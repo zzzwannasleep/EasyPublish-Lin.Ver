@@ -1,0 +1,113 @@
+name: 构建并发布Release
+
+on: 
+  workflow_dispatch: 
+
+jobs:
+    Build_Win:
+      name: 构建Windows版本
+      runs-on: windows-latest
+
+      steps:
+        - name: 拉取代码
+          uses: actions/checkout@v4
+          with:
+            ref: ${{ github.sha }}
+
+        - name: 安装Node环境
+          uses: actions/setup-node@v4
+          with:
+            node-version: "20"
+
+        - name: 安装依赖
+          run: npm ci
+
+        - name: 打包构建
+          run: npm run build:win
+
+        - name: 上传artifact
+          uses: actions/upload-artifact@v6
+          with: 
+            name: win-dist
+            path: |
+              ./dist/*.exe
+              ./dist/*.blockmap
+              ./dist/*.zip
+              ./dist/latest.yml
+
+    Build_Linux:
+      name: 构建Linux版本
+      runs-on: ubuntu-latest
+      steps:
+        - name: 拉取代码
+          uses: actions/checkout@v4
+          with:
+            ref: ${{ github.sha }}
+
+        - name: 安装Node环境
+          uses: actions/setup-node@v4
+          with:
+            node-version: "20"
+
+        - name: 安装依赖
+          run: npm ci
+
+        - name: 打包构建
+          run: npm run build:linux
+
+        - name: 上传artifact
+          uses: actions/upload-artifact@v6
+          with: 
+            name: linux-dist
+            path: |
+              ./dist/*.deb
+              ./dist/*.snap
+              ./dist/*.AppImage
+              ./dist/latest-linux.yml
+
+    Upload_Release:
+      name: 上传Release
+      runs-on: ubuntu-latest
+      needs: [ Build_Linux, Build_Win ]
+      steps:
+        
+        - name: 拉取代码
+          uses: actions/checkout@v4
+          with:
+            ref: ${{ github.sha }}
+
+        - name: 读取package.json
+          uses: rexdefuror/read-package-json@v1.0.5
+
+        - name: 获取Windows Release
+          uses: actions/download-artifact@v7
+          with:
+            name: win-dist
+            path: build
+          
+        - name: 获取Linux Release
+          uses: actions/download-artifact@v7
+          with:
+            name: linux-dist
+            path: build
+
+        - name: 发布Release
+          uses: softprops/action-gh-release@v2
+          with:
+            tag_name: v${{ env.PACKAGE_VERSION }}
+            name: ${{ env.PACKAGE_VERSION }}
+            draft: true
+            token: ${{ secrets.RELEASE }}
+            prerelease: false
+            target_commitish: ${{ github.sha }}
+            repository: vcb-s/EasyPublish
+            body_path: NEW.md
+            files: |
+              build/*.exe
+              build/*.blockmap
+              build/*.zip
+              build/latest.yml
+              build/*.deb
+              build/*.snap
+              build/*.AppImage
+              build/latest-linux.yml

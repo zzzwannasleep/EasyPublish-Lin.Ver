@@ -1,0 +1,59 @@
+:root {
+  color-scheme: light;
+  --font-sans: "IBM Plex Sans", "Noto Sans SC", "Segoe UI", sans-serif;
+  --font-display: "Space Grotesk", "IBM Plex Sans", "Noto Sans SC", sans-serif;
+  --bg-base: #f4efe7;
+  --bg-elevated: rgba(255, 252, 247, 0.86);
+  --bg-strong: #fff9f0;
+  --bg-panel: rgba(255, 255, 255, 0.88);
+  --bg-panel-strong: #fffdf8;
+  --border-soft: rgba(74, 53, 36, 0.12);
+  --border-strong: rgba(74, 53, 36, 0.18);
+  --text-primary: #1f1a16;
+  --text-secondary: #665b52;
+  --text-muted: #8c8177;
+  --brand: #c65a2e;
+  --brand-strong: #984121;
+  --brand-soft: rgba(198, 90, 46, 0.12);
+  --accent: #1f6f78;
+  --accent-soft: rgba(31, 111, 120, 0.14);
+  --success: #1d7c55;
+  --success-soft: rgba(29, 124, 85, 0.13);
+  --warning: #ad7a14;
+  --warning-soft: rgba(173, 122, 20, 0.15);
+  --danger: #b13b2d;
+  --danger-soft: rgba(177, 59, 45, 0.12);
+  --shadow-lg: 0 24px 80px rgba(39, 26, 13, 0.14);
+  --shadow-md: 0 16px 40px rgba(39, 26, 13, 0.1);
+  --radius-xl: 28px;
+  --radius-lg: 22px;
+  --radius-md: 16px;
+  --radius-sm: 12px;
+}
+
+html.dark {
+  color-scheme: dark;
+  --bg-base: #17120e;
+  --bg-elevated: rgba(32, 24, 18, 0.88);
+  --bg-strong: #221a14;
+  --bg-panel: rgba(31, 23, 17, 0.86);
+  --bg-panel-strong: #251c15;
+  --border-soft: rgba(255, 241, 224, 0.08);
+  --border-strong: rgba(255, 241, 224, 0.14);
+  --text-primary: #f8efe3;
+  --text-secondary: #d3c3b4;
+  --text-muted: #a9988a;
+  --brand: #ff8759;
+  --brand-strong: #ffb08a;
+  --brand-soft: rgba(255, 135, 89, 0.16);
+  --accent: #67b6bf;
+  --accent-soft: rgba(103, 182, 191, 0.16);
+  --success: #63c18e;
+  --success-soft: rgba(99, 193, 142, 0.16);
+  --warning: #f0be59;
+  --warning-soft: rgba(240, 190, 89, 0.16);
+  --danger: #f08c7c;
+  --danger-soft: rgba(240, 140, 124, 0.16);
+  --shadow-lg: 0 26px 90px rgba(0, 0, 0, 0.32);
+  --shadow-md: 0 16px 44px rgba(0, 0, 0, 0.22);
+}

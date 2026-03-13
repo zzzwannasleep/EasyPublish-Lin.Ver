@@ -1,0 +1,79 @@
+export const defaultTaskData: Config.TaskData = { tasks: [] }
+
+export const defaultUserData: Config.UserData = {
+  proxyConfig: {
+    status: false,
+    type: '',
+    host: '',
+    port: 8080,
+  },
+  name: 'default',
+  acgnxAPI: {
+    enable: false,
+    asia: {
+      uid: '',
+      token: '',
+    },
+    global: {
+      uid: '',
+      token: '',
+    },
+  },
+  forum: { username: '', password: '', cookies: [] },
+  info: [
+    {
+      name: 'bangumi',
+      time: '--',
+      status: '账号未登录',
+      username: '',
+      password: '',
+      enable: false,
+      cookies: [],
+    },
+    {
+      name: 'nyaa',
+      time: '--',
+      status: '账号未登录',
+      username: '',
+      password: '',
+      enable: false,
+      cookies: [],
+    },
+    {
+      name: 'acgrip',
+      time: '--',
+      status: '账号未登录',
+      username: '',
+      password: '',
+      enable: false,
+      cookies: [],
+    },
+    {
+      name: 'dmhy',
+      time: '--',
+      status: '账号未登录',
+      username: '',
+      password: '',
+      enable: false,
+      cookies: [],
+    },
+    {
+      name: 'acgnx_g',
+      time: '--',
+      status: '账号未登录',
+      username: '',
+      password: '',
+      enable: false,
+      cookies: [],
+    },
+    {
+      name: 'acgnx_a',
+      time: '--',
+      status: '账号未登录',
+      username: '',
+      password: '',
+      enable: false,
+      cookies: [],
+    },
+  ],
+}
