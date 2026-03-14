@@ -1,6 +1,10 @@
-export type SiteId = 'bangumi' | 'nyaa' | 'acgrip' | 'dmhy' | 'acgnx_a' | 'acgnx_g' | 'forum'
+export const builtinSiteIds = ['bangumi', 'nyaa', 'acgrip', 'dmhy', 'acgnx_a', 'acgnx_g', 'forum'] as const
 
-export type SiteAdapterKind = 'bangumi' | 'nyaa' | 'nexusphp' | 'wordpress'
+export type BuiltInSiteId = (typeof builtinSiteIds)[number]
+
+export type SiteId = string
+
+export type SiteAdapterKind = 'bangumi' | 'nyaa' | 'nexusphp' | 'unit3d' | 'wordpress'
 
 export type SiteCapability =
   | 'torrent_publish'

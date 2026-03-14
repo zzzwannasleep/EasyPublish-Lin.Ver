@@ -1,4 +1,5 @@
 import { fail, ok } from '../../shared/types/api'
+import type { PtSiteDraft } from '../../shared/types/pt-site'
 import type { SiteId } from '../../shared/types/site'
 import { createSiteRegistry } from '../sites/registry'
 import { createCredentialStore } from '../storage/credential-store'
@@ -13,6 +14,7 @@ interface CreateSiteServiceOptions {
 
 export function createSiteService(options: CreateSiteServiceOptions) {
   const { siteRegistry, credentialStore, projectStore, notifyProjectDataChanged } = options
+  const ptAdapters = new Set(['nexusphp', 'unit3d'])
 
   function getSiteContext(id: SiteId) {
     const profile = siteRegistry.getProfileById(id)
@@ -39,6 +41,35 @@ export function createSiteService(options: CreateSiteServiceOptions) {
       adapter,
       account: credentialStore.getSiteAccount(id),
       credentials: credentialStore.getSiteCredentialRecord(id),
+    }
+  }
+
+  function listManagedPtSites() {
+    try {
+      const sites = siteRegistry
+        .listCatalog()
+        .filter(site => ptAdapters.has(site.adapter))
+        .map(site => {
+          const account = credentialStore.getSiteAccount(site.id)
+          const credentials = credentialStore.getSiteCredentialRecord(site.id)
+          return {
+            ...site,
+            builtIn: !credentialStore.getCustomPtSite(site.id),
+            accountAuthMode: account.authMode,
+            accountStatus: account.healthStatus,
+            accountMessage: account.legacyStatus,
+            lastCheckAt: account.lastCheckAt,
+            username: credentials.username,
+            password: credentials.password,
+            apiToken: credentials.apiToken,
+          }
+        })
+
+      return JSON.stringify(ok({ sites }))
+    } catch (error) {
+      return JSON.stringify(
+        fail('PT_SITE_LIST_FAILED', 'Unable to load PT site accounts', (error as Error).message),
+      )
     }
   }
 
@@ -104,6 +135,18 @@ export function createSiteService(options: CreateSiteServiceOptions) {
         account,
         credentials,
       })
+
+      if (credentialStore.getCustomPtSite(id)) {
+        await credentialStore.recordCustomPtSiteValidation(
+          id,
+          result.status === 'authenticated'
+            ? 'authenticated'
+            : result.status === 'unauthenticated'
+              ? 'unauthenticated'
+              : 'error',
+          result.message,
+        )
+      }
 
       return JSON.stringify(
         ok({
@@ -197,9 +240,58 @@ export function createSiteService(options: CreateSiteServiceOptions) {
     }
   }
 
+  async function saveManagedPtSite(msg: string) {
+    try {
+      const draft = JSON.parse(msg) as PtSiteDraft
+      const siteId = await credentialStore.saveManagedPtSite(draft)
+      const site = siteRegistry.getCatalogEntry(siteId)
+      if (!site) {
+        return JSON.stringify(fail('PT_SITE_NOT_FOUND', `PT site ${siteId} does not exist`))
+      }
+
+      const account = credentialStore.getSiteAccount(siteId)
+      const credentials = credentialStore.getSiteCredentialRecord(siteId)
+
+      return JSON.stringify(
+        ok({
+          site: {
+            ...site,
+            builtIn: !credentialStore.getCustomPtSite(site.id),
+            accountAuthMode: account.authMode,
+            accountStatus: account.healthStatus,
+            accountMessage: account.legacyStatus,
+            lastCheckAt: account.lastCheckAt,
+            username: credentials.username,
+            password: credentials.password,
+            apiToken: credentials.apiToken,
+          },
+        }),
+      )
+    } catch (error) {
+      return JSON.stringify(
+        fail('PT_SITE_SAVE_FAILED', 'Unable to save PT site account', (error as Error).message),
+      )
+    }
+  }
+
+  async function removeManagedPtSite(msg: string) {
+    try {
+      const { id } = JSON.parse(msg) as { id: SiteId }
+      await credentialStore.removeManagedPtSite(id)
+      return JSON.stringify(ok({ id }))
+    } catch (error) {
+      return JSON.stringify(
+        fail('PT_SITE_REMOVE_FAILED', 'Unable to remove PT site account', (error as Error).message),
+      )
+    }
+  }
+
   return {
     listSites,
+    listManagedPtSites,
     getSite,
+    saveManagedPtSite,
+    removeManagedPtSite,
     validateAccount,
     validatePublish,
     loadMetadata,

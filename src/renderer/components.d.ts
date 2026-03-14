@@ -45,6 +45,7 @@ declare module 'vue' {
     Finish: typeof import('./src/components/Finish.vue')['default']
     ForumPublish: typeof import('./src/components/ForumPublish.vue')['default']
     Modify: typeof import('./src/components/Modify.vue')['default']
+    PtSiteAccounts: typeof import('./src/components/PtSiteAccounts.vue')['default']
     Quickstart: typeof import('./src/components/Quickstart.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']

@@ -57,7 +57,10 @@ type ProjectHandlers = {
 
 type SiteHandlers = {
   listSites: () => Asyncish<unknown>
+  listManagedPtSites: () => Asyncish<unknown>
   getSite: (msg: string) => Asyncish<unknown>
+  saveManagedPtSite: (msg: string) => Asyncish<unknown>
+  removeManagedPtSite: (msg: string) => Asyncish<unknown>
   validateAccount: (msg: string) => Asyncish<unknown>
   validatePublish: (msg: string) => Asyncish<unknown>
   loadMetadata: (msg: string) => Asyncish<unknown>
@@ -131,7 +134,10 @@ export function registerIpcHandlers({ Global, BT, Forum, Project, Site, Log, Tas
   ipcMain.handle('project_removeProject', (_event, msg) => Project.removeProject(msg))
 
   ipcMain.handle('site_listSites', () => Site.listSites())
+  ipcMain.handle('site_listManagedPtSites', () => Site.listManagedPtSites())
   ipcMain.handle('site_getSite', (_event, msg) => Site.getSite(msg))
+  ipcMain.handle('site_saveManagedPtSite', (_event, msg) => Site.saveManagedPtSite(msg))
+  ipcMain.handle('site_removeManagedPtSite', (_event, msg) => Site.removeManagedPtSite(msg))
   ipcMain.handle('site_validateAccount', (_event, msg) => Site.validateAccount(msg))
   ipcMain.handle('site_validatePublish', (_event, msg) => Site.validatePublish(msg))
   ipcMain.handle('site_loadMetadata', (_event, msg) => Site.loadMetadata(msg))

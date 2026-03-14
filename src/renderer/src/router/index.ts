@@ -11,7 +11,6 @@ import ProjectCreateView from '../views/projects/ProjectCreateView.vue'
 import ProjectsView from '../views/projects/ProjectsView.vue'
 import AccountsView from '../views/accounts/AccountsView.vue'
 import LogsView from '../views/logs/LogsView.vue'
-import SitesView from '../views/sites/SitesView.vue'
 import ModifyView from '../views/tools/ModifyView.vue'
 import GuideView from '../views/guides/GuideView.vue'
 
@@ -132,15 +131,6 @@ const router = createRouter({
       meta: {
         titleKey: 'route.accounts.title',
         subtitleKey: 'route.accounts.subtitle'
-      }
-    },
-    {
-      name: 'sites',
-      path: '/sites',
-      component: SitesView,
-      meta: {
-        titleKey: 'route.sites.title',
-        subtitleKey: 'route.sites.subtitle'
       }
     },
     {

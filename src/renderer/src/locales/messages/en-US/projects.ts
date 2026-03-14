@@ -14,7 +14,8 @@ const projects = {
   'projectCreate.hero.chip': 'Project model connected',
   'projectCreate.panel.eyebrow': 'Project Setup',
   'projectCreate.panel.title': 'Initialize Release Workspace',
-  'projectCreate.panel.description': 'Create the project record first, then continue into the existing stages.',
+  'projectCreate.panel.description':
+    'Create the project record first, then continue into the existing stages.',
   'create.form.name.label': 'Project Name',
   'create.form.name.placeholder': 'Leave blank to use a timestamp-based folder name',
   'create.form.directory.label': 'Working Directory',
@@ -24,9 +25,11 @@ const projects = {
   'create.form.source.quick.label': 'Quick Publish',
   'create.form.source.quick.description': 'Start from the current guided workflow.',
   'create.form.source.file.label': 'From Files',
-  'create.form.source.file.description': 'Seed the project from existing Markdown, HTML, and BBCode files.',
+  'create.form.source.file.description':
+    'Seed the project from existing Markdown, HTML, and BBCode files.',
   'create.form.source.template.label': 'From Template',
-  'create.form.source.template.description': 'Use template fields and generate content inside the project.',
+  'create.form.source.template.description':
+    'Use template fields and generate content inside the project.',
   'create.validation.sourceKind': 'Choose a project source mode.',
   'create.validation.completeRequired': 'Complete the required fields before creating the project.',
   'create.error.directoryMissing': 'The selected working directory does not exist.',
@@ -34,6 +37,7 @@ const projects = {
   'taskList.filter.showPublished': 'Show completed projects',
   'taskList.actions.refresh': 'Refresh',
   'taskList.actions.open': 'Open',
+  'taskList.actions.openList': 'View all projects',
   'taskList.actions.openFolder': 'Open Folder',
   'taskList.actions.delete': 'Delete',
   'taskList.actions.continue': 'Continue',
@@ -44,7 +48,8 @@ const projects = {
   'taskList.summary.visible': 'Visible Now',
   'taskList.card.links': 'Recorded Links',
   'taskList.empty.title': 'No projects to show',
-  'taskList.empty.description': 'Create a project first, then continue editing, review, and publishing here.',
+  'taskList.empty.description':
+    'Create a project first, then continue editing, review, and publishing here.',
   'taskList.columns.folder': 'Folder',
   'taskList.columns.project': 'Project',
   'taskList.columns.source': 'Source',
@@ -55,7 +60,7 @@ const projects = {
   'taskList.details.noLinks': 'No publish links have been recorded for this project yet.',
   'taskList.status.published': 'Published',
   'taskList.success.removed': 'Removed project "{name}".',
-  'taskList.success.copied': 'Copied to clipboard.',
+  'taskList.success.copied': 'Copied to clipboard.'
 } as const
 
 export default projects

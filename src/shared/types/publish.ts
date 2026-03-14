@@ -19,16 +19,39 @@ export interface SitePublishDraft {
   title: string
   description: string
   torrentPath: string
+  categoryId?: number
+  resolutionId?: number
   smallDescription?: string
   url?: string
   technicalInfo?: string
   ptGen?: string
+  mediaInfo?: string
+  bdInfo?: string
   price?: number
   tagIds?: number[]
+  regionId?: number
+  distributorId?: number
+  seasonNumber?: number
+  episodeNumber?: number
+  tmdb?: number
+  imdb?: number
+  tvdb?: number
+  mal?: number
+  igdb?: number
   posState?: string
   posStateUntil?: string
   pickType?: string
   anonymous?: boolean
+  personalRelease?: boolean
+  internal?: boolean
+  refundable?: boolean
+  featured?: boolean
+  free?: number
+  flUntil?: number
+  doubleup?: boolean
+  duUntil?: number
+  sticky?: boolean
+  modQueueOptIn?: boolean
   subCategories: Record<string, number>
   nfoPath?: string
 }

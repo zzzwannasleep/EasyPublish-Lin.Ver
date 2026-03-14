@@ -54,7 +54,9 @@ const credentialStore = createCredentialStore({
 const projectStore = createProjectStore({
   getTaskDB: () => taskDB,
 })
-const siteRegistry = createSiteRegistry()
+const siteRegistry = createSiteRegistry({
+  getCustomProfiles: () => credentialStore.listCustomSiteProfiles(),
+})
 
 const userAgent = USER_AGENT
 //axios闂傚倷鑳堕幊鎾诲吹閺嶎厽鈷旈柛鏇ㄥ灠閺勩儵鏌涘☉鍗炲笌閹艰揪绲剧€氭岸鏌熺紒妯轰刊婵炶偐娓筼okie闂傚倷绀侀幉锛勫垝瀹€鍕剨闁秆呮珴ragent,婵犵數鍋為崹鍫曞箲娴ｅ摜鏆﹂柣銏犳啞閸嬬喐銇勯弽銊х煁濠殿垰銈搁弻娑㈠箻濡も偓閹冲繘鎮楅銏＄厽闁绘﹢浜跺鐑芥煕婵犲啰娲撮柟?
@@ -409,8 +411,17 @@ namespace Site {
   export function listSites() {
     return siteService.listSites()
   }
+  export function listManagedPtSites() {
+    return siteService.listManagedPtSites()
+  }
   export function getSite(msg: string) {
     return siteService.getSite(msg)
+  }
+  export function saveManagedPtSite(msg: string) {
+    return siteService.saveManagedPtSite(msg)
+  }
+  export function removeManagedPtSite(msg: string) {
+    return siteService.removeManagedPtSite(msg)
   }
   export function validateAccount(msg: string) {
     return siteService.validateAccount(msg)

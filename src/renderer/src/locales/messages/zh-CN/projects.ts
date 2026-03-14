@@ -34,6 +34,7 @@ const projects = {
   'taskList.filter.showPublished': '显示已完成项目',
   'taskList.actions.refresh': '刷新',
   'taskList.actions.open': '打开',
+  'taskList.actions.openList': '查看全部项目',
   'taskList.actions.openFolder': '打开目录',
   'taskList.actions.delete': '删除',
   'taskList.actions.continue': '继续',
@@ -55,7 +56,7 @@ const projects = {
   'taskList.details.noLinks': '当前项目还没有记录任何发布链接。',
   'taskList.status.published': '已发布',
   'taskList.success.removed': '已移除项目 “{name}”。',
-  'taskList.success.copied': '已复制到剪贴板。',
+  'taskList.success.copied': '已复制到剪贴板。'
 } as const
 
 export default projects

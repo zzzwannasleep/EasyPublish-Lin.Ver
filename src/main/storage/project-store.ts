@@ -9,7 +9,7 @@ import type {
   PublishProject,
 } from '../../shared/types/project'
 import type { PublishResult } from '../../shared/types/publish'
-import type { SiteId } from '../../shared/types/site'
+import type { BuiltInSiteId, SiteId } from '../../shared/types/site'
 
 type TaskDbProvider = () => Low<Config.TaskData>
 
@@ -17,7 +17,7 @@ interface CreateProjectStoreOptions {
   getTaskDB: TaskDbProvider
 }
 
-const torrentSites: Exclude<SiteId, 'forum'>[] = [
+const torrentSites: Exclude<BuiltInSiteId, 'forum'>[] = [
   'bangumi',
   'nyaa',
   'acgrip',
@@ -255,7 +255,7 @@ export function createProjectStore(options: CreateProjectStoreOptions) {
     task.forumLink = link
   }
 
-  function setSiteLink(id: number | string, siteId: Exclude<SiteId, 'forum'>, remoteUrl: string) {
+  function setSiteLink(id: number | string, siteId: Exclude<BuiltInSiteId, 'forum'>, remoteUrl: string) {
     const task = findLegacyTaskById(id)
     if (!task) {
       throw new Error(`Project ${id} does not exist`)
@@ -284,8 +284,8 @@ export function createProjectStore(options: CreateProjectStoreOptions) {
     if (nextResult.status === 'published' && nextResult.remoteUrl) {
       if (nextResult.siteId === 'forum') {
         task.forumLink = nextResult.remoteUrl
-      } else {
-        const siteId = nextResult.siteId as Exclude<SiteId, 'forum'>
+      } else if (torrentSites.includes(nextResult.siteId as Exclude<BuiltInSiteId, 'forum'>)) {
+        const siteId = nextResult.siteId as Exclude<BuiltInSiteId, 'forum'>
         task[siteId] = nextResult.remoteUrl
       }
     }

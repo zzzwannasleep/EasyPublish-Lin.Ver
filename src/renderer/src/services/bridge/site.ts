@@ -1,5 +1,6 @@
 import type { ApiResult } from '../../types/api'
 import type { SitePublishDraft, SitePublishPayload } from '../../types/publish'
+import type { PtSiteDraft, PtSiteListPayload, PtSitePayload } from '../../types/pt-site'
 import type {
   SiteAccountValidationPayload,
   SiteDetailPayload,
@@ -18,8 +19,20 @@ export const siteBridge = {
     return parseResult<SiteListPayload>(window.siteAPI.listSites())
   },
 
+  listManagedPtSites() {
+    return parseResult<PtSiteListPayload>(window.siteAPI.listManagedPtSites())
+  },
+
   getSite(id: SiteId) {
     return parseResult<SiteDetailPayload>(window.siteAPI.getSite(JSON.stringify({ id })))
+  },
+
+  saveManagedPtSite(input: PtSiteDraft) {
+    return parseResult<PtSitePayload>(window.siteAPI.saveManagedPtSite(JSON.stringify(input)))
+  },
+
+  removeManagedPtSite(id: SiteId) {
+    return parseResult<{ id: SiteId }>(window.siteAPI.removeManagedPtSite(JSON.stringify({ id })))
   },
 
   validateAccount(id: SiteId) {

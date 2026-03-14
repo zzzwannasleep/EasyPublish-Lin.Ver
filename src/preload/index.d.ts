@@ -62,7 +62,10 @@ export interface ProjectAPI {
 
 export interface SiteAPI {
   listSites: () => Promise<string>
+  listManagedPtSites: () => Promise<string>
   getSite: (msg: string) => Promise<string>
+  saveManagedPtSite: (msg: string) => Promise<string>
+  removeManagedPtSite: (msg: string) => Promise<string>
   validateAccount: (msg: string) => Promise<string>
   validatePublish: (msg: string) => Promise<string>
   loadMetadata: (msg: string) => Promise<string>

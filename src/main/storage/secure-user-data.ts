@@ -25,10 +25,16 @@ type StoredAcgnxApiConfig = Omit<Config.AcgnXAPIConfig, 'asia' | 'global'> & {
   global: Omit<Config.AcgnXAPIConfig['global'], 'token'> & { token: StoredSecret }
 }
 
-type StoredUserData = Omit<Config.UserData, 'info' | 'forum' | 'acgnxAPI'> & {
+type StoredPtSiteConfig = Omit<Config.PTSiteConfig, 'password' | 'apiToken'> & {
+  password: StoredSecret
+  apiToken?: StoredSecret
+}
+
+type StoredUserData = Omit<Config.UserData, 'info' | 'forum' | 'acgnxAPI' | 'ptSites'> & {
   info: StoredLoginInfo[]
   forum: StoredForumCredentials
   acgnxAPI?: StoredAcgnxApiConfig
+  ptSites?: StoredPtSiteConfig[]
 }
 
 function cloneDefaultUserData(): Config.UserData {
@@ -118,6 +124,19 @@ function normalizeUserData(data: Config.UserData | null | undefined): Config.Use
       ...(source.forum ?? {}),
       cookies: source.forum?.cookies ?? defaults.forum.cookies,
     },
+    ptSites: (source.ptSites ?? []).map(site => ({
+      id: site.id,
+      name: site.name,
+      adapter: site.adapter,
+      baseUrl: site.baseUrl,
+      enabled: site.enabled ?? true,
+      username: site.username ?? '',
+      password: site.password ?? '',
+      apiToken: site.apiToken ?? '',
+      lastCheckAt: site.lastCheckAt,
+      healthStatus: site.healthStatus,
+      statusMessage: site.statusMessage,
+    })),
     info: defaults.info.map(defaultInfo => {
       const current = source.info?.find(item => item.name === defaultInfo.name)
       return {
@@ -144,6 +163,11 @@ function serializeUserData(data: Config.UserData): StoredUserData {
       password: encryptSecret(normalized.forum.password),
       cookies: encryptSecret(normalized.forum.cookies ?? []),
     },
+    ptSites: normalized.ptSites?.map(site => ({
+      ...site,
+      password: encryptSecret(site.password),
+      apiToken: encryptSecret(site.apiToken ?? ''),
+    })),
     acgnxAPI: normalized.acgnxAPI
       ? {
           ...normalized.acgnxAPI,
@@ -179,6 +203,14 @@ function deserializeUserData(raw: StoredUserData | null | undefined): Config.Use
       password: decryptSecret(raw?.forum?.password, normalized.forum.password),
       cookies: decryptSecret(raw?.forum?.cookies, normalized.forum.cookies ?? []),
     },
+    ptSites: normalized.ptSites?.map(site => {
+      const storedSite = raw?.ptSites?.find(item => item.id === site.id)
+      return {
+        ...site,
+        password: decryptSecret(storedSite?.password, site.password),
+        apiToken: decryptSecret(storedSite?.apiToken, site.apiToken ?? ''),
+      }
+    }) ?? [],
     acgnxAPI: {
       ...normalizedAcgnxApi,
       asia: {

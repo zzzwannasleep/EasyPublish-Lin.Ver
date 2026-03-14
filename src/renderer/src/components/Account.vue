@@ -18,6 +18,21 @@ import type { SiteId } from '../types/site'
 
 type LegacyAccountType = Exclude<SiteId, 'forum'>
 
+const props = withDefaults(
+  defineProps<{
+    siteIds?: LegacyAccountType[]
+    showSettings?: boolean
+    titleKey?: string
+    descriptionKey?: string
+  }>(),
+  {
+    siteIds: undefined,
+    showSettings: true,
+    titleKey: 'accounts.bt.title',
+    descriptionKey: 'accounts.bt.description',
+  },
+)
+
 type SiteAccount = {
   siteId: LegacyAccountType
   type: LegacyAccountType
@@ -153,25 +168,29 @@ function normalizeAccountStatus(status: string, enabled: boolean): NormalizedAcc
   return 'unknown'
 }
 
+const visibleSiteAccounts = computed(() =>
+  props.siteIds?.length ? siteAccounts.filter(item => props.siteIds!.includes(item.siteId)) : siteAccounts,
+)
+
 const overviewItems = computed(() => [
   {
     label: t('accounts.summary.total'),
-    value: siteAccounts.length,
+    value: visibleSiteAccounts.value.length,
     tone: 'neutral' as const,
   },
   {
     label: t('accounts.summary.enabled'),
-    value: siteAccounts.filter(item => item.enable).length,
+    value: visibleSiteAccounts.value.filter(item => item.enable).length,
     tone: 'info' as const,
   },
   {
     label: t('accounts.summary.authenticated'),
-    value: siteAccounts.filter(item => normalizeAccountStatus(item.status, item.enable) === 'loggedIn').length,
+    value: visibleSiteAccounts.value.filter(item => normalizeAccountStatus(item.status, item.enable) === 'loggedIn').length,
     tone: 'success' as const,
   },
   {
     label: t('accounts.summary.attention'),
-    value: siteAccounts.filter(item =>
+    value: visibleSiteAccounts.value.filter(item =>
       ['blocked', 'failed', 'passwordError', 'captchaError', 'validationFailed'].includes(
         normalizeAccountStatus(item.status, item.enable),
       ),
@@ -343,8 +362,8 @@ onMounted(() => {
 
     <section class="account-toolbar">
       <div class="account-toolbar__copy">
-        <div class="account-toolbar__title">{{ t('accounts.bt.title') }}</div>
-        <div class="account-toolbar__text">{{ t('accounts.bt.description') }}</div>
+        <div class="account-toolbar__title">{{ t(props.titleKey) }}</div>
+        <div class="account-toolbar__text">{{ t(props.descriptionKey) }}</div>
       </div>
 
       <div class="account-toolbar__actions">
@@ -364,7 +383,7 @@ onMounted(() => {
     </section>
 
     <section class="account-grid" v-loading="isLoading">
-      <article v-for="account in siteAccounts" :key="account.siteId" class="account-card">
+      <article v-for="account in visibleSiteAccounts" :key="account.siteId" class="account-card">
         <header class="account-card__head">
           <div class="account-card__title-group">
             <div class="account-card__eyebrow">{{ account.type }}</div>
@@ -428,7 +447,7 @@ onMounted(() => {
       </article>
     </section>
 
-    <section class="account-settings">
+    <section v-if="showSettings" class="account-settings">
       <article class="account-settings__card">
         <header class="account-settings__header">
           <div class="account-settings__icon">

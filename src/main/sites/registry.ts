@@ -2,6 +2,11 @@ import { buildSiteCapabilitySet, defaultSiteProfiles } from '../../shared/types/
 import type { SiteAdapterKind, SiteCatalogEntry, SiteId, SiteProfile } from '../../shared/types/site'
 import type { SiteAdapter } from './adapter'
 import { createNexusphpAdapter } from './nexusphp/adapter'
+import { createUnit3dAdapter } from './unit3d/adapter'
+
+interface CreateSiteRegistryOptions {
+  getCustomProfiles?: () => SiteProfile[]
+}
 
 function normalizeBaseUrl(baseUrl: string): string {
   const trimmed = baseUrl.trim().replace(/\/+$/, '')
@@ -20,7 +25,7 @@ function normalizeBaseUrl(baseUrl: string): string {
 }
 
 function createStaticAdapter(
-  id: Exclude<SiteAdapterKind, 'nexusphp'>,
+  id: Exclude<SiteAdapterKind, 'nexusphp' | 'unit3d'>,
   displayName: string,
   note: string,
 ): SiteAdapter {
@@ -48,11 +53,13 @@ function createStaticAdapter(
   }
 }
 
-export function createSiteRegistry(siteProfiles: SiteProfile[] = defaultSiteProfiles) {
+export function createSiteRegistry(options: CreateSiteRegistryOptions = {}) {
+  const { getCustomProfiles } = options
   const adapters: SiteAdapter[] = [
     createStaticAdapter('bangumi', 'Bangumi', 'Legacy Bangumi workflow remains bridged through the existing BT service.'),
     createStaticAdapter('nyaa', 'Nyaa', 'Legacy Nyaa workflow remains bridged through the existing BT service.'),
     createNexusphpAdapter(),
+    createUnit3dAdapter(),
     createStaticAdapter('wordpress', 'WordPress', 'Forum publishing still routes through the legacy forum service for now.'),
   ]
 
@@ -61,7 +68,9 @@ export function createSiteRegistry(siteProfiles: SiteProfile[] = defaultSiteProf
   )
 
   function listProfiles(): SiteProfile[] {
-    return siteProfiles.map(profile => ({
+    const profiles = [...defaultSiteProfiles, ...(getCustomProfiles?.() ?? [])]
+
+    return profiles.map(profile => ({
       ...profile,
       capabilities: [...profile.capabilities],
     }))

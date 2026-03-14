@@ -11,23 +11,38 @@ import {
   getProjectStageLabel,
   getProjectStatusLabel,
   getSiteLabel,
-  projectStatusTones,
+  projectStatusTones
 } from '../services/project/presentation'
 import type { ProjectStage, PublishProject } from '../types/project'
 import type { SiteId } from '../types/site'
+
+const props = withDefaults(
+  defineProps<{
+    variant?: 'full' | 'preview'
+    limit?: number
+  }>(),
+  {
+    variant: 'full',
+    limit: 0
+  }
+)
 
 const router = useRouter()
 const { t } = useI18n()
 const isLoading = ref(false)
 const showPublished = ref(false)
 const projects = ref<PublishProject[]>([])
+const isPreviewMode = computed(() => props.variant === 'preview')
 
-const stageRouteMap: Record<ProjectStage, 'edit' | 'check' | 'bt_publish' | 'forum_publish' | 'finish'> = {
+const stageRouteMap: Record<
+  ProjectStage,
+  'edit' | 'check' | 'bt_publish' | 'forum_publish' | 'finish'
+> = {
   edit: 'edit',
   review: 'check',
   torrent_publish: 'bt_publish',
   forum_publish: 'forum_publish',
-  completed: 'finish',
+  completed: 'finish'
 }
 
 function getProjectTimeValue(value?: string) {
@@ -40,7 +55,9 @@ function getProjectTimeValue(value?: string) {
 }
 
 const orderedProjects = computed(() => {
-  return [...projects.value].sort((left, right) => getProjectTimeValue(right.updatedAt) - getProjectTimeValue(left.updatedAt))
+  return [...projects.value].sort(
+    (left, right) => getProjectTimeValue(right.updatedAt) - getProjectTimeValue(left.updatedAt)
+  )
 })
 
 const visibleProjects = computed(() => {
@@ -48,36 +65,48 @@ const visibleProjects = computed(() => {
     return orderedProjects.value
   }
 
-  return orderedProjects.value.filter(project => project.status !== 'published')
+  return orderedProjects.value.filter((project) => project.status !== 'published')
 })
+
+const renderedProjects = computed(() => {
+  const baseProjects = isPreviewMode.value ? orderedProjects.value : visibleProjects.value
+
+  if (props.limit > 0) {
+    return baseProjects.slice(0, props.limit)
+  }
+
+  return baseProjects
+})
+
+const showOpenListAction = computed(() => isPreviewMode.value)
 
 const overviewItems = computed(() => [
   {
     label: t('taskList.summary.total'),
     value: projects.value.length,
-    tone: 'neutral' as const,
+    tone: 'neutral' as const
   },
   {
     label: t('taskList.summary.active'),
-    value: projects.value.filter(project => project.status !== 'published').length,
-    tone: 'warning' as const,
+    value: projects.value.filter((project) => project.status !== 'published').length,
+    tone: 'warning' as const
   },
   {
     label: t('taskList.summary.published'),
-    value: projects.value.filter(project => project.status === 'published').length,
-    tone: 'success' as const,
+    value: projects.value.filter((project) => project.status === 'published').length,
+    tone: 'success' as const
   },
   {
     label: t('taskList.summary.visible'),
     value: visibleProjects.value.length,
-    tone: 'info' as const,
-  },
+    tone: 'info' as const
+  }
 ])
 
 function getSiteEntries(project: PublishProject) {
   const entries = Object.entries({
     ...project.siteLinks,
-    forum: project.forumLink,
+    forum: project.forumLink
   }) as Array<[SiteId, string | undefined]>
 
   return entries.filter(([, value]) => Boolean(value))
@@ -101,7 +130,7 @@ async function loadData() {
 function openProject(project: PublishProject) {
   router.push({
     name: stageRouteMap[project.stage],
-    params: { id: project.id },
+    params: { id: project.id }
   })
 }
 
@@ -139,8 +168,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="project-list" v-loading="isLoading">
-    <section class="project-list__overview">
+  <div :class="['project-list', { 'project-list--preview': isPreviewMode }]" v-loading="isLoading">
+    <section v-if="!isPreviewMode" class="project-list__overview">
       <article v-for="item in overviewItems" :key="item.label" class="project-list__metric">
         <div class="project-list__metric-label">{{ item.label }}</div>
         <div class="project-list__metric-value">{{ item.value }}</div>
@@ -148,7 +177,7 @@ onMounted(() => {
       </article>
     </section>
 
-    <section class="project-list__toolbar">
+    <section v-if="!isPreviewMode" class="project-list__toolbar">
       <div class="project-list__toolbar-copy">
         <div class="project-list__toolbar-title">{{ t('projects.panel.title') }}</div>
         <div class="project-list__toolbar-text">{{ t('projects.panel.description') }}</div>
@@ -166,8 +195,8 @@ onMounted(() => {
       </div>
     </section>
 
-    <section v-if="visibleProjects.length" class="project-list__grid">
-      <article v-for="project in visibleProjects" :key="project.id" class="project-card">
+    <section v-if="renderedProjects.length" class="project-list__grid">
+      <article v-for="project in renderedProjects" :key="project.id" class="project-card">
         <header class="project-card__head">
           <div class="project-card__title-group">
             <div class="project-card__eyebrow">#{{ project.id }}</div>
@@ -192,7 +221,9 @@ onMounted(() => {
               <el-icon><Timer /></el-icon>
               <span>{{ t('taskList.columns.updated') }}</span>
             </div>
-            <div class="project-card__meta-value">{{ formatProjectTimestamp(project.updatedAt) }}</div>
+            <div class="project-card__meta-value">
+              {{ formatProjectTimestamp(project.updatedAt) }}
+            </div>
           </article>
 
           <article class="project-card__meta-card project-card__meta-card--path">
@@ -200,7 +231,11 @@ onMounted(() => {
               <el-icon><FolderOpened /></el-icon>
               <span>{{ t('taskList.details.workingDirectory') }}</span>
             </div>
-            <button class="project-card__path" type="button" @click="copyText(project.workingDirectory)">
+            <button
+              class="project-card__path"
+              type="button"
+              @click="copyText(project.workingDirectory)"
+            >
               {{ project.workingDirectory }}
             </button>
           </article>
@@ -223,7 +258,9 @@ onMounted(() => {
                 <a :href="link" class="project-card__link" target="_blank" rel="noreferrer">
                   {{ link }}
                 </a>
-                <el-button link size="small" @click="copyText(link)">{{ t('taskList.actions.copy') }}</el-button>
+                <el-button link size="small" @click="copyText(link)">{{
+                  t('taskList.actions.copy')
+                }}</el-button>
               </div>
             </article>
           </div>
@@ -232,19 +269,29 @@ onMounted(() => {
         </section>
 
         <footer class="project-card__footer">
-          <el-button type="primary" @click="openProject(project)">{{ t('taskList.actions.continue') }}</el-button>
+          <el-button type="primary" @click="openProject(project)">{{
+            t('taskList.actions.continue')
+          }}</el-button>
           <el-button plain @click="openFolder(project.workingDirectory)">
             {{ t('taskList.actions.openFolder') }}
           </el-button>
-          <el-button plain @click="copyText(project.workingDirectory)">{{ t('taskList.actions.copy') }}</el-button>
-          <el-button text type="danger" @click="removeProject(project)">
-            {{ t('taskList.actions.delete') }}
-          </el-button>
+          <template v-if="!isPreviewMode">
+            <el-button plain @click="copyText(project.workingDirectory)">{{
+              t('taskList.actions.copy')
+            }}</el-button>
+            <el-button text type="danger" @click="removeProject(project)">
+              {{ t('taskList.actions.delete') }}
+            </el-button>
+          </template>
         </footer>
       </article>
     </section>
 
-    <el-empty v-else class="project-list__empty-state" :description="t('taskList.empty.description')">
+    <el-empty
+      v-else
+      class="project-list__empty-state"
+      :description="t('taskList.empty.description')"
+    >
       <template #image>
         <div class="project-list__empty-icon">
           <el-icon><Collection /></el-icon>
@@ -257,6 +304,12 @@ onMounted(() => {
         </div>
       </template>
     </el-empty>
+
+    <footer v-if="showOpenListAction" class="project-list__preview-footer">
+      <router-link to="/projects">
+        <el-button plain>{{ t('taskList.actions.openList') }}</el-button>
+      </router-link>
+    </footer>
   </div>
 </template>
 
@@ -282,9 +335,7 @@ onMounted(() => {
 .project-card {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.44), transparent 38%),
-    var(--bg-panel);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.44), transparent 38%), var(--bg-panel);
 }
 
 .project-list__metric {
@@ -499,6 +550,24 @@ onMounted(() => {
 
 .project-list__empty-state {
   padding: 24px 0 8px;
+}
+
+.project-list__preview-footer {
+  display: flex;
+  justify-content: center;
+}
+
+.project-list--preview {
+  gap: 14px;
+}
+
+.project-list--preview .project-list__grid {
+  grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+}
+
+.project-list--preview .project-card {
+  padding: 18px;
+  box-shadow: none;
 }
 
 .project-list__empty-icon {

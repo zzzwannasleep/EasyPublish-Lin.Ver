@@ -19,6 +19,7 @@ export const defaultUserData: Config.UserData = {
       token: '',
     },
   },
+  ptSites: [],
   forum: { username: '', password: '', cookies: [] },
   info: [
     {

@@ -10,7 +10,6 @@ import {
   FolderOpened,
   House,
   Key,
-  Operation
 } from '@element-plus/icons-vue'
 import AppShell from './components/layout/AppShell.vue'
 import { type LocaleCode, useI18n } from './i18n'
@@ -50,12 +49,6 @@ const navItems = computed(() => [
     caption: t('nav.accounts.caption'),
     icon: Key,
     matchPrefixes: ['/account']
-  },
-  {
-    to: '/sites',
-    label: t('nav.sites.label'),
-    caption: t('nav.sites.caption'),
-    icon: Operation
   },
   {
     to: '/logs',

@@ -46,7 +46,7 @@ export const publishStateTones: Record<PublishState, 'neutral' | 'info' | 'succe
   failed: 'danger',
 }
 
-export const siteLabelKeys: Record<SiteId, string> = {
+export const siteLabelKeys: Record<string, string> = {
   bangumi: 'project.site.bangumi',
   nyaa: 'project.site.nyaa',
   acgrip: 'project.site.acgrip',
@@ -73,7 +73,7 @@ export function getPublishStateLabel(state: PublishState) {
 }
 
 export function getSiteLabel(siteId: SiteId) {
-  return translate(siteLabelKeys[siteId])
+  return siteLabelKeys[siteId] ? translate(siteLabelKeys[siteId]) : siteId
 }
 
 export function formatProjectTimestamp(value?: string) {

@@ -1,64 +1,116 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive } from 'vue'
 import AppPanel from '../../components/base/AppPanel.vue'
-import StatusChip from '../../components/feedback/StatusChip.vue'
+import TaskList from '../../components/TaskList.vue'
 import { useI18n } from '../../i18n'
 import { projectBridge } from '../../services/bridge/project'
+import { getProjectStageLabel } from '../../services/project/presentation'
+import type { ProjectStage, ProjectStats } from '../../types/project'
+
+interface DistributionItem {
+  key: string
+  label: string
+  count: number
+  share: string
+  progress: string
+}
 
 const { t } = useI18n()
+
+const stageOrder: ProjectStage[] = [
+  'edit',
+  'review',
+  'torrent_publish',
+  'forum_publish',
+  'completed'
+]
+
+function createEmptyStats(): ProjectStats {
+  return {
+    total: 0,
+    active: 0,
+    published: 0,
+    recent: 0,
+    byStage: {
+      edit: 0,
+      review: 0,
+      torrent_publish: 0,
+      forum_publish: 0,
+      completed: 0
+    },
+    bySourceKind: {
+      quick: 0,
+      file: 0,
+      template: 0
+    }
+  }
+}
+
+function formatShare(ratio: number) {
+  if (!Number.isFinite(ratio) || ratio <= 0) {
+    return '0%'
+  }
+
+  if (ratio >= 1) {
+    return '100%'
+  }
+
+  const percentage = ratio * 100
+  return percentage >= 10 ? `${Math.round(percentage)}%` : `${percentage.toFixed(1)}%`
+}
+
+function buildDistributionItem(
+  key: string,
+  label: string,
+  count: number,
+  total: number
+): DistributionItem {
+  const ratio = total > 0 ? count / total : 0
+
+  return {
+    key,
+    label,
+    count,
+    share: formatShare(ratio),
+    progress: `${Math.max(ratio * 100, count > 0 ? 8 : 0)}%`
+  }
+}
+
+const stats = reactive<ProjectStats>(createEmptyStats())
 
 const quickLinks = computed(() => [
   {
     to: '/new-project',
     title: t('dashboard.quickLinks.create.title'),
-    text: t('dashboard.quickLinks.create.text'),
-  },
-  {
-    to: '/projects',
-    title: t('dashboard.quickLinks.projects.title'),
-    text: t('dashboard.quickLinks.projects.text'),
+    text: t('dashboard.quickLinks.create.text')
   },
   {
     to: '/accounts',
     title: t('dashboard.quickLinks.accounts.title'),
-    text: t('dashboard.quickLinks.accounts.text'),
+    text: t('dashboard.quickLinks.accounts.text')
   },
   {
     to: '/logs',
     title: t('dashboard.quickLinks.logs.title'),
-    text: t('dashboard.quickLinks.logs.text'),
+    text: t('dashboard.quickLinks.logs.text')
   },
   {
     to: '/legacy/modify',
     title: t('dashboard.quickLinks.modify.title'),
-    text: t('dashboard.quickLinks.modify.text'),
-  },
+    text: t('dashboard.quickLinks.modify.text')
+  }
 ])
 
-const milestones = computed(() => [
-  {
-    title: t('dashboard.milestones.m1.title'),
-    text: t('dashboard.milestones.m1.text'),
-  },
-  {
-    title: t('dashboard.milestones.m2.title'),
-    text: t('dashboard.milestones.m2.text'),
-  },
-  {
-    title: t('dashboard.milestones.m3.title'),
-    text: t('dashboard.milestones.m3.text'),
-  },
-  {
-    title: t('dashboard.milestones.m5.title'),
-    text: t('dashboard.milestones.m5.text'),
-  },
-])
-
-const stats = reactive({
-  total: 0,
-  active: 0,
-  published: 0,
-})
+const stageItems = computed(() =>
+  stageOrder.map((stage) =>
+    buildDistributionItem(
+      stage,
+      getProjectStageLabel(stage),
+      stats.byStage[stage] ?? 0,
+      stats.total
+    )
+  )
+)
 
 async function loadStats() {
   const result = await projectBridge.getProjectStats()
@@ -66,7 +118,19 @@ async function loadStats() {
     return
   }
 
-  Object.assign(stats, result.data.stats)
+  const nextStats = createEmptyStats()
+  Object.assign(nextStats, result.data.stats, {
+    byStage: {
+      ...nextStats.byStage,
+      ...result.data.stats.byStage
+    },
+    bySourceKind: {
+      ...nextStats.bySourceKind,
+      ...result.data.stats.bySourceKind
+    }
+  })
+
+  Object.assign(stats, nextStats)
 }
 
 onMounted(() => {
@@ -76,75 +140,216 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page-shell">
-    <section class="page-hero">
-      <div class="page-hero__content">
-        <div class="page-eyebrow">{{ t('dashboard.hero.eyebrow') }}</div>
-        <h1 class="page-title">{{ t('dashboard.hero.title') }}</h1>
-        <p class="page-summary">{{ t('dashboard.hero.summary') }}</p>
-        <div class="page-actions">
-          <router-link to="/new-project">
-            <el-button type="primary" size="large">{{ t('dashboard.actions.create') }}</el-button>
-          </router-link>
-          <router-link to="/projects">
-            <el-button size="large" plain>{{ t('dashboard.actions.openList') }}</el-button>
+  <div class="page-shell dashboard-shell">
+    <section class="dashboard-top-grid">
+      <AppPanel
+        :eyebrow="t('dashboard.panel.links.eyebrow')"
+        :title="t('dashboard.panel.links.title')"
+        :description="t('dashboard.panel.links.description')"
+      >
+        <div class="quick-link-grid">
+          <router-link
+            v-for="link in quickLinks"
+            :key="link.to"
+            :to="link.to"
+            class="quick-link-card"
+          >
+            <div class="quick-link-card__copy">
+              <span class="quick-link-card__title">{{ link.title }}</span>
+              <p class="quick-link-card__text">{{ link.text }}</p>
+            </div>
+            <span class="quick-link-card__action">{{ t('dashboard.quickLinks.action') }}</span>
           </router-link>
         </div>
-      </div>
-      <div class="stack-list">
-        <StatusChip tone="success">{{ t('dashboard.chips.engineOnline') }}</StatusChip>
-        <StatusChip tone="info">{{ t('dashboard.chips.desktopScope') }}</StatusChip>
-        <StatusChip tone="warning">{{ t('dashboard.chips.uiRefactor') }}</StatusChip>
-      </div>
+      </AppPanel>
+
+      <AppPanel
+        :eyebrow="t('dashboard.panel.stages.eyebrow')"
+        :title="t('dashboard.panel.stages.title')"
+        :description="t('dashboard.panel.stages.description')"
+      >
+        <div class="distribution-list">
+          <article v-for="item in stageItems" :key="item.key" class="distribution-item">
+            <div class="distribution-item__main">
+              <span class="distribution-item__label">{{ item.label }}</span>
+              <strong class="distribution-item__count">{{ item.count }}</strong>
+            </div>
+            <div class="distribution-item__track">
+              <span class="distribution-item__fill" :style="{ width: item.progress }"></span>
+            </div>
+            <div class="distribution-item__meta">{{ item.share }}</div>
+          </article>
+        </div>
+      </AppPanel>
     </section>
 
-    <section class="stat-grid">
-      <div class="stat-card">
-        <div class="stat-card__label">{{ t('dashboard.stats.total.label') }}</div>
-        <div class="stat-card__value">{{ stats.total }}</div>
-        <div class="stat-card__text">{{ t('dashboard.stats.total.text') }}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-card__label">{{ t('dashboard.stats.active.label') }}</div>
-        <div class="stat-card__value">{{ stats.active }}</div>
-        <div class="stat-card__text">{{ t('dashboard.stats.active.text') }}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-card__label">{{ t('dashboard.stats.published.label') }}</div>
-        <div class="stat-card__value">{{ stats.published }}</div>
-        <div class="stat-card__text">{{ t('dashboard.stats.published.text') }}</div>
-      </div>
-    </section>
-
-    <section class="page-grid">
-      <div class="span-7">
-        <AppPanel
-          :eyebrow="t('dashboard.panel.links.eyebrow')"
-          :title="t('dashboard.panel.links.title')"
-          :description="t('dashboard.panel.links.description')"
-        >
-          <div class="quick-links">
-            <router-link v-for="link in quickLinks" :key="link.to" :to="link.to" class="quick-link">
-              <div class="quick-link__title">{{ link.title }}</div>
-              <div class="quick-link__text">{{ link.text }}</div>
-            </router-link>
-          </div>
-        </AppPanel>
-      </div>
-      <div class="span-5">
-        <AppPanel
-          :eyebrow="t('dashboard.panel.milestones.eyebrow')"
-          :title="t('dashboard.panel.milestones.title')"
-          :description="t('dashboard.panel.milestones.description')"
-        >
-          <div class="stack-list">
-            <article v-for="item in milestones" :key="item.title" class="stack-list__item">
-              <div class="stack-list__title">{{ item.title }}</div>
-              <div class="stack-list__text">{{ item.text }}</div>
-            </article>
-          </div>
-        </AppPanel>
-      </div>
-    </section>
+    <AppPanel
+      :eyebrow="t('dashboard.panel.projects.eyebrow')"
+      :title="t('dashboard.panel.projects.title')"
+      :description="t('dashboard.panel.projects.description')"
+    >
+      <TaskList variant="preview" :limit="4" />
+    </AppPanel>
   </div>
 </template>
+
+<style scoped>
+.dashboard-shell {
+  gap: 1.125rem;
+}
+
+.dashboard-top-grid,
+.quick-link-grid,
+.distribution-list {
+  display: grid;
+}
+
+.dashboard-top-grid {
+  grid-template-columns: minmax(0, 1.45fr) minmax(20rem, 1fr);
+  gap: 1.125rem;
+}
+
+.quick-link-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.distribution-list {
+  grid-template-columns: repeat(auto-fit, minmax(9.25rem, 1fr));
+  gap: 1rem;
+}
+
+.distribution-item,
+.quick-link-card {
+  position: relative;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--bg-strong);
+}
+
+.distribution-item__meta,
+.quick-link-card__text,
+.quick-link-card__action {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.quick-link-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 1rem;
+  text-decoration: none;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
+}
+
+.quick-link-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.4), transparent 62%), var(--bg-panel);
+}
+
+.quick-link-card__copy {
+  min-width: 0;
+}
+
+.quick-link-card__title {
+  display: block;
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.quick-link-card__text {
+  margin: 0;
+}
+
+.quick-link-card__action {
+  color: var(--accent);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.distribution-item {
+  padding: 1rem;
+}
+
+.distribution-item__main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.distribution-item__label,
+.distribution-item__count {
+  color: var(--text-primary);
+}
+
+.distribution-item__label {
+  font-weight: 700;
+}
+
+.distribution-item__count {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  letter-spacing: -0.03em;
+}
+
+.distribution-item__track {
+  margin-top: 0.75rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.distribution-item__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(198, 90, 46, 0.92), rgba(214, 123, 40, 0.5));
+}
+
+.distribution-item__fill--soft {
+  background: linear-gradient(90deg, rgba(79, 117, 122, 0.92), rgba(79, 117, 122, 0.36));
+}
+
+@media (max-width: 1080px) {
+  .dashboard-top-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .dashboard-shell {
+    gap: 0.875rem;
+  }
+
+  .dashboard-top-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-link-grid,
+  .distribution-list {
+    grid-template-columns: 1fr;
+    gap: 0.875rem;
+  }
+
+  .quick-link-card {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .distribution-item__main {
+    align-items: center;
+  }
+}
+</style>

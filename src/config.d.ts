@@ -47,10 +47,32 @@ declare namespace Config {
     tasks: Task[]
   }
 
+  type PTSiteConfig = {
+    id: string
+    name: string
+    adapter: 'nexusphp' | 'unit3d'
+    baseUrl: string
+    enabled: boolean
+    username: string
+    password: string
+    apiToken?: string
+    lastCheckAt?: string
+    healthStatus?:
+      | 'unknown'
+      | 'disabled'
+      | 'checking'
+      | 'authenticated'
+      | 'unauthenticated'
+      | 'blocked'
+      | 'error'
+    statusMessage?: string
+  }
+
   type UserData = {
     info: LoginInfo[]
     name?: string
     acgnxAPI?: AcgnXAPIConfig
+    ptSites?: PTSiteConfig[]
     proxyConfig: ProxyConfig
     forum: {username: string, password: string, cookies?: Cookie[]}
   }
