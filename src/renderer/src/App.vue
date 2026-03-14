@@ -6,7 +6,6 @@ import {
   Compass,
   Document,
   DocumentAdd,
-  EditPen,
   FolderOpened,
   House,
   Key,
@@ -55,13 +54,6 @@ const navItems = computed(() => [
     label: t('nav.logs.label'),
     caption: t('nav.logs.caption'),
     icon: Document
-  },
-  {
-    to: '/legacy/modify',
-    label: t('nav.tools.label'),
-    caption: t('nav.tools.caption'),
-    icon: EditPen,
-    matchPrefixes: ['/modify']
   },
   {
     to: '/guide',

@@ -2,6 +2,8 @@ import fs from 'fs'
 import { join } from 'path'
 import { Low } from 'lowdb'
 import type {
+  LegacyProjectType,
+  ProjectMode,
   ProjectSourceKind,
   ProjectStage,
   ProjectStats,
@@ -19,12 +21,21 @@ interface CreateProjectStoreOptions {
 
 const torrentSites: Exclude<BuiltInSiteId, 'forum'>[] = [
   'bangumi',
+  'mikan',
+  'miobt',
   'nyaa',
   'acgrip',
   'dmhy',
   'acgnx_a',
   'acgnx_g',
 ]
+
+function createEmptyModeStats(): Record<ProjectMode, number> {
+  return {
+    episode: 0,
+    feature: 0,
+  }
+}
 
 function createEmptyStageStats(): Record<ProjectStage, number> {
   return {
@@ -41,6 +52,36 @@ function createEmptySourceStats(): Record<ProjectSourceKind, number> {
     quick: 0,
     file: 0,
     template: 0,
+  }
+}
+
+function normalizeTargetSites(value: unknown): SiteId[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return [...new Set(value.filter((item): item is string => typeof item === 'string' && item.trim() !== ''))]
+}
+
+function readConfiguredTargetSites(configPath: string) {
+  try {
+    if (!fs.existsSync(configPath)) {
+      return []
+    }
+
+    const config = JSON.parse(fs.readFileSync(configPath, { encoding: 'utf-8' })) as Config.PublishConfig
+    const configuredTargetSites = normalizeTargetSites(config.targetSites)
+    if (configuredTargetSites.length > 0) {
+      return configuredTargetSites
+    }
+
+    if ('targetSites' in config.content) {
+      return normalizeTargetSites(config.content.targetSites)
+    }
+
+    return []
+  } catch {
+    return []
   }
 }
 
@@ -68,6 +109,8 @@ function getTimestamp(task: Config.Task, filePath?: string) {
 function buildSiteLinks(task: Config.Task): Partial<Record<SiteId, string>> {
   return {
     bangumi: task.bangumi,
+    mikan: task.mikan,
+    miobt: task.miobt,
     nyaa: task.nyaa,
     acgrip: task.acgrip,
     dmhy: task.dmhy,
@@ -156,25 +199,49 @@ function buildProjectPublishResults(task: Config.Task, updatedAt: string): Publi
   )
 }
 
+function getLegacyTaskType(task: Config.Task): LegacyProjectType | undefined {
+  return task.type
+}
+
+function getProjectMode(task: Config.Task): ProjectMode {
+  if (task.mode) {
+    return task.mode
+  }
+
+  return task.type === 'episode' ? 'episode' : 'feature'
+}
+
+function getProjectSourceKind(task: Config.Task): ProjectSourceKind | undefined {
+  const legacyType = getLegacyTaskType(task)
+  if (!legacyType || legacyType === 'episode') {
+    return undefined
+  }
+
+  return legacyType
+}
+
 function mapTaskToProject(task: Config.Task): PublishProject {
   const configPath = join(task.path, 'config.json')
   const createdAt = new Date(task.id).toISOString()
   const updatedAt = getTimestamp(task, configPath)
   const publishResults = buildProjectPublishResults(task, updatedAt)
   const siteLinks = buildSiteLinks(task)
-  const targetSites = [...new Set(publishResults.map(item => item.siteId))]
+  const projectMode = getProjectMode(task)
+  const targetSites = readConfiguredTargetSites(configPath)
+  const recordedSites = [...new Set(publishResults.map(item => item.siteId))]
 
   return {
     id: task.id,
     name: task.name,
     workingDirectory: task.path,
-    sourceKind: task.type,
+    projectMode,
+    sourceKind: getProjectSourceKind(task),
     status: mapLegacyStatus(task.status),
     stage: mapLegacyStage(task.step),
     syncEnabled: task.sync,
     siteLinks,
     forumLink: task.forumLink,
-    targetSites,
+    targetSites: targetSites.length > 0 ? targetSites : recordedSites,
     publishResults,
     configPath,
     createdAt,
@@ -293,13 +360,17 @@ export function createProjectStore(options: CreateProjectStoreOptions) {
 
   function getProjectStats(): ProjectStats {
     const projects = listProjects()
+    const byMode = createEmptyModeStats()
     const byStage = createEmptyStageStats()
     const bySourceKind = createEmptySourceStats()
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
 
     projects.forEach(project => {
+      byMode[project.projectMode] += 1
       byStage[project.stage] += 1
-      bySourceKind[project.sourceKind] += 1
+      if (project.sourceKind) {
+        bySourceKind[project.sourceKind] += 1
+      }
     })
 
     return {
@@ -307,6 +378,7 @@ export function createProjectStore(options: CreateProjectStoreOptions) {
       active: projects.filter(project => project.status !== 'published').length,
       published: projects.filter(project => project.status === 'published').length,
       recent: projects.filter(project => project.id >= sevenDaysAgo).length,
+      byMode,
       byStage,
       bySourceKind,
     }

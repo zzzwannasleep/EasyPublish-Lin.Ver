@@ -121,7 +121,7 @@
     //整理BT链接
     function generateLinks() {
         let content: string = ''
-        for (let i = 0; i < 6; i++) {
+        for (let i = 0; i < publishInfo.value.length; i++) {
             let link = publishInfo.value[i].split('：')[1]
             if (link != '未找到链接' && link != 'undefined')
                 content += `<a href="${link}" rel="noopener" target="_blank">${link}</a>\n\n`
@@ -289,6 +289,8 @@
         let msg: Message.Task.TaskID = { id: props.id }
         const result: Message.Task.PublishStatus = JSON.parse(await window.BTAPI.getBTLinks(JSON.stringify(msg)))
         publishInfo.value = []
+        publishInfo.value.push('Mikan：' + result.mikan)
+        publishInfo.value.push('MioBT：' + result.miobt)
         publishInfo.value.push('萌番组：' + result.bangumi)
         publishInfo.value.push('末日动漫：' + result.acgnx_a)
         publishInfo.value.push('Acgnx：' + result.acgnx_g)

@@ -2,7 +2,8 @@ import { app, dialog } from 'electron'
 import fs from 'fs'
 import { join } from 'path'
 import { fail, ok } from '../../shared/types/api'
-import type { CreateProjectInput } from '../../shared/types/project'
+import type { CreateProjectInput, LegacyProjectType, ProjectMode, ProjectSourceKind } from '../../shared/types/project'
+import type { SiteId } from '../../shared/types/site'
 import { getNowFormatDate } from '../core/utils'
 import { createProjectStore } from '../storage/project-store'
 
@@ -15,9 +16,28 @@ interface CreateProjectServiceOptions {
 
 export function createProjectService(options: CreateProjectServiceOptions) {
   const { projectStore, notifyProjectDataChanged } = options
+  const defaultEpisodeSites: SiteId[] = ['bangumi', 'mikan', 'miobt', 'nyaa']
 
-  function buildInitialContent(type: CreateProjectInput['sourceKind']) {
-    return type === 'template'
+  function buildInitialContent(projectMode: ProjectMode, sourceKind?: ProjectSourceKind) {
+    if (projectMode === 'episode') {
+      return {
+        seriesTitleCN: '',
+        seriesTitleEN: '',
+        seriesTitleJP: '',
+        seasonLabel: '',
+        episodeLabel: '',
+        episodeTitle: '',
+        releaseTeam: 'VCB-Studio',
+        sourceType: 'WebRip',
+        resolution: '1080p',
+        videoCodec: 'HEVC',
+        audioCodec: 'AAC',
+        summary: '',
+        targetSites: [...defaultEpisodeSites],
+      }
+    }
+
+    return sourceKind === 'template'
       ? {
           title_CN: '',
           title_EN: '',
@@ -48,21 +68,28 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         }
   }
 
-  function buildInitialPublishConfig(type: CreateProjectInput['sourceKind']): Config.PublishConfig {
+  function buildInitialPublishConfig(input: CreateProjectInput): Config.PublishConfig {
+    const { projectMode, sourceKind } = input
     return {
       title: '',
-      category_bangumi: '',
-      category_nyaa: '',
+      category_bangumi: projectMode === 'episode' ? '549ef207fe682f7549f1ea90' : '',
+      category_nyaa: projectMode === 'episode' ? '1_3' : '',
       information: 'https://vcb-s.com/archives/138',
       tags: [],
       torrentName: '',
       torrentPath: '',
-      content: buildInitialContent(type),
+      sourceKind,
+      targetSites: projectMode === 'episode' ? [...defaultEpisodeSites] : [],
+      content: buildInitialContent(projectMode, sourceKind),
     }
   }
 
   async function createProjectRecord(input: CreateProjectInput) {
-    let { workingDirectory, name, sourceKind } = input
+    let { workingDirectory, name, projectMode, sourceKind } = input
+
+    if (projectMode === 'feature' && !sourceKind) {
+      return fail('PROJECT_SOURCE_KIND_REQUIRED', 'Feature projects must include a source kind')
+    }
 
     if (workingDirectory === '') {
       workingDirectory = join(app.getPath('userData'), 'task')
@@ -81,12 +108,14 @@ export function createProjectService(options: CreateProjectServiceOptions) {
 
     const projectPath = join(workingDirectory, name)
     fs.mkdirSync(projectPath)
-    fs.writeFileSync(join(projectPath, 'config.json'), JSON.stringify(buildInitialPublishConfig(sourceKind)))
+    fs.writeFileSync(join(projectPath, 'config.json'), JSON.stringify(buildInitialPublishConfig(input)))
 
     const id = Date.now()
+    const legacyType: LegacyProjectType = projectMode === 'episode' ? 'episode' : sourceKind!
     projectStore.insertLegacyTask({
       id,
-      type: sourceKind,
+      mode: projectMode,
+      type: legacyType,
       name,
       path: projectPath,
       status: 'publishing',
@@ -120,7 +149,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const result = await createProjectRecord({
         name,
         workingDirectory: path,
-        sourceKind: type,
+        projectMode: type === 'episode' ? 'episode' : 'feature',
+        sourceKind: type === 'episode' ? undefined : type,
       })
       if (!result.ok) {
         const legacyResult: Message.Task.Result = {
@@ -156,13 +186,6 @@ export function createProjectService(options: CreateProjectServiceOptions) {
 
   function getTaskList() {
     const result: Message.Task.TaskList = { list: projectStore.getLegacyTaskList() }
-    return JSON.stringify(result)
-  }
-
-  function getTaskType(msg: string) {
-    const { id }: Message.Task.TaskID = JSON.parse(msg)
-    const type = projectStore.getLegacyTaskType(id)!
-    const result: Message.Task.TaskType = { type }
     return JSON.stringify(result)
   }
 
@@ -208,6 +231,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       result.bangumi = publishedLabel
       result.bangumi_all
     }
+    if (isPublishedLink(task.mikan)) result.mikan = publishedLabel
+    if (isPublishedLink(task.miobt)) result.miobt = publishedLabel
     if (isPublishedLink(task.nyaa)) result.nyaa = publishedLabel
     if (isPublishedLink(task.dmhy)) result.dmhy = publishedLabel
     if (isPublishedLink(task.acgrip)) result.acgrip = publishedLabel
@@ -246,7 +271,6 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     getProjectStats,
     removeProject,
     getTaskList,
-    getTaskType,
     removeTask,
     getForumLink,
     setTaskProcess,

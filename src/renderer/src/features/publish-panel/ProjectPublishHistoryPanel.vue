@@ -4,6 +4,7 @@ import StatusChip from '../../components/feedback/StatusChip.vue'
 import { useI18n } from '../../i18n'
 import {
   formatProjectTimestamp,
+  getMissingTargetSiteIds,
   getPublishStateLabel,
   getSiteLabel,
   publishStateTones,
@@ -37,6 +38,8 @@ const publishedCount = computed(
   () => new Set(results.value.filter(result => result.status === 'published').map(result => result.siteId)).size,
 )
 const failedCount = computed(() => results.value.filter(result => result.status === 'failed').length)
+const targetSiteCount = computed(() => props.project?.targetSites.length ?? 0)
+const missingTargetSites = computed(() => (props.project ? getMissingTargetSiteIds(props.project) : []))
 const latestPublishedResult = computed(() =>
   results.value.find(result => result.status === 'published' && result.remoteUrl),
 )
@@ -83,7 +86,26 @@ function formatRawResponse(rawResponse: unknown) {
         <div class="history-stat__value">{{ failedCount }}</div>
         <div class="history-stat__text">{{ t('history.stat.failures.text') }}</div>
       </article>
+      <article class="history-stat">
+        <div class="history-stat__label">{{ t('history.stat.remainingTargets.label') }}</div>
+        <div class="history-stat__value">{{ missingTargetSites.length }}</div>
+        <div class="history-stat__text">
+          {{
+            targetSiteCount
+              ? t('history.stat.remainingTargets.text', { total: targetSiteCount })
+              : t('history.stat.remainingTargets.empty')
+          }}
+        </div>
+      </article>
     </section>
+
+    <el-alert
+      v-if="missingTargetSites.length"
+      :title="t('history.missingTargets.warning', { sites: missingTargetSites.map(siteId => getSiteLabel(siteId)).join(', ') })"
+      type="warning"
+      :closable="false"
+      show-icon
+    />
 
     <article v-if="latestPublishedResult?.remoteUrl" class="history-highlight">
       <div>
@@ -159,7 +181,7 @@ function formatRawResponse(rawResponse: unknown) {
 }
 
 .history-summary {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .history-stat,
@@ -277,7 +299,7 @@ function formatRawResponse(rawResponse: unknown) {
 
 @media (max-width: 1180px) {
   .history-summary {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .history-highlight,
@@ -285,6 +307,12 @@ function formatRawResponse(rawResponse: unknown) {
   .history-item__link-row {
     flex-direction: column;
     align-items: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .history-summary {
+    grid-template-columns: 1fr;
   }
 }
 </style>

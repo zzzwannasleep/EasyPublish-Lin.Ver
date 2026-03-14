@@ -41,6 +41,7 @@ type SiteAccount = {
   index: number
   username: string
   password: string
+  apiToken?: string
   enable: boolean
 }
 
@@ -67,8 +68,31 @@ const siteAccounts = reactive<SiteAccount[]>([
     status: '',
     username: '',
     password: '',
+    apiToken: '',
     enable: true,
     index: 1,
+  },
+  {
+    siteId: 'mikan',
+    type: 'mikan',
+    time: '',
+    status: '',
+    username: '',
+    password: '',
+    apiToken: '',
+    enable: true,
+    index: 2,
+  },
+  {
+    siteId: 'miobt',
+    type: 'miobt',
+    time: '',
+    status: '',
+    username: '',
+    password: '',
+    apiToken: '',
+    enable: true,
+    index: 3,
   },
   {
     siteId: 'nyaa',
@@ -77,8 +101,9 @@ const siteAccounts = reactive<SiteAccount[]>([
     status: '',
     username: '',
     password: '',
+    apiToken: '',
     enable: true,
-    index: 2,
+    index: 4,
   },
   {
     siteId: 'acgrip',
@@ -87,8 +112,9 @@ const siteAccounts = reactive<SiteAccount[]>([
     status: '',
     username: '',
     password: '',
+    apiToken: '',
     enable: true,
-    index: 3,
+    index: 5,
   },
   {
     siteId: 'dmhy',
@@ -97,8 +123,9 @@ const siteAccounts = reactive<SiteAccount[]>([
     status: '',
     username: '',
     password: '',
+    apiToken: '',
     enable: true,
-    index: 4,
+    index: 6,
   },
   {
     siteId: 'acgnx_g',
@@ -107,8 +134,9 @@ const siteAccounts = reactive<SiteAccount[]>([
     status: '',
     username: '',
     password: '',
+    apiToken: '',
     enable: true,
-    index: 5,
+    index: 7,
   },
   {
     siteId: 'acgnx_a',
@@ -117,8 +145,9 @@ const siteAccounts = reactive<SiteAccount[]>([
     status: '',
     username: '',
     password: '',
+    apiToken: '',
     enable: true,
-    index: 6,
+    index: 8,
   },
 ])
 
@@ -157,6 +186,30 @@ function normalizeAccountStatus(status: string, enabled: boolean): NormalizedAcc
 
   const currentStatus = status.trim()
 
+  if (currentStatus === 'API credentials configured' || currentStatus === '已配置 API 凭据') {
+    return 'loggedIn'
+  }
+
+  if (currentStatus === 'API credentials missing' || currentStatus === '缺少 API 凭据') {
+    return 'loggedOut'
+  }
+
+  if (currentStatus === 'API credentials rejected' || currentStatus === 'API 凭据无效') {
+    return 'failed'
+  }
+
+  if (currentStatus === '账号已登录' || currentStatus === 'API token configured' || currentStatus === '已配置 API Token') {
+    return 'loggedIn'
+  }
+
+  if (currentStatus === '账号未登录' || currentStatus === 'API token missing' || currentStatus === '缺少 API Token') {
+    return 'loggedOut'
+  }
+
+  if (currentStatus === '访问失败' || currentStatus === 'API token rejected' || currentStatus === 'API Token 无效') {
+    return 'failed'
+  }
+
   for (const [normalized, variants] of Object.entries(statusVariants) as Array<
     [Exclude<NormalizedAccountStatus, 'unknown'>, string[]]
   >) {
@@ -166,6 +219,22 @@ function normalizeAccountStatus(status: string, enabled: boolean): NormalizedAcc
   }
 
   return 'unknown'
+}
+
+function usesApiToken(siteId: LegacyAccountType) {
+  return siteId === 'mikan' || siteId === 'miobt'
+}
+
+function usesApiUid(siteId: LegacyAccountType) {
+  return siteId === 'miobt'
+}
+
+function getUsernameLabel(siteId: LegacyAccountType) {
+  return usesApiUid(siteId) ? t('accounts.fields.apiUid') : t('accounts.fields.username')
+}
+
+function getApiTokenLabel(siteId: LegacyAccountType) {
+  return siteId === 'miobt' ? t('accounts.fields.apiKey') : t('accounts.fields.apiToken')
 }
 
 const visibleSiteAccounts = computed(() =>
@@ -415,7 +484,7 @@ onMounted(() => {
         </div>
 
         <div class="account-card__fields">
-          <label class="account-field">
+          <label v-if="!usesApiToken(account.type)" class="account-field">
             <span class="account-field__label">{{ t('accounts.fields.username') }}</span>
             <el-input v-model="account.username" @blur="saveAccountInfo(account.type)">
               <template #prefix>
@@ -424,11 +493,29 @@ onMounted(() => {
             </el-input>
           </label>
 
-          <label class="account-field">
+          <label v-if="usesApiUid(account.type)" class="account-field">
+            <span class="account-field__label">{{ getUsernameLabel(account.type) }}</span>
+            <el-input v-model="account.username" @blur="saveAccountInfo(account.type)">
+              <template #prefix>
+                <el-icon><UserFilled /></el-icon>
+              </template>
+            </el-input>
+          </label>
+
+          <label v-if="!usesApiToken(account.type)" class="account-field">
             <span class="account-field__label">{{ t('accounts.fields.password') }}</span>
             <el-input v-model="account.password" show-password type="password" @blur="saveAccountInfo(account.type)">
               <template #prefix>
                 <el-icon><Lock /></el-icon>
+              </template>
+            </el-input>
+          </label>
+
+          <label v-if="usesApiToken(account.type)" class="account-field">
+            <span class="account-field__label">{{ getApiTokenLabel(account.type) }}</span>
+            <el-input v-model="account.apiToken" show-password type="password" @blur="saveAccountInfo(account.type)">
+              <template #prefix>
+                <el-icon><Key /></el-icon>
               </template>
             </el-input>
           </label>
@@ -438,11 +525,15 @@ onMounted(() => {
           <el-button type="primary" @click="checkLoginStatus(account.type)">
             {{ t('accounts.actions.check') }}
           </el-button>
-          <el-button plain @click="openLoginWindow(account.type)">
+          <el-button v-if="!usesApiToken(account.type)" plain @click="openLoginWindow(account.type)">
             {{ t('accounts.actions.manualLogin') }}
           </el-button>
-          <el-button plain @click="importCookies(account.type)">{{ t('accounts.actions.import') }}</el-button>
-          <el-button plain @click="exportCookies(account.type)">{{ t('accounts.actions.export') }}</el-button>
+          <el-button v-if="!usesApiToken(account.type)" plain @click="importCookies(account.type)">
+            {{ t('accounts.actions.import') }}
+          </el-button>
+          <el-button v-if="!usesApiToken(account.type)" plain @click="exportCookies(account.type)">
+            {{ t('accounts.actions.export') }}
+          </el-button>
         </footer>
       </article>
     </section>

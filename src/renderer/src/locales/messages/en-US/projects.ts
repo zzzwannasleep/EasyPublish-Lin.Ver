@@ -10,17 +10,32 @@ const projects = {
   'projectCreate.hero.eyebrow': 'Projects',
   'projectCreate.hero.title': 'Create a new publishing project.',
   'projectCreate.hero.summary':
-    'This page now creates the project through the new project bridge API before continuing into the existing edit, review, and publish flow.',
+    'Choose the project mode first, then continue into the matching create form and publishing workflow.',
   'projectCreate.hero.chip': 'Project model connected',
   'projectCreate.panel.eyebrow': 'Project Setup',
   'projectCreate.panel.title': 'Initialize Release Workspace',
   'projectCreate.panel.description':
-    'Create the project record first, then continue into the existing stages.',
+    'Choose single-episode or feature/movie mode first, then continue into the matching create form.',
+  'create.mode.dialog.title': 'Choose Project Mode',
+  'create.mode.dialog.description':
+    'Decide whether this is a single-episode release or a feature/movie release before selecting the detailed flow.',
+  'create.mode.dialog.open': 'Choose Mode',
+  'create.mode.current': 'Current Mode',
+  'create.mode.unselected': 'Not selected yet',
+  'create.mode.back': 'Choose another mode',
+  'create.mode.episode.label': 'Single Episode',
+  'create.mode.episode.description':
+    'Best for frequent episode releases with explicit target-site tracking and missing-publish reminders.',
+  'create.mode.episode.action': 'Open episode form',
+  'create.mode.feature.label': 'Feature / Movie',
+  'create.mode.feature.description':
+    'Keep the existing quick, file-import, and template-based creation flows for full releases.',
+  'create.mode.feature.action': 'Open feature form',
   'create.form.name.label': 'Project Name',
   'create.form.name.placeholder': 'Leave blank to use a timestamp-based folder name',
   'create.form.directory.label': 'Working Directory',
   'create.form.directory.placeholder': 'Leave blank to use the app-data project folder',
-  'create.form.source.label': 'Project Source',
+  'create.form.source.label': 'Content Source',
   'create.form.submit': 'Create Project',
   'create.form.source.quick.label': 'Quick Publish',
   'create.form.source.quick.description': 'Start from the current guided workflow.',
@@ -34,7 +49,25 @@ const projects = {
   'create.validation.completeRequired': 'Complete the required fields before creating the project.',
   'create.error.directoryMissing': 'The selected working directory does not exist.',
   'create.success.created': 'Project created. Opening the editor workspace.',
+  'create.feature.actionsText':
+    'Feature and movie projects keep the existing quick, file, and template creation paths.',
+  'create.episode.title': 'Create Episode Workspace',
+  'create.episode.description':
+    'Create the episode project shell first, then continue into the dedicated episode editor for titles, targets, torrents, and notes.',
+  'create.episode.alert':
+    'Episode projects go straight into the dedicated episode editor instead of the legacy long form.',
+  'create.episode.nameHelp':
+    'A series-plus-episode naming pattern makes later catch-up publishing much easier to scan.',
+  'create.episode.directoryHelp':
+    'Use a dedicated working folder for episode projects or keep the default app-managed path.',
+  'create.episode.nextTitle': 'Next Step',
+  'create.episode.nextDescription':
+    'After creation, the dedicated episode editor opens so you can continue with target sites, torrent file, and publish title.',
+  'create.episode.success': 'Episode project created. Opening the dedicated editor.',
   'taskList.filter.showPublished': 'Show completed projects',
+  'taskList.filter.mode.label': 'Project Mode',
+  'taskList.filter.mode.all': 'All modes',
+  'taskList.filter.missingTargets': 'Only projects with pending targets',
   'taskList.actions.refresh': 'Refresh',
   'taskList.actions.open': 'Open',
   'taskList.actions.openList': 'View all projects',

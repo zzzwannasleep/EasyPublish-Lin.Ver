@@ -1,24 +1,30 @@
 <script setup lang="ts" name="Finish">
-    import { onMounted, ref } from "vue"
+    import { computed, onMounted, ref } from "vue"
     import { useRouter } from 'vue-router'
+    import { projectBridge } from '../services/bridge/project'
+    import { getProjectCompletionBackRouteName } from '../services/project/presentation'
+    import type { PublishProject } from '../types/project'
 
     const props = defineProps<{id: number}>()
     const router = useRouter()
 
     const src = ref('')
-    let type = ''
+    const project = ref<PublishProject | null>(null)
+    const backRouteName = computed(() => project.value ? getProjectCompletionBackRouteName(project.value) : 'forum_publish')
 
     function back() {
         router.push({
-            name: type == 'quick' ? 'bt_publish' : 'forum_publish',
+            name: backRouteName.value,
             params: {id: props.id}
         })
     }
 
     async function loadData() {
         let msg: Message.Task.TaskID = { id: props.id }
-        let taskType: Message.Task.TaskType = JSON.parse(await window.taskAPI.getTaskType(JSON.stringify(msg)))
-        type = taskType.type
+        const projectResult = await projectBridge.getProject(props.id)
+        if (projectResult.ok) {
+            project.value = projectResult.data.project
+        }
         let forumLink: Message.Task.ForumLink = JSON.parse(await window.taskAPI.getForumLink(JSON.stringify(msg)))
         if (forumLink.link) src.value = forumLink.link
     }

@@ -37,6 +37,16 @@ const ACGRIP_PUBLISH_LABEL = '\u53D1\u5E03'
 const ACGRIP_UPDATE_LABEL = '\u66F4\u65B0'
 const ACGRIP_DUPLICATE_TORRENT = '\u5DF2\u5B58\u5728\u76F8\u540C\u7684\u79CD\u5B50'
 const ACGNX_DATA_UPDATED = '\u64CD\u4F5C\u6210\u529F'
+const MIOBT_POST_API_URL = 'https://www.miobt.com/addon.php?r=api/post/76cad81b'
+const MIOBT_LINK_PREFIX = 'https://www.miobt.com/show-'
+const MIOBT_TORRENT_FIELD_NAMES = ['torrent_file', 'bt_file', 'torrent', 'file'] as const
+
+interface MioBtApiResponse {
+  status?: string
+  code?: number
+  message?: string
+  info_hash?: string
+}
 
 export function createBtPublishService(options: CreateBtPublishServiceOptions) {
   const { getUserDB, getTaskDB, projectStore, notifyProjectDataChanged } = options
@@ -66,6 +76,8 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
       case 'bangumi_all':
       case 'bangumi':
         return 'bangumi'
+      case 'mikan':
+      case 'miobt':
       case 'nyaa':
       case 'acgrip':
       case 'dmhy':
@@ -83,6 +95,10 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
         return 'Bangumi sync'
       case 'bangumi':
         return 'Bangumi'
+      case 'mikan':
+        return 'Mikan'
+      case 'miobt':
+        return 'MioBT'
       case 'nyaa':
         return 'Nyaa'
       case 'acgrip':
@@ -140,6 +156,29 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
     return JSON.parse(fs.readFileSync(join(taskPath, 'config.json'), { encoding: 'utf-8' })) as Config.PublishConfig
   }
 
+  function getMikanApiToken() {
+    return getUserDBOrThrow().data.info.find(item => item.name === 'mikan')?.apiToken?.trim() ?? ''
+  }
+
+  function getMioBtCredentials() {
+    const info = getUserDBOrThrow().data.info.find(item => item.name === 'miobt')
+    return {
+      userId: info?.username?.trim() ?? '',
+      apiKey: info?.apiToken?.trim() ?? '',
+    }
+  }
+
+  function readMikanDescription(taskPath: string) {
+    const candidates = ['acgrip.bbcode', 'nyaa.md', 'bangumi.html']
+    for (const filename of candidates) {
+      const filePath = join(taskPath, filename)
+      if (fs.existsSync(filePath)) {
+        return fs.readFileSync(filePath, { encoding: 'utf-8' }).trim()
+      }
+    }
+    return ''
+  }
+
   async function publish(msg: string) {
     let payload: Message.Task.ContentType | null = null
     try {
@@ -150,6 +189,8 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
       const config = readPublishConfig(task.path)
       if (type == 'bangumi_all') result = await publishBangumi(task, config, true)
       else if (type == 'bangumi') result = await publishBangumi(task, config, false)
+      else if (type == 'mikan') result = await publishMikan(task, config)
+      else if (type == 'miobt') result = await publishMioBt(task, config)
       else if (type == 'nyaa') result = await publishNyaa(task, config)
       else if (type == 'dmhy') result = await publishDmhy(task, config)
       else if (type == 'acgnx_a') result = await publishAcgnxA(task, config)
@@ -242,6 +283,152 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
         return 'exist'
       }
       log.error(response)
+      return 'failed'
+    } catch (err) {
+      log.error(err)
+      return 'failed'
+    }
+  }
+
+  async function publishMikan(task: Config.Task, config: Config.PublishConfig) {
+    try {
+      const apiToken = getMikanApiToken()
+      if (!apiToken) {
+        return 'unauthorized'
+      }
+
+      const torrent = fs.readFileSync(join(task.path, config.torrentName))
+      const payload: Record<string, unknown> = {
+        name: config.title,
+        torrentBase64: torrent.toString('base64'),
+      }
+
+      const description = readMikanDescription(task.path)
+      if (description) {
+        payload.description = description
+      }
+
+      const response = await axios.post('https://api.mikanani.me/api/episode', payload, {
+        responseType: 'text',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `MikanHash ${apiToken}`,
+        },
+      })
+
+      if (response.status === 200) {
+        return 'success'
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        return 'unauthorized'
+      }
+
+      log.error(response)
+      return 'failed'
+    } catch (err) {
+      log.error(err)
+      return 'failed'
+    }
+  }
+
+  function resolveMioBtSortId(config: Config.PublishConfig) {
+    switch (config.category_nyaa) {
+      case '1_4':
+        return '6'
+      case '4_1':
+      case '4_3':
+      case '4_4':
+        return '5'
+      case '1_2':
+      case '1_3':
+        return '1'
+      default:
+        break
+    }
+
+    if (config.category_bangumi === '549ef250fe682f7549f1ea91') {
+      return '5'
+    }
+
+    return '1'
+  }
+
+  function parseMioBtApiResponse(payload: unknown) {
+    if (!payload) {
+      return undefined
+    }
+
+    if (typeof payload === 'object') {
+      const response = payload as MioBtApiResponse
+      return response.status ? response : undefined
+    }
+
+    if (typeof payload === 'string') {
+      try {
+        const response = JSON.parse(payload) as MioBtApiResponse
+        return response.status ? response : undefined
+      } catch {
+        return undefined
+      }
+    }
+
+    return undefined
+  }
+
+  async function publishMioBt(task: Config.Task, config: Config.PublishConfig) {
+    try {
+      const { userId, apiKey } = getMioBtCredentials()
+      if (!userId || !apiKey) {
+        return 'unauthorized'
+      }
+
+      const taskDB = getTaskDBOrThrow()
+      const torrent = fs.readFileSync(join(task.path, config.torrentName))
+      const html = fs.readFileSync(join(task.path, 'bangumi.html'), { encoding: 'utf-8' })
+      let fallbackPayload: unknown
+
+      for (const fieldName of MIOBT_TORRENT_FIELD_NAMES) {
+        const formData = new FormData()
+        formData.append('sort_id', resolveMioBtSortId(config))
+        formData.append('title', config.title)
+        formData.append('intro', html)
+        formData.append('discuss_url', task.forumLink ?? '')
+        formData.append('user_id', userId)
+        formData.append('api_key', apiKey)
+        formData.append(fieldName, new Blob([torrent], { type: 'application/x-bittorrent' }), config.torrentName)
+
+        const response = await axios.post(MIOBT_POST_API_URL, formData, { responseType: 'text' })
+        fallbackPayload = response.data
+        const data = parseMioBtApiResponse(response.data)
+
+        if (!data) {
+          continue
+        }
+
+        if (data.status === 'success' && data.info_hash) {
+          task.miobt = `${MIOBT_LINK_PREFIX}${data.info_hash}.html`
+          await taskDB.write()
+          return 'success'
+        }
+
+        if (data.code === 103 && data.info_hash) {
+          if (!task.miobt) {
+            task.miobt = `${MIOBT_LINK_PREFIX}${data.info_hash}.html`
+            await taskDB.write()
+          }
+          return 'exist'
+        }
+
+        if (data.code === 114 || data.message === 'auth failed') {
+          return 'unauthorized'
+        }
+
+        log.error(data)
+        return 'failed'
+      }
+
+      log.error(fallbackPayload)
       return 'failed'
     } catch (err) {
       log.error(err)
@@ -461,7 +648,8 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
       const date = new Date()
       const csrf = await axios.get('https://acg.rip/cp/posts/upload', { responseType: 'text' })
       let cookieValue = csrf.headers['set-cookie']![0].match(/_kanako_session=([\S]*?);/)![1]
-      userDB.data.info[2].cookies.find(item => item.name == '_kanako_session')!.value = cookieValue
+      userDB.data.info.find(item => item.name == 'acgrip')!.cookies.find(item => item.name == '_kanako_session')!.value =
+        cookieValue
       await userDB.write()
       const token = (csrf.data as string).match(/name="csrf-token"\scontent="([\S]*?)"/)![1]
       formData.append('authenticity_token', token)
@@ -478,7 +666,8 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
       const response = await axios.post('https://acg.rip/cp/posts', formData, { responseType: 'text' })
       if (response.status == 302) {
         cookieValue = response.headers['set-cookie']![0].match(/_kanako_session=([\S]*?);/)![1]
-        userDB.data.info[2].cookies.find(item => item.name == '_kanako_session')!.value = cookieValue
+        userDB.data.info.find(item => item.name == 'acgrip')!.cookies.find(item => item.name == '_kanako_session')!.value =
+          cookieValue
         await userDB.write()
         const src = await getAcgripLink(config.title)
         task.acgrip = src == '' ? DMHY_LINK_MISSING : `https://acg.rip${src}`
@@ -531,7 +720,8 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
       }
       await sleep(1000)
       const cookieValue = result.headers['set-cookie']![0].match(/_kanako_session=([\S]*?);/)![1]
-      userDB.data.info[2].cookies.find(item => item.name == '_kanako_session')!.value = cookieValue
+      userDB.data.info.find(item => item.name == 'acgrip')!.cookies.find(item => item.name == '_kanako_session')!.value =
+        cookieValue
       await userDB.write()
     }
     return src
@@ -593,9 +783,12 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
       }
       await taskDB.write()
     }
+    const latestMikanResult = [...(task.publishResults ?? [])].reverse().find(item => item.siteId === 'mikan')
     const result: Message.Task.PublishStatus = {
       bangumi_all: isFinished,
       bangumi: task.bangumi,
+      mikan: task.mikan ?? latestMikanResult?.message,
+      miobt: task.miobt,
       nyaa: task.nyaa,
       dmhy: task.dmhy,
       acgrip: task.acgrip,

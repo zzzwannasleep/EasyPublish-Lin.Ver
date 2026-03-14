@@ -345,9 +345,6 @@ namespace Task {
   export function getTaskList() {
     return projectService.getTaskList()
   }
-  export function getTaskType(msg: string) {
-    return projectService.getTaskType(msg)
-  }
   export async function removeTask(msg: string) {
     return projectService.removeTask(msg)
   }

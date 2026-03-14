@@ -1,4 +1,5 @@
 declare namespace Message {
+  import type { LegacyProjectType, ProjectMode } from './shared/types/project'
 
   namespace Global {
     
@@ -63,6 +64,7 @@ declare namespace Message {
       status: string
       username: string
       password: string
+      apiToken?: string
       enable: boolean
     }
 
@@ -201,7 +203,7 @@ declare namespace Message {
 
     interface TaskConfig {
       path: string
-      type: 'file' | 'template' | 'quick'
+      type: LegacyProjectType
       name: string
     }
 
@@ -221,6 +223,7 @@ declare namespace Message {
 
     interface TaskType {
       type: string
+      mode?: ProjectMode
     }
 
     interface ForumLink {
@@ -258,6 +261,8 @@ declare namespace Message {
     interface PublishStatus {
       bangumi_all? :string
       bangumi?: string
+      mikan?: string
+      miobt?: string
       nyaa?: string
       dmhy?: string
       acgrip?: string
@@ -284,6 +289,8 @@ declare namespace Message {
     name: string
     path: string
     bangumi?: string
+    mikan?: string
+    miobt?: string
     nyaa?: string
     acgrip?: string
     dmhy?: string

@@ -12,6 +12,8 @@ interface CreateCredentialStoreOptions {
 
 const legacyTorrentSiteIds = [
   'bangumi',
+  'mikan',
+  'miobt',
   'nyaa',
   'acgrip',
   'dmhy',
@@ -49,6 +51,16 @@ function mapHealthStatus(info: Config.LoginInfo): SiteAccount['healthStatus'] {
   if (!info.enable) return 'disabled'
 
   const status = info.status.trim()
+  if (status.includes('API credentials configured') || status.includes('已配置 API 凭据')) return 'authenticated'
+  if (status.includes('API credentials missing') || status.includes('缺少 API 凭据')) return 'unauthenticated'
+  if (status.includes('API credentials rejected') || status.includes('API 凭据无效')) return 'error'
+  if (status.includes('API token configured') || status.includes('已配置 API Token')) return 'authenticated'
+  if (status.includes('API token missing') || status.includes('缺少 API Token')) return 'unauthenticated'
+  if (status.includes('API token rejected') || status.includes('API Token 无效')) return 'error'
+  if (status.includes('账号已登录')) return 'authenticated'
+  if (status.includes('账号未登录')) return 'unauthenticated'
+  if (status.includes('访问失败') || status.includes('错误')) return 'error'
+  if (status.includes('正在登录')) return 'checking'
   if (status.includes('已登录')) return 'authenticated'
   if (status.includes('未登录')) return 'unauthenticated'
   if (status.includes('防火墙')) return 'blocked'
@@ -115,6 +127,10 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
       return getCustomPtSite(siteId)?.apiToken || undefined
     }
 
+    if (siteId === 'mikan' || siteId === 'miobt') {
+      return getSiteLoginInfo(siteId).apiToken || undefined
+    }
+
     const acgnxAPI = getUserDBOrThrow().data.acgnxAPI
     if (!acgnxAPI?.enable) {
       return undefined
@@ -164,7 +180,7 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
     const apiToken = getSiteApiToken(siteId)
     return {
       siteId,
-      authMode: apiToken ? 'api_token' : 'username_password',
+      authMode: siteId === 'mikan' || siteId === 'miobt' || apiToken ? 'api_token' : 'username_password',
       username: info.username,
       enabled: info.enable,
       lastCheckAt: info.time,

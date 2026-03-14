@@ -7,6 +7,8 @@ const dashboard = {
   'dashboard.panel.stages.title': 'Workflow Distribution',
   'dashboard.panel.stages.description':
     'See how current projects are distributed across the publishing flow.',
+  'dashboard.panel.stages.workflowLabel': 'Workflow Stages',
+  'dashboard.panel.stages.modeLabel': 'Project Modes',
   'dashboard.panel.projects.eyebrow': 'Project Preview',
   'dashboard.panel.projects.title': 'Project List Preview',
   'dashboard.panel.projects.description':
@@ -14,12 +16,12 @@ const dashboard = {
   'dashboard.quickLinks.action': 'Open',
   'dashboard.quickLinks.create.title': 'New Project',
   'dashboard.quickLinks.create.text': 'Create a release task and continue into the edit flow.',
+  'dashboard.quickLinks.projects.title': 'Projects',
+  'dashboard.quickLinks.projects.text': 'Inspect local projects and continue the current publishing flow.',
   'dashboard.quickLinks.accounts.title': 'Site Accounts',
   'dashboard.quickLinks.accounts.text': 'Manage login state, sessions, and stored credentials.',
   'dashboard.quickLinks.logs.title': 'Logs',
   'dashboard.quickLinks.logs.text': 'Inspect runtime logs and the latest failed requests.',
-  'dashboard.quickLinks.modify.title': 'Content Modify',
-  'dashboard.quickLinks.modify.text': 'Open the published-content modify tool.'
 } as const
 
 export default dashboard

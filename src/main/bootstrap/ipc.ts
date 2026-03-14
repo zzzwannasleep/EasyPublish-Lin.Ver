@@ -76,7 +76,6 @@ type LogHandlers = {
 type TaskHandlers = {
   createTask: (msg: string) => Asyncish<unknown>
   getTaskList: () => Asyncish<unknown>
-  getTaskType: (msg: string) => Asyncish<unknown>
   getForumLink: (msg: string) => Asyncish<unknown>
   getContent: (msg: string) => Asyncish<unknown>
   getPublishStatus: (msg: string) => Asyncish<unknown>
@@ -149,7 +148,6 @@ export function registerIpcHandlers({ Global, BT, Forum, Project, Site, Log, Tas
 
   ipcMain.handle('task_createTask', (_event, msg) => Task.createTask(msg))
   ipcMain.handle('task_getTaskList', () => Task.getTaskList())
-  ipcMain.handle('task_getTaskType', (_event, msg) => Task.getTaskType(msg))
   ipcMain.handle('task_getForumLink', (_event, msg) => Task.getForumLink(msg))
   ipcMain.handle('task_getContent', (_event, msg) => Task.getContent(msg))
   ipcMain.handle('task_getPublishStatus', (_event, msg) => Task.getPublishStatus(msg))

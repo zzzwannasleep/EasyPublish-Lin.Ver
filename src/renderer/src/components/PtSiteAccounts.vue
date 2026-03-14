@@ -17,8 +17,6 @@ interface PtSiteForm {
   apiToken: string
 }
 
-const legacyPtSites = new Set(['acgrip', 'dmhy', 'acgnx_a', 'acgnx_g'])
-
 const { t } = useI18n()
 const isLoading = ref(false)
 const showCreator = ref(false)
@@ -211,18 +209,6 @@ async function loadMetadata(site: PtSiteRecord) {
   } finally {
     metadataLoadingBySite.value[site.id] = false
   }
-}
-
-function openLegacyLogin(siteId: SiteId) {
-  window.BTAPI.openLoginWindow(JSON.stringify({ type: siteId }))
-}
-
-function importCookies(siteId: SiteId) {
-  window.BTAPI.importCookies(JSON.stringify({ type: siteId }))
-}
-
-function exportCookies(siteId: SiteId) {
-  window.BTAPI.exportCookies(JSON.stringify({ type: siteId }))
 }
 
 function getAccountStatus(site: PtSiteRecord) {
@@ -457,6 +443,17 @@ onMounted(() => {
       </footer>
     </section>
 
+    <section v-if="!isLoading && !sites.length && !showCreator" class="pt-empty">
+      <div class="pt-empty__icon">
+        <el-icon><CirclePlus /></el-icon>
+      </div>
+      <div class="pt-empty__title">{{ t('accounts.pt.empty.title') }}</div>
+      <div class="pt-empty__text">{{ t('accounts.pt.empty.description') }}</div>
+      <el-button type="primary" @click="showCreator = true">
+        {{ t('accounts.pt.empty.action') }}
+      </el-button>
+    </section>
+
     <section class="pt-grid" v-loading="isLoading">
       <article v-for="site in sites" :key="site.id" class="pt-card">
         <header class="pt-card__head">
@@ -593,15 +590,6 @@ onMounted(() => {
           >
             {{ t('accounts.pt.actions.checkSite') }}
           </el-button>
-          <el-button v-if="legacyPtSites.has(site.id)" plain @click="openLegacyLogin(site.id)">
-            {{ t('accounts.actions.manualLogin') }}
-          </el-button>
-          <el-button v-if="legacyPtSites.has(site.id)" plain @click="importCookies(site.id)">
-            {{ t('accounts.actions.import') }}
-          </el-button>
-          <el-button v-if="legacyPtSites.has(site.id)" plain @click="exportCookies(site.id)">
-            {{ t('accounts.actions.export') }}
-          </el-button>
           <el-button v-if="!site.builtIn" plain type="danger" @click="removeSite(site.id)">
             <el-icon><Delete /></el-icon>
             <span>{{ t('accounts.pt.actions.remove') }}</span>
@@ -625,6 +613,43 @@ onMounted(() => {
 .pt-fields {
   display: grid;
   gap: 14px;
+}
+
+.pt-empty {
+  display: grid;
+  justify-items: start;
+  gap: 14px;
+  padding: 24px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at top right, rgba(255, 190, 92, 0.12), transparent 38%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32), transparent 40%),
+    var(--bg-panel);
+}
+
+.pt-empty__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(230, 156, 28, 0.14);
+  color: var(--accent-strong);
+  font-size: 20px;
+}
+
+.pt-empty__title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.pt-empty__text {
+  max-width: 44rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
 }
 
 .pt-overview {

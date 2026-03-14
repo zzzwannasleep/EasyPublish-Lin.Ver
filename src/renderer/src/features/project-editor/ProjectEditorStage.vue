@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import Edit from '../../components/Edit.vue'
+import EpisodeEdit from '../../components/EpisodeEdit.vue'
 import StageWorkspace from '../../components/base/StageWorkspace.vue'
 import { useI18n } from '../../i18n'
 import ProjectStageAside from '../project-detail/ProjectStageAside.vue'
@@ -14,20 +15,7 @@ const { t } = useI18n()
 const { project, isLoading, errorMessage } = useProjectContext()
 const projectName = computed(() => project.value?.name ?? t('common.projectWithId', { id: props.id }))
 
-const notes = computed(() => [
-  {
-    title: t('stage.editor.note1.title'),
-    text: t('stage.editor.note1.text'),
-  },
-  {
-    title: t('stage.editor.note2.title'),
-    text: t('stage.editor.note2.text'),
-  },
-  {
-    title: t('stage.editor.note3.title'),
-    text: t('stage.editor.note3.text'),
-  },
-])
+const notes = computed(() => [])
 </script>
 
 <template>
@@ -45,7 +33,9 @@ const notes = computed(() => [
     :aside-title="t('stage.shared.asideTitle')"
     :aside-description="t('stage.editor.asideDescription')"
   >
-    <Edit :id="id" />
+    <EpisodeEdit v-if="project?.projectMode === 'episode'" :id="id" />
+    <Edit v-else-if="project" :id="id" :project="project" />
+    <div v-else class="project-editor-stage__loading">Loading project editor...</div>
 
     <template #aside>
       <ProjectStageAside
@@ -57,3 +47,12 @@ const notes = computed(() => [
     </template>
   </StageWorkspace>
 </template>
+
+<style scoped>
+.project-editor-stage__loading {
+  padding: 18px;
+  border: 1px dashed var(--border-soft);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+}
+</style>

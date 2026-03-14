@@ -49,12 +49,13 @@ export function createSiteService(options: CreateSiteServiceOptions) {
       const sites = siteRegistry
         .listCatalog()
         .filter(site => ptAdapters.has(site.adapter))
+        .filter(site => Boolean(credentialStore.getCustomPtSite(site.id)))
         .map(site => {
           const account = credentialStore.getSiteAccount(site.id)
           const credentials = credentialStore.getSiteCredentialRecord(site.id)
           return {
             ...site,
-            builtIn: !credentialStore.getCustomPtSite(site.id),
+            builtIn: false,
             accountAuthMode: account.authMode,
             accountStatus: account.healthStatus,
             accountMessage: account.legacyStatus,

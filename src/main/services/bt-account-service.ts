@@ -61,6 +61,8 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
       const { type }: Message.BT.AccountType = JSON.parse(msg)
       if (type == 'all') {
         void checkLoginStatus('{"type":"bangumi"}')
+        void checkLoginStatus('{"type":"mikan"}')
+        void checkLoginStatus('{"type":"miobt"}')
         void checkLoginStatus('{"type":"nyaa"}')
         void checkLoginStatus('{"type":"dmhy"}')
         void checkLoginStatus('{"type":"acgrip"}')
@@ -91,6 +93,16 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
             if (info.status == '璐﹀彿鏈櫥褰?')
               if (info.username != '' && info.password != '')
                 void loginAcgrip(info)
+          }
+          if (type == 'mikan') {
+            await checkMikanLoginStatus(info)
+            await userDB.write()
+            refreshLoginData()
+          }
+          if (type == 'miobt') {
+            await checkMioBtLoginStatus(info)
+            await userDB.write()
+            refreshLoginData()
           }
           if (type == 'nyaa') {
             await checkNyaaLoginStatus(info)
@@ -194,6 +206,16 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
       info.time = getCurrentTime()
       info.status = '璁块棶澶辫触'
     }
+  }
+
+  async function checkMikanLoginStatus(info: Config.LoginInfo) {
+    info.time = getCurrentTime()
+    info.status = info.apiToken?.trim() ? 'API token configured' : 'API token missing'
+  }
+
+  async function checkMioBtLoginStatus(info: Config.LoginInfo) {
+    info.time = getCurrentTime()
+    info.status = info.username.trim() && info.apiToken?.trim() ? 'API credentials configured' : 'API credentials missing'
   }
 
   async function checkNyaaLoginStatus(info: Config.LoginInfo) {
@@ -757,6 +779,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
     const info = userDB.data.info.find(item => item.name == result.type)!
     info.username = result.username
     info.password = result.password
+    info.apiToken = result.apiToken?.trim() ?? ''
     info.enable = result.enable
     await userDB.write()
   }
@@ -770,6 +793,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
       status: info.status,
       username: info.username,
       password: info.password,
+      apiToken: info.apiToken ?? '',
       enable: info.enable,
     }
     return JSON.stringify(result)

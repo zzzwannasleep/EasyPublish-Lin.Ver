@@ -7,13 +7,16 @@ import { useI18n } from '../i18n'
 import { projectBridge } from '../services/bridge/project'
 import {
   formatProjectTimestamp,
+  getMissingTargetSiteIds,
+  getProjectModeLabel,
+  getProjectResumeRouteName,
   getProjectSourceLabel,
   getProjectStageLabel,
   getProjectStatusLabel,
   getSiteLabel,
   projectStatusTones
 } from '../services/project/presentation'
-import type { ProjectStage, PublishProject } from '../types/project'
+import type { ProjectMode, PublishProject } from '../types/project'
 import type { SiteId } from '../types/site'
 
 const props = withDefaults(
@@ -31,19 +34,15 @@ const router = useRouter()
 const { t } = useI18n()
 const isLoading = ref(false)
 const showPublished = ref(false)
+const projectModeFilter = ref<'all' | ProjectMode>('all')
+const showOnlyMissingTargets = ref(false)
 const projects = ref<PublishProject[]>([])
 const isPreviewMode = computed(() => props.variant === 'preview')
-
-const stageRouteMap: Record<
-  ProjectStage,
-  'edit' | 'check' | 'bt_publish' | 'forum_publish' | 'finish'
-> = {
-  edit: 'edit',
-  review: 'check',
-  torrent_publish: 'bt_publish',
-  forum_publish: 'forum_publish',
-  completed: 'finish'
-}
+const modeFilterOptions = computed(() => [
+  { value: 'all' as const, label: t('taskList.filter.mode.all') },
+  { value: 'episode' as const, label: getProjectModeLabel('episode') },
+  { value: 'feature' as const, label: getProjectModeLabel('feature') },
+])
 
 function getProjectTimeValue(value?: string) {
   if (!value) {
@@ -54,18 +53,52 @@ function getProjectTimeValue(value?: string) {
   return Number.isFinite(timestamp) ? timestamp : 0
 }
 
+function getProjectPriority(project: PublishProject) {
+  const missingTargetCount = getMissingTargetSiteIds(project).length
+  if (project.projectMode === 'episode' && missingTargetCount > 0) {
+    return 3
+  }
+
+  if (missingTargetCount > 0) {
+    return 2
+  }
+
+  if (project.projectMode === 'episode') {
+    return 1
+  }
+
+  return 0
+}
+
 const orderedProjects = computed(() => {
   return [...projects.value].sort(
-    (left, right) => getProjectTimeValue(right.updatedAt) - getProjectTimeValue(left.updatedAt)
+    (left, right) => {
+      const priorityDelta = getProjectPriority(right) - getProjectPriority(left)
+      if (priorityDelta !== 0) {
+        return priorityDelta
+      }
+
+      return getProjectTimeValue(right.updatedAt) - getProjectTimeValue(left.updatedAt)
+    }
   )
 })
 
 const visibleProjects = computed(() => {
-  if (showPublished.value) {
-    return orderedProjects.value
-  }
+  return orderedProjects.value.filter(project => {
+    if (!showPublished.value && project.status === 'published') {
+      return false
+    }
 
-  return orderedProjects.value.filter((project) => project.status !== 'published')
+    if (projectModeFilter.value !== 'all' && project.projectMode !== projectModeFilter.value) {
+      return false
+    }
+
+    if (showOnlyMissingTargets.value && getMissingTargetSiteIds(project).length === 0) {
+      return false
+    }
+
+    return true
+  })
 })
 
 const renderedProjects = computed(() => {
@@ -112,6 +145,10 @@ function getSiteEntries(project: PublishProject) {
   return entries.filter(([, value]) => Boolean(value))
 }
 
+function getMissingTargetLabels(project: PublishProject) {
+  return getMissingTargetSiteIds(project).map(siteId => getSiteLabel(siteId)).join(', ')
+}
+
 async function loadData() {
   isLoading.value = true
   try {
@@ -129,7 +166,7 @@ async function loadData() {
 
 function openProject(project: PublishProject) {
   router.push({
-    name: stageRouteMap[project.stage],
+    name: getProjectResumeRouteName(project),
     params: { id: project.id }
   })
 }
@@ -188,6 +225,16 @@ onMounted(() => {
           <span>{{ t('taskList.filter.showPublished') }}</span>
           <el-switch v-model="showPublished" />
         </label>
+        <label class="project-list__toggle project-list__toggle--select">
+          <span>{{ t('taskList.filter.mode.label') }}</span>
+          <el-select v-model="projectModeFilter" class="project-list__select" size="small">
+            <el-option v-for="option in modeFilterOptions" :key="option.value" :label="option.label" :value="option.value" />
+          </el-select>
+        </label>
+        <label class="project-list__toggle">
+          <span>{{ t('taskList.filter.missingTargets') }}</span>
+          <el-switch v-model="showOnlyMissingTargets" />
+        </label>
         <el-button plain @click="loadData">
           <el-icon><RefreshRight /></el-icon>
           <span>{{ t('taskList.actions.refresh') }}</span>
@@ -209,7 +256,11 @@ onMounted(() => {
 
         <div class="project-card__chips">
           <StatusChip tone="info">{{ getProjectStageLabel(project.stage) }}</StatusChip>
-          <StatusChip>{{ getProjectSourceLabel(project.sourceKind) }}</StatusChip>
+          <StatusChip tone="warning">{{ getProjectModeLabel(project.projectMode) }}</StatusChip>
+          <StatusChip v-if="project.sourceKind">{{ getProjectSourceLabel(project.sourceKind) }}</StatusChip>
+          <StatusChip v-if="getMissingTargetSiteIds(project).length" tone="warning">
+            待发布 {{ getMissingTargetSiteIds(project).length }}
+          </StatusChip>
           <StatusChip v-if="getSiteEntries(project).length" tone="success">
             {{ getSiteEntries(project).length }} {{ t('taskList.card.links') }}
           </StatusChip>
@@ -265,7 +316,13 @@ onMounted(() => {
             </article>
           </div>
 
-          <div v-else class="project-card__empty">{{ t('taskList.details.noLinks') }}</div>
+          <div v-if="getMissingTargetSiteIds(project).length" class="project-card__empty project-card__empty--warning">
+            待发布：{{ getMissingTargetLabels(project) }}
+          </div>
+
+          <div v-if="!getSiteEntries(project).length && !getMissingTargetSiteIds(project).length" class="project-card__empty">
+            {{ t('taskList.details.noLinks') }}
+          </div>
         </section>
 
         <footer class="project-card__footer">
@@ -405,6 +462,14 @@ onMounted(() => {
   font-size: 13px;
 }
 
+.project-list__toggle--select {
+  gap: 12px;
+}
+
+.project-list__select {
+  min-width: 9.5rem;
+}
+
 .project-list__grid {
   grid-template-columns: repeat(auto-fit, minmax(21rem, 1fr));
 }
@@ -542,6 +607,10 @@ onMounted(() => {
   color: var(--text-secondary);
   font-size: 14px;
   line-height: 1.6;
+}
+
+.project-card__empty--warning {
+  color: var(--warning);
 }
 
 .project-card__footer {

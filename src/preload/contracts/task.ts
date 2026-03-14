@@ -5,7 +5,6 @@ export const taskAPI = {
     ipcRenderer.on('task_refreshTaskData', () => loadData()),
   createTask: async (msg: string) => await ipcRenderer.invoke('task_createTask', msg),
   getTaskList: async () => await ipcRenderer.invoke('task_getTaskList'),
-  getTaskType: async (msg: string) => await ipcRenderer.invoke('task_getTaskType', msg),
   getForumLink: async (msg: string) => await ipcRenderer.invoke('task_getForumLink', msg),
   getContent: async (msg: string) => await ipcRenderer.invoke('task_getContent', msg),
   getPublishConfig: async (msg: string) => await ipcRenderer.invoke('task_getPublishConfig', msg),

@@ -1,21 +1,25 @@
 import type { PublishResult } from './publish'
 import type { SiteId } from './site'
 
+export type ProjectMode = 'episode' | 'feature'
 export type ProjectSourceKind = 'quick' | 'file' | 'template'
+export type LegacyProjectType = ProjectSourceKind | 'episode'
 export type ProjectStatus = 'draft' | 'publishing' | 'published'
 export type ProjectStage = 'edit' | 'review' | 'torrent_publish' | 'forum_publish' | 'completed'
 
 export interface CreateProjectInput {
   name: string
   workingDirectory: string
-  sourceKind: ProjectSourceKind
+  projectMode: ProjectMode
+  sourceKind?: ProjectSourceKind
 }
 
 export interface PublishProject {
   id: number
   name: string
   workingDirectory: string
-  sourceKind: ProjectSourceKind
+  projectMode: ProjectMode
+  sourceKind?: ProjectSourceKind
   status: ProjectStatus
   stage: ProjectStage
   syncEnabled: boolean
@@ -34,6 +38,7 @@ export interface ProjectStats {
   published: number
   recent: number
   byStage: Record<ProjectStage, number>
+  byMode: Record<ProjectMode, number>
   bySourceKind: Record<ProjectSourceKind, number>
 }
 
@@ -52,4 +57,3 @@ export interface ProjectStatsPayload {
 export interface ProjectRemovalPayload {
   id: number
 }
-

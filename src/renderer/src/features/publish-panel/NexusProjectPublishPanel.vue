@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import StatusChip from '../../components/feedback/StatusChip.vue'
 import { useI18n } from '../../i18n'
 import { siteBridge } from '../../services/bridge/site'
@@ -15,6 +15,14 @@ import type {
   SiteSection,
 } from '../../types/site'
 import { useProjectContext } from '../project-detail/project-context'
+
+interface SharedPublishDraftForm {
+  title: string
+  description: string
+  torrentPath: string
+  nfoPath: string
+  anonymous: boolean
+}
 
 interface SitePublishDraftForm {
   title: string
@@ -69,6 +77,8 @@ const { project, refreshProject } = useProjectContext()
 const isBootstrapping = ref(false)
 const bootstrapError = ref('')
 const sites = ref<SiteCatalogEntry[]>([])
+const selectedSiteIds = ref<SiteId[]>([])
+const advancedSiteIds = ref<string[]>([])
 const metadataBySite = ref<Partial<Record<SiteId, SiteMetadataRecord>>>({})
 const metadataErrorBySite = ref<Partial<Record<SiteId, string>>>({})
 const metadataLoadingBySite = ref<Partial<Record<SiteId, boolean>>>({})
@@ -81,9 +91,34 @@ const publishErrorBySite = ref<Partial<Record<SiteId, string>>>({})
 const publishLoadingBySite = ref<Partial<Record<SiteId, boolean>>>({})
 const publishResultBySite = ref<Partial<Record<SiteId, PublishResult>>>({})
 
+const sharedDraft = reactive<SharedPublishDraftForm>({
+  title: '',
+  description: '',
+  torrentPath: '',
+  nfoPath: '',
+  anonymous: false,
+})
+
+const selectedSites = computed(() => sites.value.filter(site => selectedSiteIds.value.includes(site.id)))
+
 const descriptionPreview = computed(() => {
+  if (selectedSiteIds.value.length === 0) {
+    return t('nexus.hero.noSiteSelected')
+  }
+
   const total = Object.keys(metadataBySite.value).length
   return total > 0 ? t('nexus.hero.loadedMetadata', { count: total }) : t('nexus.hero.noMetadata')
+})
+
+const selectedSummary = computed(() => {
+  if (selectedSiteIds.value.length === 0) {
+    return t('nexus.selector.emptySummary')
+  }
+
+  return t('nexus.selector.selectedSummary', {
+    count: selectedSiteIds.value.length,
+    total: sites.value.length,
+  })
 })
 
 function isMetadataLoading(siteId: SiteId) {
@@ -138,8 +173,46 @@ function supportsMetadata(site: SiteCatalogEntry) {
   return site.capabilitySet.metadata.sections
 }
 
-function canRenderPublishForm(site: SiteCatalogEntry) {
-  return isUnit3dSite(site) || Boolean(getMetadata(site.id))
+function isSiteSelected(siteId: SiteId) {
+  return selectedSiteIds.value.includes(siteId)
+}
+
+function toggleSite(siteId: SiteId) {
+  if (isSiteSelected(siteId)) {
+    selectedSiteIds.value = selectedSiteIds.value.filter(id => id !== siteId)
+    advancedSiteIds.value = advancedSiteIds.value.filter(id => id !== siteId)
+    return
+  }
+
+  selectedSiteIds.value = [...selectedSiteIds.value, siteId]
+}
+
+function getMetadataStateLabel(site: SiteCatalogEntry) {
+  if (isMetadataLoading(site.id)) {
+    return t('nexus.selector.metadataLoading')
+  }
+
+  if (!supportsMetadata(site)) {
+    return t('nexus.selector.manualEntry')
+  }
+
+  return getMetadata(site.id) ? t('nexus.selector.metadataReady') : t('nexus.selector.metadataPending')
+}
+
+function getMetadataStateTone(site: SiteCatalogEntry): 'neutral' | 'info' | 'success' | 'warning' | 'danger' {
+  if (isMetadataLoading(site.id)) {
+    return 'info'
+  }
+
+  if (!supportsMetadata(site)) {
+    return 'neutral'
+  }
+
+  if (getMetadataError(site.id)) {
+    return 'danger'
+  }
+
+  return getMetadata(site.id) ? 'success' : 'warning'
 }
 
 function getAccountStatusLabel(siteId: SiteId) {
@@ -207,6 +280,17 @@ function createEmptyDraft(): SitePublishDraftForm {
   }
 }
 
+function applySharedDraft(config: Config.PublishConfig, content: Message.Task.TaskContents) {
+  sharedDraft.title = config.title ?? content.title ?? ''
+  sharedDraft.description = content.html ?? ''
+  sharedDraft.torrentPath =
+    config.torrentName && project.value?.workingDirectory
+      ? joinProjectPath(project.value.workingDirectory, config.torrentName)
+      : config.torrentPath ?? ''
+  sharedDraft.nfoPath = ''
+  sharedDraft.anonymous = false
+}
+
 function createInitialDraft(config: Config.PublishConfig, content: Message.Task.TaskContents): SitePublishDraftForm {
   const draft = createEmptyDraft()
   draft.title = config.title ?? content.title ?? ''
@@ -260,17 +344,17 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
     projectId: props.id,
     siteId,
     typeId: draft.typeId ?? 0,
-    title: draft.title.trim(),
-    description: draft.description.trim(),
-    torrentPath: draft.torrentPath.trim(),
-    anonymous: draft.anonymous,
+    title: sharedDraft.title.trim(),
+    description: sharedDraft.description.trim(),
+    torrentPath: sharedDraft.torrentPath.trim(),
+    anonymous: sharedDraft.anonymous,
     subCategories: Object.entries(draft.subCategories).reduce<Record<string, number>>((accumulator, [field, value]) => {
       if (typeof value === 'number' && value > 0) {
         accumulator[field] = value
       }
       return accumulator
     }, {}),
-    nfoPath: draft.nfoPath.trim() || undefined,
+    nfoPath: sharedDraft.nfoPath.trim() || undefined,
   }
 
   if (site?.adapter === 'unit3d') {
@@ -316,11 +400,11 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
   }
 }
 
-async function chooseFile(siteId: SiteId, field: 'torrentPath' | 'nfoPath', extension: string) {
+async function chooseCommonFile(field: 'torrentPath' | 'nfoPath', extension: string) {
   const message: Message.Global.FileType = { type: extension }
   const { path }: Message.Global.Path = JSON.parse(await window.globalAPI.getFilePath(JSON.stringify(message)))
   if (path) {
-    ensureDraft(siteId)[field] = path
+    sharedDraft[field] = path
   }
 }
 
@@ -468,6 +552,7 @@ async function bootstrap() {
     }
 
     sites.value = siteResult.data.sites.filter(site => site.adapter === 'nexusphp' || site.adapter === 'unit3d')
+    applySharedDraft(config, content)
     sites.value.forEach(site => {
       publishDrafts.value[site.id] = createInitialDraft(config, content)
       publishErrorBySite.value[site.id] = ''
@@ -475,12 +560,26 @@ async function bootstrap() {
       publishValidationBySite.value[site.id] = undefined
       accountValidationBySite.value[site.id] = undefined
     })
+
+    const targetSiteIds = (project.value?.targetSites ?? []).filter(siteId =>
+      sites.value.some(site => site.id === siteId),
+    )
+    selectedSiteIds.value = targetSiteIds.length > 0 ? [...targetSiteIds] : sites.value.length === 1 ? [sites.value[0].id] : []
   } catch (error) {
     bootstrapError.value = (error as Error).message
   } finally {
     isBootstrapping.value = false
   }
 }
+
+watch(selectedSiteIds, siteIds => {
+  siteIds.forEach(siteId => {
+    const site = getSite(siteId)
+    if (site && supportsMetadata(site) && !getMetadata(siteId) && !isMetadataLoading(siteId)) {
+      void loadMetadata(siteId)
+    }
+  })
+})
 
 onMounted(() => {
   void bootstrap()
@@ -497,19 +596,103 @@ onMounted(() => {
           {{ t('nexus.hero.descriptionPrefix', { summary: descriptionPreview }) }}
         </p>
       </div>
-      <StatusChip tone="success">{{ t('sites.adapter.count', { count: sites.length }) }}</StatusChip>
+      <StatusChip tone="success">{{ t('nexus.hero.count', { count: sites.length }) }}</StatusChip>
     </header>
 
     <div v-if="isBootstrapping" class="nexus-panel__empty">{{ t('nexus.empty.loading') }}</div>
     <div v-else-if="bootstrapError" class="nexus-panel__empty nexus-panel__empty--danger">
       {{ bootstrapError }}
     </div>
-    <div v-else class="nexus-site-list">
-      <article v-for="site in sites" :key="site.id" class="nexus-site-card">
+    <div v-else class="nexus-panel__stack">
+      <article class="nexus-block">
+        <header class="nexus-block__header">
+          <div>
+            <h4 class="nexus-block__title">{{ t('nexus.common.title') }}</h4>
+            <p class="nexus-block__description">{{ t('nexus.common.description') }}</p>
+          </div>
+          <StatusChip tone="info">{{ t('nexus.common.hint') }}</StatusChip>
+        </header>
+
+        <div class="nexus-form__grid">
+          <el-form-item :label="t('sites.form.title')">
+            <el-input v-model="sharedDraft.title" />
+          </el-form-item>
+          <el-form-item :label="t('sites.form.torrentFile')">
+            <div class="file-picker">
+              <el-input v-model="sharedDraft.torrentPath" />
+              <el-button plain @click="chooseCommonFile('torrentPath', 'torrent')">
+                {{ t('sites.actions.pickTorrent') }}
+              </el-button>
+            </div>
+          </el-form-item>
+        </div>
+
+        <el-form-item :label="t('sites.form.description')">
+          <el-input v-model="sharedDraft.description" type="textarea" :rows="6" />
+        </el-form-item>
+
+        <div class="nexus-form__grid">
+          <el-form-item :label="t('sites.form.nfoFile')">
+            <div class="file-picker">
+              <el-input v-model="sharedDraft.nfoPath" />
+              <el-button plain @click="chooseCommonFile('nfoPath', 'nfo')">{{ t('sites.actions.pickNfo') }}</el-button>
+            </div>
+          </el-form-item>
+          <div class="nexus-common__flags">
+            <el-checkbox v-model="sharedDraft.anonymous">{{ t('sites.flags.anonymous') }}</el-checkbox>
+          </div>
+        </div>
+      </article>
+
+      <article class="nexus-block">
+        <header class="nexus-block__header">
+          <div>
+            <h4 class="nexus-block__title">{{ t('nexus.selector.title') }}</h4>
+            <p class="nexus-block__description">{{ t('nexus.selector.description') }}</p>
+          </div>
+          <StatusChip tone="warning">{{ selectedSummary }}</StatusChip>
+        </header>
+
+        <div class="nexus-selector">
+          <button
+            v-for="site in sites"
+            :key="site.id"
+            type="button"
+            class="nexus-selector__card"
+            :class="{ 'nexus-selector__card--active': isSiteSelected(site.id) }"
+            @click="toggleSite(site.id)"
+          >
+            <div class="nexus-selector__card-head">
+              <div>
+                <div class="nexus-selector__name">{{ site.name }}</div>
+                <div class="nexus-selector__endpoint">{{ site.apiBaseUrl || site.normalizedBaseUrl }}</div>
+              </div>
+              <StatusChip :tone="isSiteSelected(site.id) ? 'success' : 'neutral'">
+                {{ isSiteSelected(site.id) ? t('nexus.selector.selected') : t('nexus.selector.unselected') }}
+              </StatusChip>
+            </div>
+            <div class="nexus-selector__meta">
+              <StatusChip :tone="getMetadataStateTone(site)">
+                {{ getMetadataStateLabel(site) }}
+              </StatusChip>
+              <StatusChip v-if="getPublishResult(site.id)" :tone="publishStateTones[getPublishResult(site.id)!.status]">
+                {{ getPublishStateLabel(getPublishResult(site.id)!.status) }}
+              </StatusChip>
+            </div>
+          </button>
+        </div>
+      </article>
+
+      <div v-if="selectedSites.length === 0" class="nexus-panel__empty">
+        {{ t('nexus.site.noSitesSelected') }}
+      </div>
+
+      <article v-for="site in selectedSites" :key="site.id" class="nexus-site-card">
         <header class="nexus-site-card__header">
           <div>
             <div class="nexus-site-card__name">{{ site.name }}</div>
             <div class="nexus-site-card__endpoint">{{ site.apiBaseUrl || site.normalizedBaseUrl }}</div>
+            <p class="nexus-site-card__shared-text">{{ t('nexus.site.sharedFields') }}</p>
           </div>
           <div class="nexus-site-card__header-actions">
             <el-button
@@ -551,8 +734,10 @@ onMounted(() => {
           <span v-for="note in site.notes" :key="note" class="nexus-site-card__note">{{ note }}</span>
         </div>
 
-        <div v-if="canRenderPublishForm(site)" class="nexus-site-card__body">
-          <div v-if="supportsMetadata(site)" class="nexus-form__grid">
+        <section class="nexus-site-card__body">
+          <div class="nexus-site-card__section-title">{{ t('nexus.site.requiredSection') }}</div>
+
+          <div v-if="supportsMetadata(site) && getMetadata(site.id)" class="nexus-form__grid">
             <el-form-item :label="t('sites.form.section')">
               <el-select v-model="ensureDraft(site.id).sectionId" @change="onSectionChange(site.id)">
                 <el-option
@@ -576,170 +761,168 @@ onMounted(() => {
             </el-form-item>
           </div>
 
+          <div v-else-if="site.adapter === 'nexusphp'" class="nexus-site-card__manual">
+            <div class="nexus-site-card__hint">
+              {{ getMetadataError(site.id) || t('nexus.site.manualTypeHint') }}
+            </div>
+            <div class="nexus-form__grid">
+              <el-form-item :label="t('nexus.site.manualTypeId')">
+                <el-input-number v-model="ensureDraft(site.id).typeId" :controls="false" :min="1" />
+              </el-form-item>
+            </div>
+          </div>
+
           <div v-else class="nexus-form__grid nexus-form__grid--meta">
-            <el-form-item label="Category ID">
+            <el-form-item :label="t('nexus.site.manualCategoryId')">
               <el-input-number v-model="ensureDraft(site.id).categoryId" :controls="false" :min="1" />
             </el-form-item>
-            <el-form-item label="Type ID">
+            <el-form-item :label="t('nexus.site.manualTypeId')">
               <el-input-number v-model="ensureDraft(site.id).typeId" :controls="false" :min="1" />
             </el-form-item>
-            <el-form-item label="Resolution ID">
+            <el-form-item :label="t('nexus.site.manualResolutionId')">
               <el-input-number v-model="ensureDraft(site.id).resolutionId" :controls="false" :min="1" />
             </el-form-item>
-            <el-form-item label="Region ID">
-              <el-input-number v-model="ensureDraft(site.id).regionId" :controls="false" :min="1" />
-            </el-form-item>
-            <el-form-item label="Distributor ID">
-              <el-input-number v-model="ensureDraft(site.id).distributorId" :controls="false" :min="1" />
-            </el-form-item>
           </div>
 
-          <div class="nexus-form__grid">
-            <el-form-item :label="t('sites.form.title')">
-              <el-input v-model="ensureDraft(site.id).title" />
-            </el-form-item>
-            <el-form-item v-if="supportsMetadata(site)" :label="t('sites.form.smallDescription')">
-              <el-input v-model="ensureDraft(site.id).smallDescription" />
-            </el-form-item>
-          </div>
+          <el-collapse v-model="advancedSiteIds" class="nexus-site-card__collapse">
+            <el-collapse-item :name="site.id" :title="t('nexus.site.optionalSection')">
+              <div v-if="supportsMetadata(site)" class="nexus-site-card__optional-stack">
+                <div class="nexus-form__grid">
+                  <el-form-item :label="t('sites.form.smallDescription')">
+                    <el-input v-model="ensureDraft(site.id).smallDescription" />
+                  </el-form-item>
+                  <el-form-item :label="t('sites.form.referenceUrl')">
+                    <el-input v-model="ensureDraft(site.id).url" />
+                  </el-form-item>
+                </div>
 
-          <el-form-item :label="t('sites.form.description')">
-            <el-input v-model="ensureDraft(site.id).description" type="textarea" :rows="5" />
-          </el-form-item>
+                <div class="nexus-form__grid nexus-form__grid--meta">
+                  <el-form-item :label="t('sites.form.ptgen')">
+                    <el-input v-model="ensureDraft(site.id).ptGen" />
+                  </el-form-item>
+                  <el-form-item :label="t('sites.form.technicalInfo')">
+                    <el-input v-model="ensureDraft(site.id).technicalInfo" />
+                  </el-form-item>
+                  <el-form-item :label="t('sites.form.price')">
+                    <el-input v-model="ensureDraft(site.id).price" />
+                  </el-form-item>
+                  <el-form-item :label="t('sites.form.positionUntil')">
+                    <el-input v-model="ensureDraft(site.id).posStateUntil" placeholder="YYYY-MM-DD HH:mm:ss" />
+                  </el-form-item>
+                </div>
 
-          <div v-if="isUnit3dSite(site)" class="nexus-form__grid">
-            <el-form-item label="MediaInfo">
-              <el-input v-model="ensureDraft(site.id).mediaInfo" type="textarea" :rows="5" />
-            </el-form-item>
-            <el-form-item label="BDInfo">
-              <el-input v-model="ensureDraft(site.id).bdInfo" type="textarea" :rows="5" />
-            </el-form-item>
-          </div>
+                <div class="nexus-form__grid nexus-form__grid--meta">
+                  <el-form-item :label="t('sites.form.tags')">
+                    <el-select v-model="ensureDraft(site.id).tagIds" multiple collapse-tags collapse-tags-tooltip>
+                      <el-option
+                        v-for="tag in getSelectedSection(site.id)?.tags ?? []"
+                        :key="tag.id"
+                        :label="`${tag.name} (${tag.id})`"
+                        :value="tag.id"
+                      />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item :label="t('sites.form.positionState')">
+                    <el-select v-model="ensureDraft(site.id).posState">
+                      <el-option :label="t('sites.values.normal')" value="normal" />
+                      <el-option :label="t('sites.values.sticky')" value="sticky" />
+                      <el-option :label="t('sites.values.recommended')" value="recommended" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item :label="t('sites.form.pickType')">
+                    <el-select v-model="ensureDraft(site.id).pickType">
+                      <el-option :label="t('sites.values.normal')" value="normal" />
+                      <el-option :label="t('sites.values.hot')" value="hot" />
+                      <el-option :label="t('sites.values.classic')" value="classic" />
+                    </el-select>
+                  </el-form-item>
+                </div>
 
-          <div class="nexus-form__grid nexus-form__grid--files">
-            <el-form-item :label="t('sites.form.torrentFile')">
-              <div class="file-picker">
-                <el-input v-model="ensureDraft(site.id).torrentPath" />
-                <el-button plain @click="chooseFile(site.id, 'torrentPath', 'torrent')">{{ t('sites.actions.pickTorrent') }}</el-button>
+                <div
+                  v-if="(getSelectedSection(site.id)?.subCategories?.length ?? 0) > 0"
+                  class="nexus-form__grid"
+                >
+                  <el-form-item
+                    v-for="subCategory in getSelectedSection(site.id)?.subCategories ?? []"
+                    :key="subCategory.field"
+                    :label="`${subCategory.label} (${subCategory.field})`"
+                  >
+                    <el-select v-model="ensureDraft(site.id).subCategories[subCategory.field]">
+                      <el-option :label="t('common.none')" :value="undefined" />
+                      <el-option
+                        v-for="option in subCategory.data"
+                        :key="option.id"
+                        :label="`${option.name} (${option.id})`"
+                        :value="option.id"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </div>
               </div>
-            </el-form-item>
 
-            <el-form-item :label="t('sites.form.nfoFile')">
-              <div class="file-picker">
-                <el-input v-model="ensureDraft(site.id).nfoPath" />
-                <el-button plain @click="chooseFile(site.id, 'nfoPath', 'nfo')">{{ t('sites.actions.pickNfo') }}</el-button>
+              <div v-if="isUnit3dSite(site)" class="nexus-site-card__optional-stack">
+                <div class="nexus-form__grid">
+                  <el-form-item label="MediaInfo">
+                    <el-input v-model="ensureDraft(site.id).mediaInfo" type="textarea" :rows="5" />
+                  </el-form-item>
+                  <el-form-item label="BDInfo">
+                    <el-input v-model="ensureDraft(site.id).bdInfo" type="textarea" :rows="5" />
+                  </el-form-item>
+                </div>
+
+                <div class="nexus-form__grid nexus-form__grid--meta">
+                  <el-form-item label="Region ID">
+                    <el-input-number v-model="ensureDraft(site.id).regionId" :controls="false" :min="1" />
+                  </el-form-item>
+                  <el-form-item label="Distributor ID">
+                    <el-input-number v-model="ensureDraft(site.id).distributorId" :controls="false" :min="1" />
+                  </el-form-item>
+                  <el-form-item label="TMDB">
+                    <el-input-number v-model="ensureDraft(site.id).tmdb" :controls="false" :min="1" />
+                  </el-form-item>
+                  <el-form-item label="IMDB">
+                    <el-input-number v-model="ensureDraft(site.id).imdb" :controls="false" :min="1" />
+                  </el-form-item>
+                  <el-form-item label="TVDB">
+                    <el-input-number v-model="ensureDraft(site.id).tvdb" :controls="false" :min="1" />
+                  </el-form-item>
+                  <el-form-item label="MAL">
+                    <el-input-number v-model="ensureDraft(site.id).mal" :controls="false" :min="1" />
+                  </el-form-item>
+                  <el-form-item label="IGDB">
+                    <el-input-number v-model="ensureDraft(site.id).igdb" :controls="false" :min="1" />
+                  </el-form-item>
+                  <el-form-item label="Season">
+                    <el-input-number v-model="ensureDraft(site.id).seasonNumber" :controls="false" :min="1" />
+                  </el-form-item>
+                  <el-form-item label="Episode">
+                    <el-input-number v-model="ensureDraft(site.id).episodeNumber" :controls="false" :min="1" />
+                  </el-form-item>
+                  <el-form-item label="Free %">
+                    <el-input-number v-model="ensureDraft(site.id).free" :controls="false" :min="0" :max="100" />
+                  </el-form-item>
+                  <el-form-item label="Freeleech Days">
+                    <el-input-number v-model="ensureDraft(site.id).flUntil" :controls="false" :min="1" />
+                  </el-form-item>
+                  <el-form-item label="Double Upload Days">
+                    <el-input-number v-model="ensureDraft(site.id).duUntil" :controls="false" :min="1" />
+                  </el-form-item>
+                </div>
+
+                <div class="nexus-site-card__flags">
+                  <el-checkbox v-model="ensureDraft(site.id).personalRelease">Personal Release</el-checkbox>
+                  <el-checkbox v-model="ensureDraft(site.id).internal">Internal</el-checkbox>
+                  <el-checkbox v-model="ensureDraft(site.id).refundable">Refundable</el-checkbox>
+                  <el-checkbox v-model="ensureDraft(site.id).featured">Featured</el-checkbox>
+                  <el-checkbox v-model="ensureDraft(site.id).doubleup">Double Upload</el-checkbox>
+                  <el-checkbox v-model="ensureDraft(site.id).sticky">Sticky</el-checkbox>
+                  <el-checkbox v-model="ensureDraft(site.id).modQueueOptIn">Mod Queue Opt-In</el-checkbox>
+                </div>
               </div>
-            </el-form-item>
-          </div>
-
-          <div v-if="supportsMetadata(site)" class="nexus-form__grid nexus-form__grid--meta">
-            <el-form-item :label="t('sites.form.referenceUrl')">
-              <el-input v-model="ensureDraft(site.id).url" />
-            </el-form-item>
-            <el-form-item :label="t('sites.form.ptgen')">
-              <el-input v-model="ensureDraft(site.id).ptGen" />
-            </el-form-item>
-            <el-form-item :label="t('sites.form.technicalInfo')">
-              <el-input v-model="ensureDraft(site.id).technicalInfo" />
-            </el-form-item>
-            <el-form-item :label="t('sites.form.price')">
-              <el-input v-model="ensureDraft(site.id).price" />
-            </el-form-item>
-          </div>
-
-          <div v-if="supportsMetadata(site)" class="nexus-form__grid nexus-form__grid--meta">
-            <el-form-item :label="t('sites.form.tags')">
-              <el-select v-model="ensureDraft(site.id).tagIds" multiple collapse-tags collapse-tags-tooltip>
-                <el-option
-                  v-for="tag in getSelectedSection(site.id)?.tags ?? []"
-                  :key="tag.id"
-                  :label="`${tag.name} (${tag.id})`"
-                  :value="tag.id"
-                />
-              </el-select>
-            </el-form-item>
-            <el-form-item :label="t('sites.form.positionState')">
-              <el-select v-model="ensureDraft(site.id).posState">
-                <el-option :label="t('sites.values.normal')" value="normal" />
-                <el-option :label="t('sites.values.sticky')" value="sticky" />
-                <el-option :label="t('sites.values.recommended')" value="recommended" />
-              </el-select>
-            </el-form-item>
-            <el-form-item :label="t('sites.form.pickType')">
-              <el-select v-model="ensureDraft(site.id).pickType">
-                <el-option :label="t('sites.values.normal')" value="normal" />
-                <el-option :label="t('sites.values.hot')" value="hot" />
-                <el-option :label="t('sites.values.classic')" value="classic" />
-              </el-select>
-            </el-form-item>
-            <el-form-item :label="t('sites.form.positionUntil')">
-              <el-input v-model="ensureDraft(site.id).posStateUntil" placeholder="YYYY-MM-DD HH:mm:ss" />
-            </el-form-item>
-          </div>
-
-          <div v-if="supportsMetadata(site) && (getSelectedSection(site.id)?.subCategories?.length ?? 0) > 0" class="nexus-form__grid">
-            <el-form-item
-              v-for="subCategory in getSelectedSection(site.id)?.subCategories ?? []"
-              :key="subCategory.field"
-              :label="`${subCategory.label} (${subCategory.field})`"
-            >
-              <el-select v-model="ensureDraft(site.id).subCategories[subCategory.field]">
-                <el-option :label="t('common.none')" :value="undefined" />
-                <el-option
-                  v-for="option in subCategory.data"
-                  :key="option.id"
-                  :label="`${option.name} (${option.id})`"
-                  :value="option.id"
-                />
-              </el-select>
-            </el-form-item>
-          </div>
-
-          <div v-if="isUnit3dSite(site)" class="nexus-form__grid nexus-form__grid--meta">
-            <el-form-item label="TMDB">
-              <el-input-number v-model="ensureDraft(site.id).tmdb" :controls="false" :min="1" />
-            </el-form-item>
-            <el-form-item label="IMDB">
-              <el-input-number v-model="ensureDraft(site.id).imdb" :controls="false" :min="1" />
-            </el-form-item>
-            <el-form-item label="TVDB">
-              <el-input-number v-model="ensureDraft(site.id).tvdb" :controls="false" :min="1" />
-            </el-form-item>
-            <el-form-item label="MAL">
-              <el-input-number v-model="ensureDraft(site.id).mal" :controls="false" :min="1" />
-            </el-form-item>
-            <el-form-item label="IGDB">
-              <el-input-number v-model="ensureDraft(site.id).igdb" :controls="false" :min="1" />
-            </el-form-item>
-            <el-form-item label="Season">
-              <el-input-number v-model="ensureDraft(site.id).seasonNumber" :controls="false" :min="1" />
-            </el-form-item>
-            <el-form-item label="Episode">
-              <el-input-number v-model="ensureDraft(site.id).episodeNumber" :controls="false" :min="1" />
-            </el-form-item>
-            <el-form-item label="Free %">
-              <el-input-number v-model="ensureDraft(site.id).free" :controls="false" :min="0" :max="100" />
-            </el-form-item>
-            <el-form-item label="Freeleech Days">
-              <el-input-number v-model="ensureDraft(site.id).flUntil" :controls="false" :min="1" />
-            </el-form-item>
-            <el-form-item label="Double Upload Days">
-              <el-input-number v-model="ensureDraft(site.id).duUntil" :controls="false" :min="1" />
-            </el-form-item>
-          </div>
-
-          <div v-if="isUnit3dSite(site)" class="nexus-site-card__flags">
-            <el-checkbox v-model="ensureDraft(site.id).personalRelease">Personal Release</el-checkbox>
-            <el-checkbox v-model="ensureDraft(site.id).internal">Internal</el-checkbox>
-            <el-checkbox v-model="ensureDraft(site.id).refundable">Refundable</el-checkbox>
-            <el-checkbox v-model="ensureDraft(site.id).featured">Featured</el-checkbox>
-            <el-checkbox v-model="ensureDraft(site.id).doubleup">Double Upload</el-checkbox>
-            <el-checkbox v-model="ensureDraft(site.id).sticky">Sticky</el-checkbox>
-            <el-checkbox v-model="ensureDraft(site.id).modQueueOptIn">Mod Queue Opt-In</el-checkbox>
-          </div>
+            </el-collapse-item>
+          </el-collapse>
 
           <div class="nexus-site-card__actions">
-            <el-checkbox v-model="ensureDraft(site.id).anonymous">{{ t('sites.flags.anonymous') }}</el-checkbox>
             <div class="nexus-site-card__action-buttons">
               <el-button :loading="isPublishValidationLoading(site.id)" plain type="primary" @click="validatePublish(site.id)">
                 {{ t('nexus.actions.runChecks') }}
@@ -779,15 +962,7 @@ onMounted(() => {
             </a>
             <pre class="nexus-site-card__raw">{{ formatRawResponse(getPublishResult(site.id)?.rawResponse) }}</pre>
           </div>
-        </div>
-
-        <div v-else-if="getMetadataError(site.id)" class="nexus-site-card__error">
-          {{ getMetadataError(site.id) }}
-        </div>
-
-        <div v-else class="nexus-site-card__hint">
-          Load metadata to unlock the NexusPHP publish form.
-        </div>
+        </section>
       </article>
     </div>
   </section>
@@ -795,7 +970,17 @@ onMounted(() => {
 
 <style scoped>
 .nexus-panel,
+.nexus-panel__stack,
+.nexus-site-card__body,
+.nexus-site-card__validation,
+.nexus-site-card__result,
+.nexus-site-card__optional-stack {
+  display: grid;
+  gap: 16px;
+}
+
 .nexus-panel__header,
+.nexus-block__header,
 .nexus-site-card__header,
 .nexus-site-card__header-actions,
 .nexus-site-card__account-status,
@@ -803,7 +988,10 @@ onMounted(() => {
 .nexus-site-card__action-buttons,
 .nexus-site-card__notes,
 .nexus-site-card__flags,
-.file-picker {
+.file-picker,
+.nexus-common__flags,
+.nexus-selector__card-head,
+.nexus-selector__meta {
   display: flex;
 }
 
@@ -813,8 +1001,10 @@ onMounted(() => {
 }
 
 .nexus-panel__header,
+.nexus-block__header,
 .nexus-site-card__header,
-.nexus-site-card__actions {
+.nexus-site-card__actions,
+.nexus-selector__card-head {
   justify-content: space-between;
   gap: 14px;
 }
@@ -823,18 +1013,14 @@ onMounted(() => {
 .nexus-site-card__action-buttons,
 .nexus-site-card__account-status,
 .nexus-site-card__notes,
-.nexus-site-card__flags {
+.nexus-site-card__flags,
+.nexus-selector__meta {
   gap: 10px;
 }
 
-.nexus-site-card__account-status {
+.nexus-site-card__account-status,
+.nexus-common__flags {
   align-items: center;
-  margin-top: 12px;
-}
-
-.nexus-site-card__notes,
-.nexus-site-card__flags {
-  flex-wrap: wrap;
 }
 
 .nexus-panel__eyebrow {
@@ -845,25 +1031,38 @@ onMounted(() => {
   text-transform: uppercase;
 }
 
-.nexus-panel__title {
+.nexus-panel__title,
+.nexus-block__title {
   margin: 10px 0 0;
   font-family: var(--font-display);
-  font-size: 24px;
   letter-spacing: -0.04em;
 }
 
+.nexus-panel__title {
+  font-size: 24px;
+}
+
+.nexus-block__title {
+  font-size: 20px;
+}
+
 .nexus-panel__description,
+.nexus-block__description,
+.nexus-selector__endpoint,
 .nexus-site-card__endpoint,
 .nexus-site-card__account-text,
 .nexus-site-card__error,
 .nexus-site-card__hint,
-.nexus-site-card__result-link {
+.nexus-site-card__result-link,
+.nexus-site-card__shared-text {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.6;
 }
 
-.nexus-panel__description {
+.nexus-panel__description,
+.nexus-block__description,
+.nexus-site-card__shared-text {
   margin: 12px 0 0;
 }
 
@@ -880,23 +1079,59 @@ onMounted(() => {
   color: var(--danger);
 }
 
-.nexus-site-list,
-.nexus-site-card__body,
-.nexus-site-card__validation,
-.nexus-site-card__result {
-  display: grid;
-  gap: 16px;
-}
-
-.nexus-site-card {
+.nexus-block,
+.nexus-site-card,
+.nexus-selector__card {
   padding: 18px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   background: var(--bg-strong);
 }
 
+.nexus-selector {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 12px;
+}
+
+.nexus-selector__card {
+  display: grid;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.nexus-selector__card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.nexus-selector__card--active {
+  border-color: rgba(230, 156, 28, 0.48);
+  box-shadow: 0 18px 38px rgba(230, 156, 28, 0.12);
+}
+
+.nexus-selector__name,
 .nexus-site-card__name {
   font-weight: 700;
+}
+
+.nexus-selector__meta,
+.nexus-site-card__notes,
+.nexus-site-card__flags {
+  flex-wrap: wrap;
+}
+
+.nexus-site-card__section-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 .nexus-site-card__note {
@@ -915,11 +1150,7 @@ onMounted(() => {
 }
 
 .nexus-form__grid--meta {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.nexus-form__grid--files {
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .file-picker {
@@ -932,10 +1163,6 @@ onMounted(() => {
 
 .nexus-form__grid :deep(.el-input-number) {
   width: 100%;
-}
-
-.nexus-site-card__actions {
-  align-items: center;
 }
 
 .nexus-site-card__issues {
@@ -959,12 +1186,14 @@ onMounted(() => {
 
 @media (max-width: 1180px) {
   .nexus-panel__header,
+  .nexus-block__header,
   .nexus-site-card__header,
   .nexus-site-card__header-actions,
   .nexus-site-card__account-status,
   .nexus-site-card__actions,
   .nexus-site-card__action-buttons,
-  .file-picker {
+  .file-picker,
+  .nexus-selector__card-head {
     flex-direction: column;
     align-items: stretch;
   }

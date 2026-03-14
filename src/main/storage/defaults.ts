@@ -1,5 +1,18 @@
 export const defaultTaskData: Config.TaskData = { tasks: [] }
 
+function createDefaultLoginInfo(name: string): Config.LoginInfo {
+  return {
+    name,
+    time: '--',
+    status: '账号未登录',
+    username: '',
+    password: '',
+    apiToken: '',
+    enable: false,
+    cookies: [],
+  }
+}
+
 export const defaultUserData: Config.UserData = {
   proxyConfig: {
     status: false,
@@ -22,59 +35,19 @@ export const defaultUserData: Config.UserData = {
   ptSites: [],
   forum: { username: '', password: '', cookies: [] },
   info: [
+    createDefaultLoginInfo('bangumi'),
+    createDefaultLoginInfo('nyaa'),
     {
-      name: 'bangumi',
-      time: '--',
-      status: '账号未登录',
-      username: '',
-      password: '',
-      enable: false,
-      cookies: [],
+      ...createDefaultLoginInfo('mikan'),
+      status: 'API token missing',
     },
     {
-      name: 'nyaa',
-      time: '--',
-      status: '账号未登录',
-      username: '',
-      password: '',
-      enable: false,
-      cookies: [],
+      ...createDefaultLoginInfo('miobt'),
+      status: 'API credentials missing',
     },
-    {
-      name: 'acgrip',
-      time: '--',
-      status: '账号未登录',
-      username: '',
-      password: '',
-      enable: false,
-      cookies: [],
-    },
-    {
-      name: 'dmhy',
-      time: '--',
-      status: '账号未登录',
-      username: '',
-      password: '',
-      enable: false,
-      cookies: [],
-    },
-    {
-      name: 'acgnx_g',
-      time: '--',
-      status: '账号未登录',
-      username: '',
-      password: '',
-      enable: false,
-      cookies: [],
-    },
-    {
-      name: 'acgnx_a',
-      time: '--',
-      status: '账号未登录',
-      username: '',
-      password: '',
-      enable: false,
-      cookies: [],
-    },
+    createDefaultLoginInfo('acgrip'),
+    createDefaultLoginInfo('dmhy'),
+    createDefaultLoginInfo('acgnx_g'),
+    createDefaultLoginInfo('acgnx_a'),
   ],
 }

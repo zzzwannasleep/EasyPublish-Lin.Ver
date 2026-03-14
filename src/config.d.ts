@@ -2,12 +2,16 @@
 declare namespace Config {
   import { Cookie } from 'electron'
   import type { PublishResult } from './shared/types/publish'
+  import type { LegacyProjectType, ProjectMode, ProjectSourceKind } from './shared/types/project'
+  import type { SiteId } from './shared/types/site'
 
   type Task = {
     id: number
     name: string
     path: string
     bangumi?: string
+    mikan?: string
+    miobt?: string
     nyaa?: string
     acgrip?: string
     dmhy?: string
@@ -16,7 +20,8 @@ declare namespace Config {
     forumLink?: string
     publishResults?: PublishResult[]
     sync: boolean
-    type: 'file' | 'template' | 'quick'
+    mode?: ProjectMode
+    type?: LegacyProjectType
     status: 'published' | 'publishing'
     step: 'edit' | 'check' | 'bt_publish' | 'forum_publish' | 'finish'
   }
@@ -27,6 +32,7 @@ declare namespace Config {
     status: string,
     username: string,
     password: string,
+    apiToken?: string,
     enable: boolean,
     cookies: Cookie[]
   }
@@ -131,16 +137,34 @@ declare namespace Config {
     path_bbcode: string
   }
 
+  interface Content_episode {
+    seriesTitleCN: string
+    seriesTitleEN: string
+    seriesTitleJP: string
+    seasonLabel?: string
+    episodeLabel: string
+    episodeTitle?: string
+    releaseTeam: string
+    sourceType: string
+    resolution: string
+    videoCodec: string
+    audioCodec: string
+    summary: string
+    targetSites: SiteId[]
+  }
+
   declare interface PublishConfig {
     torrentPath: string
     torrentName: string
     category_bangumi: string
     category_nyaa: string
     tags: {label: string, value: string}[]
-    content: Content_file | Content_template
+    content: Content_file | Content_template | Content_episode
     completed?: boolean
     information: string
     remake?: boolean
     title: string
+    sourceKind?: ProjectSourceKind
+    targetSites?: SiteId[]
   }
 }

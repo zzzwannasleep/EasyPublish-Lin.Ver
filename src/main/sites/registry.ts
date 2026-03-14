@@ -57,6 +57,8 @@ export function createSiteRegistry(options: CreateSiteRegistryOptions = {}) {
   const { getCustomProfiles } = options
   const adapters: SiteAdapter[] = [
     createStaticAdapter('bangumi', 'Bangumi', 'Legacy Bangumi workflow remains bridged through the existing BT service.'),
+    createStaticAdapter('mikan', 'Mikan', 'Mikan publishing currently runs through the legacy BT service with token-based API auth.'),
+    createStaticAdapter('miobt', 'MioBT', 'MioBT publishing currently runs through the legacy BT service with API key auth.'),
     createStaticAdapter('nyaa', 'Nyaa', 'Legacy Nyaa workflow remains bridged through the existing BT service.'),
     createNexusphpAdapter(),
     createUnit3dAdapter(),

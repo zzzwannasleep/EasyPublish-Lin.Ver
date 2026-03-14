@@ -101,11 +101,71 @@ export function createContentService(options: CreateContentServiceOptions) {
 
   async function createConfig(msg: string) {
     const { id, config, type }: Message.Task.ModifiedConfig = JSON.parse(msg)
+    const taskDB = getTaskDBOrThrow()
+    const task = taskDB.data.tasks.find(item => item.id == id)
+    const taskMode = task?.mode ?? (task?.type === 'episode' ? 'episode' : 'feature')
+    const resolvedType = type ?? task?.type
     let result = ''
-    if (type == 'template') result = await createWithTemplate(id, config)
+    if (taskMode === 'episode' || resolvedType == 'episode') result = await createWithEpisode(id, config)
+    else if (resolvedType == 'template') result = await createWithTemplate(id, config)
     else result = await createWithFile(id, config)
     const response: Message.Task.Result = { result }
     return JSON.stringify(response)
+  }
+
+  function escapeMarkup(value: string) {
+    return value
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;')
+  }
+
+  function buildEpisodeHtml(config: Config.PublishConfig, info: Config.Content_episode) {
+    const titles = [info.seriesTitleCN, info.seriesTitleEN, info.seriesTitleJP].filter(Boolean)
+    const titleBlock = titles.map(item => escapeMarkup(item)).join(' / ')
+    const summaryBlock = info.summary
+      .split(/\r?\n/)
+      .map(item => item.trim())
+      .filter(Boolean)
+      .map(item => `<p>${escapeMarkup(item)}</p>`)
+      .join('\n')
+
+    const metaRows = [
+      ['标题 / Title', titleBlock],
+      ['季 / Season', escapeMarkup(info.seasonLabel ?? '')],
+      ['集数 / Episode', escapeMarkup(info.episodeLabel)],
+      ['分集标题 / Episode Title', escapeMarkup(info.episodeTitle ?? '')],
+      [
+        '规格 / Format',
+        escapeMarkup([info.sourceType, info.resolution, info.videoCodec, info.audioCodec].filter(Boolean).join(' / ')),
+      ],
+      ['发布组 / Release Team', escapeMarkup(info.releaseTeam)],
+    ].filter(([, value]) => Boolean(value))
+
+    return [
+      '<section>',
+      `<p><strong>${escapeMarkup(config.title)}</strong></p>`,
+      '<ul>',
+      ...metaRows.map(([label, value]) => `<li>${label}: ${value}</li>`),
+      '</ul>',
+      summaryBlock || '<p>暂无补充说明。</p>',
+      '</section>',
+    ].join('\n')
+  }
+
+  function writeDerivedContent(taskPath: string, html: string) {
+    const converter = new html2md()
+    const md = converter.turndown(html)
+    const reader = new commonmark.Parser()
+    const writer = new md2bbc.BBCodeRenderer()
+    const parsed = reader.parse((md as string).replaceAll('\n* * *', ''))
+    const bbcode = writer.render(parsed).slice(1).replace(/\[img\salt="[\s\S]*?"\]/g, '[img]')
+
+    fs.writeFileSync(join(taskPath, 'bangumi.html'), html)
+    fs.writeFileSync(join(taskPath, 'nyaa.md'), md)
+    fs.writeFileSync(join(taskPath, 'acgrip.bbcode'), bbcode)
   }
 
   async function createWithFile(id: number, config: Config.PublishConfig) {
@@ -284,13 +344,32 @@ export function createContentService(options: CreateContentServiceOptions) {
     }
   }
 
+  async function createWithEpisode(id: number, config: Config.PublishConfig) {
+    try {
+      const taskDB = getTaskDBOrThrow()
+      const task = taskDB.data.tasks.find(item => item.id == id)
+      const info = config.content as Config.Content_episode
+      if (!task) return 'taskNotFound'
+      fs.writeFileSync(join(task.path, 'config.json'), JSON.stringify(config))
+      if (!fs.existsSync(config.torrentPath)) return 'noSuchFile_torrent'
+
+      const html = buildEpisodeHtml(config, info)
+      writeDerivedContent(task.path, html)
+      fs.copyFileSync(config.torrentPath, join(task.path, basename(config.torrentPath)))
+      return 'success'
+    } catch (err) {
+      dialog.showErrorBox('错误', (err as Error).message)
+      return 'failed'
+    }
+  }
+
   async function getForumConfig(msg: string) {
     try {
       const taskDB = getTaskDBOrThrow()
       const { id }: Message.Task.TaskID = JSON.parse(msg)
       const task = taskDB.data.tasks.find(item => item.id == id)!
       const result: Message.Forum.Contents = {}
-      if (task.type == 'template') {
+      if ((task.mode ?? (task.type === 'episode' ? 'episode' : 'feature')) !== 'episode' && task.type == 'template') {
         const config: Config.PublishConfig = JSON.parse(
           fs.readFileSync(join(task.path, 'config.json'), { encoding: 'utf-8' }),
         )

@@ -1,15 +1,17 @@
 <script setup lang="ts" name="ProjectWorkflowView">
 import { computed, onMounted, ref, watch } from 'vue'
-import { RouterView, useRoute } from 'vue-router'
+import { RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from '../../i18n'
 import { provideProjectContext } from '../../features/project-detail/project-context'
+import { getProjectResumeRouteName, getProjectWorkflowRouteNames, type ProjectRouteName } from '../../services/project/presentation'
 import { projectBridge } from '../../services/bridge/project'
 import type { PublishProject } from '../../types/project'
 
 const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
 
-const steps = computed(
+const allSteps = computed(
   () =>
     [
       {
@@ -37,14 +39,35 @@ const steps = computed(
         title: t('workflow.step.finish.title'),
         description: t('workflow.step.finish.description'),
       },
-    ] as const,
+    ] satisfies Array<{
+      routeName: ProjectRouteName
+      title: string
+      description: string
+    }>,
 )
+
+const steps = computed(() => {
+  if (!project.value) {
+    return allSteps.value
+  }
+
+  const availableRoutes = new Set(getProjectWorkflowRouteNames(project.value))
+  return allSteps.value.filter(step => availableRoutes.has(step.routeName))
+})
 
 const activeStep = computed(() => {
   const routeName = typeof route.name === 'string' ? route.name : ''
-  return steps.value.findIndex(item => item.routeName === routeName) >= 0
-    ? steps.value.findIndex(item => item.routeName === routeName)
-    : 0
+  const matchedIndex = steps.value.findIndex(item => item.routeName === routeName)
+  if (matchedIndex >= 0) {
+    return matchedIndex
+  }
+
+  const currentProject = project.value
+  if (currentProject) {
+    return steps.value.findIndex(item => item.routeName === getProjectResumeRouteName(currentProject))
+  }
+
+  return 0
 })
 
 const workflowId = computed(() => Number(route.params.id ?? 0))
@@ -90,6 +113,26 @@ onMounted(() => {
 watch(workflowId, () => {
   void loadProject()
 })
+
+watch(
+  () => [project.value, route.name] as const,
+  ([currentProject, currentRouteName]) => {
+    if (!currentProject || typeof currentRouteName !== 'string') {
+      return
+    }
+
+    const availableRoutes = getProjectWorkflowRouteNames(currentProject)
+    if (availableRoutes.includes(currentRouteName as ProjectRouteName)) {
+      return
+    }
+
+    void router.replace({
+      name: getProjectResumeRouteName(currentProject),
+      params: { id: workflowId.value },
+    })
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

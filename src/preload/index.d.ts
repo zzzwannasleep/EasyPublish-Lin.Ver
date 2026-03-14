@@ -83,7 +83,6 @@ export interface TaskAPI {
   createTask: (msg: string) => Promise<string>
   getTaskList: () => Promise<string>
   removeTask: (msg: string) => void
-  getTaskType: (msg: string) => Promise<string>
   setTaskProcess: (msg: string) => void
   getForumLink: (msg: string) => Promise<string>
   getContent: (msg: string) => Promise<string>

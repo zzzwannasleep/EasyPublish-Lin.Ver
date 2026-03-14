@@ -1,5 +1,6 @@
 export type {
   CreateProjectInput,
+  ProjectMode,
   ProjectDetailPayload,
   ProjectListPayload,
   ProjectRemovalPayload,
@@ -10,4 +11,3 @@ export type {
   ProjectStatus,
   PublishProject,
 } from '../../../shared/types/project'
-

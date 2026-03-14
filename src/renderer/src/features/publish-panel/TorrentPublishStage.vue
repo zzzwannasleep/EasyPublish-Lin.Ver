@@ -7,6 +7,8 @@ import ProjectStageAside from '../project-detail/ProjectStageAside.vue'
 import { useProjectContext } from '../project-detail/project-context'
 import NexusProjectPublishPanel from './NexusProjectPublishPanel.vue'
 
+type LegacyStageSiteType = 'bangumi_all' | 'bangumi' | 'mikan' | 'miobt' | 'nyaa'
+
 const props = defineProps<{
   id: number
 }>()
@@ -14,6 +16,24 @@ const props = defineProps<{
 const { t } = useI18n()
 const { project, isLoading, errorMessage } = useProjectContext()
 const projectName = computed(() => project.value?.name ?? t('common.projectWithId', { id: props.id }))
+const legacySiteTypes = computed<LegacyStageSiteType[]>(() => {
+  if (!project.value || project.value.projectMode !== 'episode') {
+    return ['bangumi_all', 'bangumi', 'mikan', 'miobt', 'nyaa']
+  }
+
+  const siteMap: Partial<Record<string, LegacyStageSiteType>> = {
+    bangumi: 'bangumi',
+    mikan: 'mikan',
+    miobt: 'miobt',
+    nyaa: 'nyaa',
+  }
+
+  const targetRows = project.value.targetSites
+    .map(siteId => siteMap[siteId])
+    .filter((siteType): siteType is LegacyStageSiteType => Boolean(siteType))
+
+  return targetRows.length > 0 ? [...new Set(targetRows)] : ['bangumi', 'mikan', 'miobt', 'nyaa']
+})
 
 const notes = computed(() => [
   {
@@ -46,13 +66,13 @@ const notes = computed(() => [
     :aside-description="t('stage.torrent.asideDescription')"
   >
     <div class="publish-stage-stack">
-      <NexusProjectPublishPanel :id="id" />
+      <NexusProjectPublishPanel v-if="project && project.projectMode !== 'episode'" :id="id" />
 
       <section class="legacy-fallback">
         <div class="legacy-fallback__eyebrow">{{ t('stage.torrent.legacyEyebrow') }}</div>
         <h3 class="legacy-fallback__title">{{ t('stage.torrent.legacyTitle') }}</h3>
         <p class="legacy-fallback__description">{{ t('stage.torrent.legacyDescription') }}</p>
-        <BTPublish :id="id" :site-types="['bangumi_all', 'bangumi', 'nyaa']" />
+        <BTPublish :id="id" :site-types="legacySiteTypes" />
       </section>
     </div>
 

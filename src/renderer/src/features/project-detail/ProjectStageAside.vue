@@ -4,6 +4,8 @@ import StatusChip from '../../components/feedback/StatusChip.vue'
 import { useI18n } from '../../i18n'
 import {
   formatProjectTimestamp,
+  getMissingTargetSiteIds,
+  getProjectModeLabel,
   getPublishStateLabel,
   getRecordedSiteIds,
   getProjectSourceLabel,
@@ -44,6 +46,14 @@ const latestResult = computed(() => {
   return sortPublishResults(props.project.publishResults)[0]
 })
 
+const missingTargetSites = computed(() => {
+  if (!props.project) {
+    return ''
+  }
+
+  return getMissingTargetSiteIds(props.project).map(siteId => getSiteLabel(siteId)).join(', ')
+})
+
 function openProjectFolder(path: string) {
   const message: Message.Global.Path = { path }
   window.globalAPI.openFolder(JSON.stringify(message))
@@ -58,7 +68,8 @@ function openProjectFolder(path: string) {
     <div v-else-if="project" class="project-stage-aside__group">
       <div class="project-stage-aside__headline">{{ project.name }}</div>
       <div class="project-stage-aside__chips">
-        <StatusChip tone="info">{{ getProjectSourceLabel(project.sourceKind) }}</StatusChip>
+        <StatusChip tone="info">{{ getProjectModeLabel(project.projectMode) }}</StatusChip>
+        <StatusChip v-if="project.sourceKind" tone="neutral">{{ getProjectSourceLabel(project.sourceKind) }}</StatusChip>
         <StatusChip :tone="projectStatusTones[project.status]">
           {{ getProjectStatusLabel(project.status) }}
         </StatusChip>
@@ -80,6 +91,7 @@ function openProjectFolder(path: string) {
         {{ t('projectAside.noLinks') }}
       </template>
     </div>
+    <div v-if="missingTargetSites" class="stack-list__text">待发布：{{ missingTargetSites }}</div>
     <div v-if="latestResult" class="project-stage-aside__latest">
       <StatusChip :tone="publishStateTones[latestResult.status]">
         {{ getPublishStateLabel(latestResult.status) }}

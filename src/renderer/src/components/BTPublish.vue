@@ -4,14 +4,21 @@ import { useRouter } from 'vue-router'
 import type { TableInstance } from 'element-plus'
 import StatusChip from './feedback/StatusChip.vue'
 import { projectBridge } from '../services/bridge/project'
-import { formatProjectTimestamp, sortPublishResults } from '../services/project/presentation'
+import {
+  formatProjectTimestamp,
+  getMissingTargetSiteIds,
+  getSiteLabel,
+  sortPublishResults,
+} from '../services/project/presentation'
 import type { PublishResult } from '../types/publish'
-import type { PublishProject, ProjectSourceKind } from '../types/project'
+import type { PublishProject } from '../types/project'
 import type { SiteId } from '../types/site'
 
 type LegacySiteType =
   | 'bangumi_all'
   | 'bangumi'
+  | 'mikan'
+  | 'miobt'
   | 'nyaa'
   | 'acgrip'
   | 'dmhy'
@@ -41,10 +48,14 @@ const props = withDefaults(defineProps<{ id: number; siteTypes?: LegacySiteType[
 const router = useRouter()
 const publishtable = ref<TableInstance>()
 const project = ref<PublishProject | null>(null)
-const projectSourceKind = ref<ProjectSourceKind | null>(null)
 const isLoading = ref(false)
 const loadError = ref('')
 const selectedRowTypes = ref<LegacySiteType[]>([])
+
+const loggedInStatuses = ['账号已登录', '璐﹀彿宸茬櫥褰?']
+const loggedOutStatuses = ['账号未登录', '璐﹀彿鏈櫥褰?']
+const mikanConfiguredStatuses = ['API token configured', '已配置 API Token', '宸查厤缃?API Token']
+const miobtConfiguredStatuses = ['API credentials configured', '已配置 API 凭据', '宸查厤缃?API 鍑嵁']
 
 const baseRows: Array<Omit<LegacyPublishRow, 'index' | 'status' | 'lock' | 'rowClass' | 'attemptCount' | 'resolved'>> = [
   {
@@ -58,6 +69,18 @@ const baseRows: Array<Omit<LegacyPublishRow, 'index' | 'status' | 'lock' | 'rowC
     type: 'bangumi',
     siteId: 'bangumi',
     description: '旧 Bangumi 发布接口，实时回写项目结果。',
+  },
+  {
+    name: 'Mikan',
+    type: 'mikan',
+    siteId: 'mikan',
+    description: '通过 API Token 发布。',
+  },
+  {
+    name: 'MioBT',
+    type: 'miobt',
+    siteId: 'miobt',
+    description: '通过 UID + API Key 发布。',
   },
   {
     name: 'Nyaa',
@@ -114,17 +137,48 @@ const tabledata = reactive<LegacyPublishRow[]>(
 const resolvedCount = computed(() => tabledata.filter(row => row.resolved).length)
 const failedCount = computed(() => tabledata.filter(row => !row.lock && row.rowClass === 'danger-row').length)
 const activeCount = computed(() => tabledata.filter(row => row.lock).length)
+const targetSiteCount = computed(() => project.value?.targetSites.length ?? 0)
+const shouldSkipForumStage = computed(() => {
+  if (!project.value) {
+    return false
+  }
+
+  return project.value.projectMode === 'episode' || project.value.sourceKind === 'quick'
+})
+const missingTargetSites = computed(() => {
+  if (!project.value) {
+    return []
+  }
+
+  const availableSites = new Set(tabledata.map(row => row.siteId))
+  return getMissingTargetSiteIds(project.value).filter(siteId => availableSites.has(siteId))
+})
+const missingTargetLabels = computed(() => missingTargetSites.value.map(siteId => getSiteLabel(siteId)).join(', '))
 
 function back() {
+  const targetProject = project.value
   router.push({
-    name: projectSourceKind.value === 'quick' ? 'edit' : 'check',
+    name: targetProject && shouldSkipForumStage.value ? 'edit' : 'check',
     params: { id: props.id },
   })
 }
 
-function next() {
+async function next() {
+  if (missingTargetSites.value.length > 0) {
+    try {
+      await ElMessageBox.confirm(`还有这些目标站点未完成发布：${missingTargetLabels.value}`, '未完成目标站点', {
+        confirmButtonText: '仍然完成',
+        cancelButtonText: '返回继续发布',
+        type: 'warning',
+      })
+    } catch {
+      return
+    }
+  }
+
+  const targetProject = project.value
   router.push({
-    name: projectSourceKind.value === 'quick' ? 'finish' : 'forum_publish',
+    name: targetProject && shouldSkipForumStage.value ? 'finish' : 'forum_publish',
     params: { id: props.id },
   })
 }
@@ -149,6 +203,22 @@ function getResultsForRow(row: LegacyPublishRow) {
   return sortPublishResults(
     (project.value?.publishResults ?? []).filter(result => result.siteId === row.siteId),
   )
+}
+
+function isLoggedInStatus(status: string) {
+  return loggedInStatuses.includes(status)
+}
+
+function isLoggedOutStatus(status: string) {
+  return loggedOutStatuses.includes(status)
+}
+
+function isMikanConfiguredStatus(status: string) {
+  return mikanConfiguredStatuses.includes(status)
+}
+
+function isMioBtConfiguredStatus(status: string) {
+  return miobtConfiguredStatuses.includes(status)
 }
 
 function summarizePersistedResult(row: LegacyPublishRow, result: PublishResult) {
@@ -262,14 +332,7 @@ async function loadData() {
   loadError.value = ''
 
   try {
-    const [taskTypeRaw, projectResult] = await Promise.all([
-      window.taskAPI.getTaskType(JSON.stringify({ id: props.id })),
-      projectBridge.getProject(props.id),
-    ])
-
-    const taskType: Message.Task.TaskType = JSON.parse(taskTypeRaw)
-    projectSourceKind.value = taskType.type as ProjectSourceKind
-
+    const projectResult = await projectBridge.getProject(props.id)
     if (!projectResult.ok) {
       project.value = null
       loadError.value = projectResult.error.message
@@ -296,11 +359,28 @@ async function loadData() {
   }
 }
 
+function applyUnauthorizedStatus(row: LegacyPublishRow) {
+  row.rowClass = 'danger-row'
+  row.resolved = false
+
+  if (row.type === 'mikan') {
+    row.status = 'API Token 无效'
+    return
+  }
+
+  if (row.type === 'miobt') {
+    row.status = 'API 凭据无效'
+    return
+  }
+
+  row.status = 'API账户无效'
+}
+
 async function publish(index: number) {
   const row = tabledata[index]
   row.lock = true
   row.rowClass = 'warning-row'
-  row.status = '正在检查账户登录'
+  row.status = '正在检查账户状态'
 
   const loginMessage: Message.BT.AccountType = {
     type: row.type === 'bangumi_all' ? 'bangumi' : row.type,
@@ -309,9 +389,25 @@ async function publish(index: number) {
     await window.BTAPI.checkLoginStatus(JSON.stringify(loginMessage)),
   )
 
-  if (status !== '账号已登录') {
-    if ((row.type === 'acgnx_a' || row.type === 'acgnx_g') && status === '账号未登录') {
-      row.status = '账号未登录，尝试使用API发布'
+  if (row.type === 'mikan') {
+    if (!isMikanConfiguredStatus(status)) {
+      row.lock = false
+      row.status = status
+      row.rowClass = 'warning-row'
+      return
+    }
+    row.status = 'API Token 已就绪，正在发布'
+  } else if (row.type === 'miobt') {
+    if (!isMioBtConfiguredStatus(status)) {
+      row.lock = false
+      row.status = status
+      row.rowClass = 'warning-row'
+      return
+    }
+    row.status = 'API 凭据已就绪，正在发布'
+  } else if (!isLoggedInStatus(status)) {
+    if ((row.type === 'acgnx_a' || row.type === 'acgnx_g') && isLoggedOutStatus(status)) {
+      row.status = '账号未登录，尝试使用 API 发布'
     } else {
       row.lock = false
       row.status = status
@@ -329,9 +425,8 @@ async function publish(index: number) {
     if (result === 'success' || result === 'exist' || result === 'unauthorized') {
       row.lock = false
       await loadData()
-      if (result === 'unauthorized' && row.status === '未发布') {
-        row.status = 'API账户无效'
-        row.rowClass = 'danger-row'
+      if (result === 'unauthorized') {
+        applyUnauthorizedStatus(row)
       }
       return
     }
@@ -352,6 +447,16 @@ async function multipublish() {
     if (row) {
       void publish(row.index)
     }
+  })
+}
+
+async function publishPendingTargets() {
+  const pendingRows = tabledata.filter(
+    row => missingTargetSites.value.includes(row.siteId) && !row.lock && !row.resolved,
+  )
+
+  pendingRows.forEach(row => {
+    void publish(row.index)
   })
 }
 
@@ -376,6 +481,8 @@ onMounted(async () => {
         </p>
       </div>
       <div class="legacy-bt__chips">
+        <StatusChip v-if="targetSiteCount" tone="info">目标站点 {{ targetSiteCount }}</StatusChip>
+        <StatusChip v-if="missingTargetSites.length" tone="warning">待发布 {{ missingTargetSites.length }}</StatusChip>
         <StatusChip tone="success">已解决 {{ resolvedCount }} / {{ tabledata.length }}</StatusChip>
         <StatusChip v-if="failedCount" tone="danger">失败 {{ failedCount }}</StatusChip>
         <StatusChip v-if="activeCount" tone="warning">进行中 {{ activeCount }}</StatusChip>
@@ -384,6 +491,7 @@ onMounted(async () => {
 
     <div class="legacy-bt__toolbar">
       <div class="legacy-bt__toolbar-actions">
+        <el-button plain @click="publishPendingTargets" :disabled="missingTargetSites.length === 0">发布剩余目标站点</el-button>
         <el-button plain @click="loadData">刷新项目结果</el-button>
         <el-button plain @click="multipublish" :disabled="selectedRowTypes.length === 0">发布选中站点</el-button>
       </div>
@@ -392,6 +500,7 @@ onMounted(async () => {
           {{ loadError }}
         </template>
         <template v-else-if="project">
+          <div v-if="missingTargetSites.length">仍有待发布站点：{{ missingTargetLabels }}</div>
           最近同步：{{ formatProjectTimestamp(project.updatedAt) }}
         </template>
         <template v-else>

@@ -4,8 +4,8 @@ import AppPanel from '../../components/base/AppPanel.vue'
 import TaskList from '../../components/TaskList.vue'
 import { useI18n } from '../../i18n'
 import { projectBridge } from '../../services/bridge/project'
-import { getProjectStageLabel } from '../../services/project/presentation'
-import type { ProjectStage, ProjectStats } from '../../types/project'
+import { getProjectModeLabel, getProjectStageLabel } from '../../services/project/presentation'
+import type { ProjectMode, ProjectStage, ProjectStats } from '../../types/project'
 
 interface DistributionItem {
   key: string
@@ -37,6 +37,10 @@ function createEmptyStats(): ProjectStats {
       torrent_publish: 0,
       forum_publish: 0,
       completed: 0
+    },
+    byMode: {
+      episode: 0,
+      feature: 0
     },
     bySourceKind: {
       quick: 0,
@@ -85,6 +89,11 @@ const quickLinks = computed(() => [
     text: t('dashboard.quickLinks.create.text')
   },
   {
+    to: '/projects',
+    title: t('dashboard.quickLinks.projects.title'),
+    text: t('dashboard.quickLinks.projects.text')
+  },
+  {
     to: '/accounts',
     title: t('dashboard.quickLinks.accounts.title'),
     text: t('dashboard.quickLinks.accounts.text')
@@ -93,11 +102,6 @@ const quickLinks = computed(() => [
     to: '/logs',
     title: t('dashboard.quickLinks.logs.title'),
     text: t('dashboard.quickLinks.logs.text')
-  },
-  {
-    to: '/legacy/modify',
-    title: t('dashboard.quickLinks.modify.title'),
-    text: t('dashboard.quickLinks.modify.text')
   }
 ])
 
@@ -112,6 +116,14 @@ const stageItems = computed(() =>
   )
 )
 
+const modeOrder: ProjectMode[] = ['episode', 'feature']
+
+const modeItems = computed(() =>
+  modeOrder.map(mode =>
+    buildDistributionItem(mode, getProjectModeLabel(mode), stats.byMode[mode] ?? 0, stats.total)
+  )
+)
+
 async function loadStats() {
   const result = await projectBridge.getProjectStats()
   if (!result.ok) {
@@ -123,6 +135,10 @@ async function loadStats() {
     byStage: {
       ...nextStats.byStage,
       ...result.data.stats.byStage
+    },
+    byMode: {
+      ...nextStats.byMode,
+      ...result.data.stats.byMode
     },
     bySourceKind: {
       ...nextStats.bySourceKind,
@@ -168,17 +184,38 @@ onMounted(() => {
         :title="t('dashboard.panel.stages.title')"
         :description="t('dashboard.panel.stages.description')"
       >
-        <div class="distribution-list">
-          <article v-for="item in stageItems" :key="item.key" class="distribution-item">
-            <div class="distribution-item__main">
-              <span class="distribution-item__label">{{ item.label }}</span>
-              <strong class="distribution-item__count">{{ item.count }}</strong>
+        <div class="dashboard-distribution">
+          <section class="dashboard-distribution__section">
+            <div class="dashboard-distribution__label">{{ t('dashboard.panel.stages.workflowLabel') }}</div>
+            <div class="distribution-list">
+              <article v-for="item in stageItems" :key="item.key" class="distribution-item">
+                <div class="distribution-item__main">
+                  <span class="distribution-item__label">{{ item.label }}</span>
+                  <strong class="distribution-item__count">{{ item.count }}</strong>
+                </div>
+                <div class="distribution-item__track">
+                  <span class="distribution-item__fill" :style="{ width: item.progress }"></span>
+                </div>
+                <div class="distribution-item__meta">{{ item.share }}</div>
+              </article>
             </div>
-            <div class="distribution-item__track">
-              <span class="distribution-item__fill" :style="{ width: item.progress }"></span>
+          </section>
+
+          <section class="dashboard-distribution__section">
+            <div class="dashboard-distribution__label">{{ t('dashboard.panel.stages.modeLabel') }}</div>
+            <div class="distribution-list distribution-list--compact">
+              <article v-for="item in modeItems" :key="item.key" class="distribution-item">
+                <div class="distribution-item__main">
+                  <span class="distribution-item__label">{{ item.label }}</span>
+                  <strong class="distribution-item__count">{{ item.count }}</strong>
+                </div>
+                <div class="distribution-item__track">
+                  <span class="distribution-item__fill" :style="{ width: item.progress }"></span>
+                </div>
+                <div class="distribution-item__meta">{{ item.share }}</div>
+              </article>
             </div>
-            <div class="distribution-item__meta">{{ item.share }}</div>
-          </article>
+          </section>
         </div>
       </AppPanel>
     </section>
@@ -199,6 +236,7 @@ onMounted(() => {
 }
 
 .dashboard-top-grid,
+.dashboard-distribution,
 .quick-link-grid,
 .distribution-list {
   display: grid;
@@ -217,6 +255,27 @@ onMounted(() => {
 .distribution-list {
   grid-template-columns: repeat(auto-fit, minmax(9.25rem, 1fr));
   gap: 1rem;
+}
+
+.dashboard-distribution {
+  gap: 1rem;
+}
+
+.dashboard-distribution__section {
+  display: grid;
+  gap: 0.875rem;
+}
+
+.dashboard-distribution__label {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.distribution-list--compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .distribution-item,
@@ -338,7 +397,8 @@ onMounted(() => {
   }
 
   .quick-link-grid,
-  .distribution-list {
+  .distribution-list,
+  .distribution-list--compact {
     grid-template-columns: 1fr;
     gap: 0.875rem;
   }

@@ -10,8 +10,9 @@ let warnedAboutUnavailableEncryption = false
 
 type StoredSecret = unknown
 
-type StoredLoginInfo = Omit<Config.LoginInfo, 'password' | 'cookies'> & {
+type StoredLoginInfo = Omit<Config.LoginInfo, 'password' | 'cookies' | 'apiToken'> & {
   password: StoredSecret
+  apiToken?: StoredSecret
   cookies: StoredSecret
 }
 
@@ -156,6 +157,7 @@ function serializeUserData(data: Config.UserData): StoredUserData {
     info: normalized.info.map(info => ({
       ...info,
       password: encryptSecret(info.password),
+      apiToken: encryptSecret(info.apiToken ?? ''),
       cookies: encryptSecret(info.cookies),
     })),
     forum: {
@@ -195,6 +197,7 @@ function deserializeUserData(raw: StoredUserData | null | undefined): Config.Use
       return {
         ...info,
         password: decryptSecret(storedInfo?.password, info.password),
+        apiToken: decryptSecret(storedInfo?.apiToken, info.apiToken ?? ''),
         cookies: decryptSecret(storedInfo?.cookies, info.cookies),
       }
     }),

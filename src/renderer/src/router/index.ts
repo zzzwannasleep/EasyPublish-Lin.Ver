@@ -11,7 +11,6 @@ import ProjectCreateView from '../views/projects/ProjectCreateView.vue'
 import ProjectsView from '../views/projects/ProjectsView.vue'
 import AccountsView from '../views/accounts/AccountsView.vue'
 import LogsView from '../views/logs/LogsView.vue'
-import ModifyView from '../views/tools/ModifyView.vue'
 import GuideView from '../views/guides/GuideView.vue'
 
 const router = createRouter({
@@ -114,14 +113,12 @@ const router = createRouter({
       ]
     },
     {
-      name: 'modify',
       path: '/legacy/modify',
-      alias: ['/modify'],
-      component: ModifyView,
-      meta: {
-        titleKey: 'route.tools.title',
-        subtitleKey: 'route.tools.subtitle'
-      }
+      redirect: '/projects'
+    },
+    {
+      path: '/modify',
+      redirect: '/projects'
     },
     {
       name: 'account',

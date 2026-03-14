@@ -5,7 +5,12 @@ import StageWorkspace from '../../components/base/StageWorkspace.vue'
 import { useI18n } from '../../i18n'
 import ProjectStageAside from '../project-detail/ProjectStageAside.vue'
 import { useProjectContext } from '../project-detail/project-context'
-import { sortPublishResults } from '../../services/project/presentation'
+import {
+  getMissingTargetSiteIds,
+  getProjectCompletionBackRouteName,
+  getSiteLabel,
+  sortPublishResults,
+} from '../../services/project/presentation'
 import ProjectPublishHistoryPanel from './ProjectPublishHistoryPanel.vue'
 
 const props = defineProps<{
@@ -16,7 +21,9 @@ const router = useRouter()
 const { t } = useI18n()
 const { project, isLoading, errorMessage, refreshProject } = useProjectContext()
 const projectName = computed(() => project.value?.name ?? t('common.projectWithId', { id: props.id }))
-const previousRouteName = computed(() => (project.value?.sourceKind === 'quick' ? 'bt_publish' : 'forum_publish'))
+const previousRouteName = computed(() => (project.value ? getProjectCompletionBackRouteName(project.value) : 'bt_publish'))
+const missingTargetSites = computed(() => (project.value ? getMissingTargetSiteIds(project.value) : []))
+const missingTargetLabels = computed(() => missingTargetSites.value.map(siteId => getSiteLabel(siteId)).join(', '))
 const primaryLink = computed(() => {
   if (project.value?.forumLink) {
     return project.value.forumLink
@@ -70,6 +77,15 @@ onMounted(async () => {
     :aside-title="t('stage.shared.asideTitle')"
     :aside-description="t('stage.finish.asideDescription')"
   >
+    <el-alert
+      v-if="missingTargetSites.length"
+      :title="t('stage.finish.missingAlert', { sites: missingTargetLabels })"
+      type="warning"
+      :closable="false"
+      show-icon
+      class="completion-stage__alert"
+    />
+
     <div class="completion-stage__actions">
       <el-button plain @click="goBack">{{ t('stage.finish.back') }}</el-button>
       <a v-if="primaryLink" :href="primaryLink" class="completion-stage__primary-link" target="_blank" rel="noreferrer">
@@ -96,6 +112,10 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
+  margin-bottom: 18px;
+}
+
+.completion-stage__alert {
   margin-bottom: 18px;
 }
 

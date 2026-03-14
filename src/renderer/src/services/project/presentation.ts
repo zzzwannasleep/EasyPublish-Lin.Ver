@@ -1,7 +1,9 @@
 import type { PublishResult, PublishState } from '../../types/publish'
-import type { ProjectSourceKind, ProjectStage, ProjectStatus, PublishProject } from '../../types/project'
+import type { ProjectMode, ProjectSourceKind, ProjectStage, ProjectStatus, PublishProject } from '../../types/project'
 import type { SiteId } from '../../types/site'
 import { getCurrentLocale, translate } from '../../i18n'
+
+export type ProjectRouteName = 'edit' | 'check' | 'bt_publish' | 'forum_publish' | 'finish'
 
 export const projectStageLabelKeys: Record<ProjectStage, string> = {
   edit: 'project.stage.edit',
@@ -9,6 +11,11 @@ export const projectStageLabelKeys: Record<ProjectStage, string> = {
   torrent_publish: 'project.stage.torrent_publish',
   forum_publish: 'project.stage.forum_publish',
   completed: 'project.stage.completed',
+}
+
+export const projectModeLabelKeys: Record<ProjectMode, string> = {
+  episode: 'project.mode.episode',
+  feature: 'project.mode.feature',
 }
 
 export const projectSourceLabelKeys: Record<ProjectSourceKind, string> = {
@@ -48,6 +55,8 @@ export const publishStateTones: Record<PublishState, 'neutral' | 'info' | 'succe
 
 export const siteLabelKeys: Record<string, string> = {
   bangumi: 'project.site.bangumi',
+  mikan: 'project.site.mikan',
+  miobt: 'project.site.miobt',
   nyaa: 'project.site.nyaa',
   acgrip: 'project.site.acgrip',
   dmhy: 'project.site.dmhy',
@@ -58,6 +67,10 @@ export const siteLabelKeys: Record<string, string> = {
 
 export function getProjectStageLabel(stage: ProjectStage) {
   return translate(projectStageLabelKeys[stage])
+}
+
+export function getProjectModeLabel(mode: ProjectMode) {
+  return translate(projectModeLabelKeys[mode])
 }
 
 export function getProjectSourceLabel(source: ProjectSourceKind) {
@@ -91,6 +104,57 @@ export function formatProjectTimestamp(value?: string) {
 
 export function getRecordedSiteIds(project: PublishProject): SiteId[] {
   return [...new Set(project.publishResults.map(item => item.siteId))]
+}
+
+export function getPublishedSiteIds(project: PublishProject): SiteId[] {
+  return [
+    ...new Set(
+      project.publishResults
+        .filter(item => item.status === 'published')
+        .map(item => item.siteId),
+    ),
+  ]
+}
+
+export function getMissingTargetSiteIds(project: PublishProject): SiteId[] {
+  if (!project.targetSites.length) {
+    return []
+  }
+
+  const publishedSites = new Set(getPublishedSiteIds(project))
+  return project.targetSites.filter(siteId => !publishedSites.has(siteId))
+}
+
+export function getProjectResumeRouteName(project: PublishProject): ProjectRouteName {
+  switch (project.stage) {
+    case 'review':
+      return project.projectMode === 'episode' ? 'bt_publish' : 'check'
+    case 'torrent_publish':
+      return 'bt_publish'
+    case 'forum_publish':
+      return project.projectMode === 'episode' ? 'finish' : 'forum_publish'
+    case 'completed':
+      return 'finish'
+    case 'edit':
+    default:
+      return 'edit'
+  }
+}
+
+export function getProjectCompletionBackRouteName(project: PublishProject): ProjectRouteName {
+  if (project.projectMode === 'episode' || project.sourceKind === 'quick') {
+    return 'bt_publish'
+  }
+
+  return 'forum_publish'
+}
+
+export function getProjectWorkflowRouteNames(project: PublishProject): ProjectRouteName[] {
+  if (project.projectMode === 'episode') {
+    return ['edit', 'bt_publish', 'finish']
+  }
+
+  return ['edit', 'check', 'bt_publish', 'forum_publish', 'finish']
 }
 
 function getPublishResultTimeValue(result: PublishResult) {

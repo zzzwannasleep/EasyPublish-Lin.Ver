@@ -8,8 +8,9 @@
     import { markdown as codemirror_md } from '@codemirror/lang-markdown'
     import { oneDark } from '@codemirror/theme-one-dark'
     import type { FormRules } from 'element-plus'
+    import type { ProjectSourceKind, PublishProject } from '../types/project'
 
-    const props = defineProps<{id: number}>()
+    const props = defineProps<{id: number, project: PublishProject}>()
     const router = useRouter()
 
     //编辑器设置
@@ -67,7 +68,7 @@
     const createForm_file = ref()
     const createForm_template = ref()
     const urlType = ref('html')
-    const taskType = ref('true')
+    const taskType = computed<ProjectSourceKind>(() => props.project.sourceKind ?? 'file')
     interface ruleForm {
         torrentPath: string,
         title_CN: string,
@@ -117,6 +118,15 @@
         imagePath?: string,
         prefill: boolean
     }
+    interface ReleaseProfile {
+        id: string
+        name: string
+        note: string[]
+        depth: string
+        resolution: string
+        encoding: string
+        contentType: string
+    }
     const config = reactive<ruleForm>({
         torrentPath: "",
         title_CN: "",
@@ -164,6 +174,29 @@
         imagePath: '',
         prefill: false
     })
+    const releaseProfiles = ref<ReleaseProfile[]>([])
+    const selectedReleaseProfileId = ref('')
+    const RELEASE_PROFILE_STORAGE_KEY = 'feature-release-profiles-v1'
+    const defaultReleaseProfiles: ReleaseProfile[] = [
+        {
+            id: 'feature-bdrip-1080p-hevc',
+            name: '标准 BDRip 1080p HEVC',
+            note: [],
+            depth: '10-bit',
+            resolution: '1080p',
+            encoding: 'HEVC',
+            contentType: 'BDRip',
+        },
+        {
+            id: 'feature-bdrip-1080p-avc',
+            name: '兼容 BDRip 1080p AVC',
+            note: [],
+            depth: '10-bit',
+            resolution: '1080p',
+            encoding: 'AVC',
+            contentType: 'BDRip',
+        },
+    ]
     const rules = reactive<FormRules<ruleForm>>({
         title_CN: [{
             message: '请输入中文标题',
@@ -363,6 +396,107 @@
             value: 'TV'
         }
     ])
+    const selectedReleaseProfileName = computed(() => {
+        const matched = releaseProfiles.value.find(profile => profile.id === selectedReleaseProfileId.value)
+        return matched ? matched.name : ''
+    })
+    function normalizeReleaseNotes(notes: string[] | undefined) {
+        if (!Array.isArray(notes)) return []
+        return notes.map(item => item.trim()).filter(Boolean)
+    }
+    function loadReleaseProfiles() {
+        try {
+            const raw = window.localStorage.getItem(RELEASE_PROFILE_STORAGE_KEY)
+            if (!raw) {
+                releaseProfiles.value = [...defaultReleaseProfiles]
+                return
+            }
+            const parsed = JSON.parse(raw) as ReleaseProfile[]
+            releaseProfiles.value = Array.isArray(parsed) && parsed.length > 0 ? parsed : [...defaultReleaseProfiles]
+        }
+        catch {
+            releaseProfiles.value = [...defaultReleaseProfiles]
+        }
+    }
+    function persistReleaseProfiles() {
+        window.localStorage.setItem(RELEASE_PROFILE_STORAGE_KEY, JSON.stringify(releaseProfiles.value))
+    }
+    function applyReleaseProfile(profile: ReleaseProfile) {
+        config.note = [...profile.note]
+        config.depth = profile.depth
+        config.resolution = profile.resolution
+        config.encoding = profile.encoding
+        config.contentType = profile.contentType
+        selectedReleaseProfileId.value = profile.id
+    }
+    function syncSelectedReleaseProfile() {
+        const currentNote = normalizeReleaseNotes(config.note)
+        const matched = releaseProfiles.value.find(profile =>
+            profile.depth === config.depth &&
+            profile.resolution === config.resolution &&
+            profile.encoding === config.encoding &&
+            profile.contentType === config.contentType &&
+            JSON.stringify(normalizeReleaseNotes(profile.note)) === JSON.stringify(currentNote),
+        )
+        selectedReleaseProfileId.value = matched ? matched.id : ''
+    }
+    function applySelectedReleaseProfile() {
+        const profile = releaseProfiles.value.find(item => item.id === selectedReleaseProfileId.value)
+        if (!profile) {
+            ElMessage.warning('请先选择一个发布规格预设')
+            return
+        }
+        applyReleaseProfile(profile)
+        ElMessage.success(`已套用预设：${profile.name}`)
+    }
+    async function saveCurrentAsReleaseProfile() {
+        const response = await ElMessageBox.prompt('输入一个便于识别的名称', '保存发布规格预设', {
+            confirmButtonText: '保存',
+            cancelButtonText: '取消',
+            inputValue: config.contentType ? `${config.contentType} / ${config.resolution} ${config.encoding}` : '',
+        }).catch(() => undefined)
+        if (!response || typeof response !== 'object' || !('value' in response))
+            return
+        const name = response.value.trim()
+        if (!name) {
+            ElMessage.warning('预设名称不能为空')
+            return
+        }
+        const existing = releaseProfiles.value.find(profile => profile.name === name)
+        const nextProfile: ReleaseProfile = {
+            id: existing ? existing.id : `${Date.now()}`,
+            name,
+            note: normalizeReleaseNotes(config.note),
+            depth: config.depth.trim(),
+            resolution: config.resolution.trim(),
+            encoding: config.encoding.trim(),
+            contentType: config.contentType.trim(),
+        }
+        const existingIndex = releaseProfiles.value.findIndex(profile => profile.id === nextProfile.id)
+        if (existingIndex >= 0)
+            releaseProfiles.value.splice(existingIndex, 1, nextProfile)
+        else
+            releaseProfiles.value = [...releaseProfiles.value, nextProfile]
+        persistReleaseProfiles()
+        selectedReleaseProfileId.value = nextProfile.id
+        ElMessage.success(`已保存预设：${nextProfile.name}`)
+    }
+    async function removeSelectedReleaseProfile() {
+        const profile = releaseProfiles.value.find(item => item.id === selectedReleaseProfileId.value)
+        if (!profile)
+            return
+        const confirmed = await ElMessageBox.confirm(`确定删除预设“${profile.name}”吗？`, '删除发布规格预设', {
+            confirmButtonText: '删除',
+            cancelButtonText: '取消',
+            type: 'warning',
+        }).then(() => true).catch(() => false)
+        if (!confirmed)
+            return
+        releaseProfiles.value = releaseProfiles.value.filter(item => item.id !== profile.id)
+        persistReleaseProfiles()
+        syncSelectedReleaseProfile()
+        ElMessage.success(`已删除预设：${profile.name}`)
+    }
     //设置字幕信息
     const subOptions = ref([
         {
@@ -886,8 +1020,6 @@
     //获取任务信息
     async function getTaskInfo() {
         let msg: Message.Task.TaskID = { id: props.id }
-        let { type }: Message.Task.TaskType = JSON.parse(await window.taskAPI.getTaskType(JSON.stringify(msg)))
-        taskType.value = type
         let result: Message.Task.PublishConfig = JSON.parse(await window.taskAPI.getPublishConfig(JSON.stringify(msg)))
         Object.assign(config, result, result.content)
         config.tags.map((val) => {
@@ -903,17 +1035,26 @@
                 for (let i = 0; i < config.subTeam_CN.length; i++)
                     subTeamInfo.value.push(`${config.subTeam_CN[i]}/${config.subTeam_EN[i]}`)
             }
+            syncSelectedReleaseProfile()
         }
     }
 
     onMounted(async () => {
         setscrollbar()
         changeTheme()
+        loadReleaseProfiles()
         let message: Message.Task.TaskStatus = { id: props.id, step: 'edit' }
         window.taskAPI.setTaskProcess(JSON.stringify(message))
         await getTaskInfo()
         loadCompleted.value = true
     })
+    watch(
+        () => [config.depth, config.resolution, config.encoding, config.contentType, normalizeReleaseNotes(config.note).join('|')],
+        () => {
+            if (taskType.value == 'template')
+                syncSelectedReleaseProfile()
+        }
+    )
     
 </script>
 
@@ -963,6 +1104,37 @@
                                     multiple filterable allow-create default-first-option
                                     :options="noteOptions" :reserve-keyword="false" style="width: 600px"
                                     />
+                            </el-form-item>
+                            <el-form-item label="发布规格预设">
+                                <div class="release-profile-tools">
+                                    <el-select
+                                        v-model="selectedReleaseProfileId"
+                                        clearable
+                                        filterable
+                                        placeholder="选择一个预设"
+                                    >
+                                        <el-option
+                                            v-for="profile in releaseProfiles"
+                                            :key="profile.id"
+                                            :label="profile.name"
+                                            :value="profile.id"
+                                        />
+                                    </el-select>
+                                    <div class="release-profile-actions">
+                                        <el-button plain @click="applySelectedReleaseProfile">套用预设</el-button>
+                                        <el-button plain @click="saveCurrentAsReleaseProfile">保存当前配置</el-button>
+                                        <el-button plain :disabled="!selectedReleaseProfileId" @click="removeSelectedReleaseProfile">
+                                            删除预设
+                                        </el-button>
+                                    </div>
+                                    <div class="release-profile-tip">
+                                        {{
+                                            selectedReleaseProfileName
+                                                ? `当前已匹配预设：${selectedReleaseProfileName}`
+                                                : '可把常用的内容量、位深、分辨率、编码和类型保存成命名预设。'
+                                        }}
+                                    </div>
+                                </div>
                             </el-form-item>
                             <el-form-item label="位深" prop="depth">
                                 <el-select-v2 v-model="config.depth" :options="depthOptions" :reserve-keyword="false" 
@@ -1250,6 +1422,24 @@
   padding-inline: 28px;
 }
 
+.release-profile-tools {
+  display: grid;
+  gap: 12px;
+  width: min(100%, 760px);
+}
+
+.release-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.release-profile-tip {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 :deep(.edit-view__scroll .el-scrollbar__view > .el-row:nth-child(-n + 4)) {
   display: none;
 }
@@ -1257,6 +1447,13 @@
 :deep(.edit-form-row > .el-col:first-child),
 :deep(.edit-form-row > .el-col:last-child) {
   display: none;
+}
+
+@media (max-width: 1080px) {
+  .release-profile-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 :deep(.edit-form-row > .el-col:nth-child(2)) {

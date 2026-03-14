@@ -63,7 +63,7 @@ const panelCopy = computed(() =>
     >
       <Account
         v-if="activeCategory === 'bt'"
-        :site-ids="['bangumi', 'nyaa']"
+        :site-ids="['bangumi', 'mikan', 'miobt', 'nyaa', 'acgrip', 'dmhy', 'acgnx_a', 'acgnx_g']"
         title-key="accounts.bt.title"
         description-key="accounts.bt.description"
       />
