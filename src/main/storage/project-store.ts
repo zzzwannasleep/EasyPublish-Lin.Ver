@@ -185,6 +185,11 @@ function mapTaskToProject(task: Config.Task): PublishProject {
 export function createProjectStore(options: CreateProjectStoreOptions) {
   const { getTaskDB } = options
 
+  function normalizeTaskId(id: number | string) {
+    const normalized = Number(id)
+    return Number.isFinite(normalized) ? normalized : -1
+  }
+
   function getTaskDBOrThrow() {
     const taskDB = getTaskDB()
     if (!taskDB) {
@@ -197,15 +202,16 @@ export function createProjectStore(options: CreateProjectStoreOptions) {
     return getTaskDBOrThrow().data.tasks
   }
 
-  function findLegacyTaskById(id: number) {
-    return getTaskDBOrThrow().data.tasks.find(item => item.id === id)
+  function findLegacyTaskById(id: number | string) {
+    const normalizedId = normalizeTaskId(id)
+    return getTaskDBOrThrow().data.tasks.find(item => item.id === normalizedId)
   }
 
   function listProjects() {
     return [...getLegacyTaskList()].map(mapTaskToProject).sort((a, b) => b.id - a.id)
   }
 
-  function getProjectById(id: number) {
+  function getProjectById(id: number | string) {
     const task = findLegacyTaskById(id)
     return task ? mapTaskToProject(task) : undefined
   }
@@ -220,16 +226,17 @@ export function createProjectStore(options: CreateProjectStoreOptions) {
     await getTaskDBOrThrow().write()
   }
 
-  function removeLegacyTask(id: number) {
+  function removeLegacyTask(id: number | string) {
+    const normalizedId = normalizeTaskId(id)
     const taskDB = getTaskDBOrThrow()
-    taskDB.data.tasks = taskDB.data.tasks.filter(item => item.id !== id)
+    taskDB.data.tasks = taskDB.data.tasks.filter(item => item.id !== normalizedId)
   }
 
-  function getLegacyTaskType(id: number) {
+  function getLegacyTaskType(id: number | string) {
     return findLegacyTaskById(id)?.type
   }
 
-  function setLegacyTaskStep(id: number, step: Config.Task['step']) {
+  function setLegacyTaskStep(id: number | string, step: Config.Task['step']) {
     const task = findLegacyTaskById(id)
     if (!task) {
       throw new Error(`Project ${id} does not exist`)
@@ -240,7 +247,7 @@ export function createProjectStore(options: CreateProjectStoreOptions) {
     }
   }
 
-  function setForumLink(id: number, link: string) {
+  function setForumLink(id: number | string, link: string) {
     const task = findLegacyTaskById(id)
     if (!task) {
       throw new Error(`Project ${id} does not exist`)
@@ -248,7 +255,7 @@ export function createProjectStore(options: CreateProjectStoreOptions) {
     task.forumLink = link
   }
 
-  function setSiteLink(id: number, siteId: Exclude<SiteId, 'forum'>, remoteUrl: string) {
+  function setSiteLink(id: number | string, siteId: Exclude<SiteId, 'forum'>, remoteUrl: string) {
     const task = findLegacyTaskById(id)
     if (!task) {
       throw new Error(`Project ${id} does not exist`)
@@ -256,7 +263,7 @@ export function createProjectStore(options: CreateProjectStoreOptions) {
     task[siteId] = remoteUrl
   }
 
-  function recordPublishResult(id: number, result: PublishResult) {
+  function recordPublishResult(id: number | string, result: PublishResult) {
     const task = findLegacyTaskById(id)
     if (!task) {
       throw new Error(`Project ${id} does not exist`)

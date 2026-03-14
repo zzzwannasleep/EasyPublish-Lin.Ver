@@ -62,7 +62,7 @@ const router = createRouter({
           path: 'edit',
           alias: ['/task/edit/:id'],
           component: ProjectEditorStage,
-          props: true,
+          props: route => ({ id: Number(route.params.id) }),
           meta: {
             titleKey: 'route.edit.title',
             subtitleKey: 'route.edit.subtitle'
@@ -73,7 +73,7 @@ const router = createRouter({
           path: 'review',
           alias: ['/task/check/:id'],
           component: ProjectReviewStage,
-          props: true,
+          props: route => ({ id: Number(route.params.id) }),
           meta: {
             titleKey: 'route.review.title',
             subtitleKey: 'route.review.subtitle'
@@ -84,7 +84,7 @@ const router = createRouter({
           path: 'torrent-publish',
           alias: ['/task/bt_publish/:id'],
           component: TorrentPublishStage,
-          props: true,
+          props: route => ({ id: Number(route.params.id) }),
           meta: {
             titleKey: 'route.publish.title',
             subtitleKey: 'route.publish.subtitle'
@@ -95,7 +95,7 @@ const router = createRouter({
           path: 'main-site',
           alias: ['/task/forum_publish/:id'],
           component: ForumPublishStage,
-          props: true,
+          props: route => ({ id: Number(route.params.id) }),
           meta: {
             titleKey: 'route.forum.title',
             subtitleKey: 'route.forum.subtitle'
@@ -106,7 +106,7 @@ const router = createRouter({
           path: 'complete',
           alias: ['/task/finish/:id'],
           component: PublishCompletionStage,
-          props: true,
+          props: route => ({ id: Number(route.params.id) }),
           meta: {
             titleKey: 'route.finish.title',
             subtitleKey: 'route.finish.subtitle'

@@ -1,15 +1,19 @@
-<script setup lang="ts" name="ProjectListTable">
+<script setup lang="ts" name="ProjectListWorkspace">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { Collection, FolderOpened, Link, RefreshRight, Timer } from '@element-plus/icons-vue'
+import StatusChip from './feedback/StatusChip.vue'
 import { useI18n } from '../i18n'
 import { projectBridge } from '../services/bridge/project'
-import type { ProjectStage, PublishProject } from '../types/project'
 import {
   formatProjectTimestamp,
   getProjectSourceLabel,
   getProjectStageLabel,
+  getProjectStatusLabel,
   getSiteLabel,
+  projectStatusTones,
 } from '../services/project/presentation'
+import type { ProjectStage, PublishProject } from '../types/project'
 import type { SiteId } from '../types/site'
 
 const router = useRouter()
@@ -26,21 +30,49 @@ const stageRouteMap: Record<ProjectStage, 'edit' | 'check' | 'bt_publish' | 'for
   completed: 'finish',
 }
 
-const visibleProjects = computed(() => {
-  if (showPublished.value) {
-    return projects.value
+function getProjectTimeValue(value?: string) {
+  if (!value) {
+    return 0
   }
 
-  return projects.value.filter(project => project.status !== 'published')
+  const timestamp = new Date(value).getTime()
+  return Number.isFinite(timestamp) ? timestamp : 0
+}
+
+const orderedProjects = computed(() => {
+  return [...projects.value].sort((left, right) => getProjectTimeValue(right.updatedAt) - getProjectTimeValue(left.updatedAt))
 })
 
-function getStatusLabel(project: PublishProject) {
-  if (project.status === 'published') {
-    return t('taskList.status.published')
+const visibleProjects = computed(() => {
+  if (showPublished.value) {
+    return orderedProjects.value
   }
 
-  return getProjectStageLabel(project.stage)
-}
+  return orderedProjects.value.filter(project => project.status !== 'published')
+})
+
+const overviewItems = computed(() => [
+  {
+    label: t('taskList.summary.total'),
+    value: projects.value.length,
+    tone: 'neutral' as const,
+  },
+  {
+    label: t('taskList.summary.active'),
+    value: projects.value.filter(project => project.status !== 'published').length,
+    tone: 'warning' as const,
+  },
+  {
+    label: t('taskList.summary.published'),
+    value: projects.value.filter(project => project.status === 'published').length,
+    tone: 'success' as const,
+  },
+  {
+    label: t('taskList.summary.visible'),
+    value: visibleProjects.value.length,
+    tone: 'info' as const,
+  },
+])
 
 function getSiteEntries(project: PublishProject) {
   const entries = Object.entries({
@@ -107,125 +139,161 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="project-list">
-    <div class="project-list__toolbar">
-      <el-checkbox v-model="showPublished" :label="t('taskList.filter.showPublished')" />
-      <el-button plain @click="loadData">{{ t('taskList.actions.refresh') }}</el-button>
-    </div>
+  <div class="project-list" v-loading="isLoading">
+    <section class="project-list__overview">
+      <article v-for="item in overviewItems" :key="item.label" class="project-list__metric">
+        <div class="project-list__metric-label">{{ item.label }}</div>
+        <div class="project-list__metric-value">{{ item.value }}</div>
+        <StatusChip :tone="item.tone">{{ item.label }}</StatusChip>
+      </article>
+    </section>
 
-    <el-table v-loading="isLoading" :data="visibleProjects" row-key="id" class="project-list__table">
-      <el-table-column fixed="right" :label="t('taskList.actions.continue')" width="100">
-        <template #default="{ row }">
-          <el-button link type="primary" size="small" @click="openProject(row)">
-            {{ t('taskList.actions.open') }}
+    <section class="project-list__toolbar">
+      <div class="project-list__toolbar-copy">
+        <div class="project-list__toolbar-title">{{ t('projects.panel.title') }}</div>
+        <div class="project-list__toolbar-text">{{ t('projects.panel.description') }}</div>
+      </div>
+
+      <div class="project-list__toolbar-actions">
+        <label class="project-list__toggle">
+          <span>{{ t('taskList.filter.showPublished') }}</span>
+          <el-switch v-model="showPublished" />
+        </label>
+        <el-button plain @click="loadData">
+          <el-icon><RefreshRight /></el-icon>
+          <span>{{ t('taskList.actions.refresh') }}</span>
+        </el-button>
+      </div>
+    </section>
+
+    <section v-if="visibleProjects.length" class="project-list__grid">
+      <article v-for="project in visibleProjects" :key="project.id" class="project-card">
+        <header class="project-card__head">
+          <div class="project-card__title-group">
+            <div class="project-card__eyebrow">#{{ project.id }}</div>
+            <h3 class="project-card__title">{{ project.name }}</h3>
+          </div>
+          <StatusChip :tone="projectStatusTones[project.status]">
+            {{ getProjectStatusLabel(project.status) }}
+          </StatusChip>
+        </header>
+
+        <div class="project-card__chips">
+          <StatusChip tone="info">{{ getProjectStageLabel(project.stage) }}</StatusChip>
+          <StatusChip>{{ getProjectSourceLabel(project.sourceKind) }}</StatusChip>
+          <StatusChip v-if="getSiteEntries(project).length" tone="success">
+            {{ getSiteEntries(project).length }} {{ t('taskList.card.links') }}
+          </StatusChip>
+        </div>
+
+        <div class="project-card__meta">
+          <article class="project-card__meta-card">
+            <div class="project-card__meta-label">
+              <el-icon><Timer /></el-icon>
+              <span>{{ t('taskList.columns.updated') }}</span>
+            </div>
+            <div class="project-card__meta-value">{{ formatProjectTimestamp(project.updatedAt) }}</div>
+          </article>
+
+          <article class="project-card__meta-card project-card__meta-card--path">
+            <div class="project-card__meta-label">
+              <el-icon><FolderOpened /></el-icon>
+              <span>{{ t('taskList.details.workingDirectory') }}</span>
+            </div>
+            <button class="project-card__path" type="button" @click="copyText(project.workingDirectory)">
+              {{ project.workingDirectory }}
+            </button>
+          </article>
+        </div>
+
+        <section class="project-card__links-section">
+          <div class="project-card__section-label">
+            <el-icon><Link /></el-icon>
+            <span>{{ t('taskList.card.links') }}</span>
+          </div>
+
+          <div v-if="getSiteEntries(project).length" class="project-card__links">
+            <article
+              v-for="[siteId, link] in getSiteEntries(project)"
+              :key="`${project.id}-${siteId}`"
+              class="project-card__link-row"
+            >
+              <div class="project-card__link-site">{{ getSiteLabel(siteId) }}</div>
+              <div class="project-card__link-actions">
+                <a :href="link" class="project-card__link" target="_blank" rel="noreferrer">
+                  {{ link }}
+                </a>
+                <el-button link size="small" @click="copyText(link)">{{ t('taskList.actions.copy') }}</el-button>
+              </div>
+            </article>
+          </div>
+
+          <div v-else class="project-card__empty">{{ t('taskList.details.noLinks') }}</div>
+        </section>
+
+        <footer class="project-card__footer">
+          <el-button type="primary" @click="openProject(project)">{{ t('taskList.actions.continue') }}</el-button>
+          <el-button plain @click="openFolder(project.workingDirectory)">
+            {{ t('taskList.actions.openFolder') }}
           </el-button>
-        </template>
-      </el-table-column>
-
-      <el-table-column fixed="right" :label="t('taskList.columns.folder')" width="90">
-        <template #default="{ row }">
-          <el-button link size="small" @click="openFolder(row.workingDirectory)">
-            {{ t('taskList.actions.open') }}
-          </el-button>
-        </template>
-      </el-table-column>
-
-      <el-table-column fixed="right" :label="t('taskList.actions.delete')" width="90">
-        <template #default="{ row }">
-          <el-button link type="danger" size="small" @click="removeProject(row)">
+          <el-button plain @click="copyText(project.workingDirectory)">{{ t('taskList.actions.copy') }}</el-button>
+          <el-button text type="danger" @click="removeProject(project)">
             {{ t('taskList.actions.delete') }}
           </el-button>
-        </template>
-      </el-table-column>
+        </footer>
+      </article>
+    </section>
 
-      <el-table-column prop="id" label="ID" width="140" sortable />
-      <el-table-column prop="name" :label="t('taskList.columns.project')" min-width="220" show-overflow-tooltip />
-      <el-table-column :label="t('taskList.columns.source')" width="110">
-        <template #default="{ row }">
-          {{ getProjectSourceLabel(row.sourceKind) }}
-        </template>
-      </el-table-column>
-      <el-table-column :label="t('taskList.columns.stage')" width="180">
-        <template #default="{ row }">
-          {{ getProjectStageLabel(row.stage) }}
-        </template>
-      </el-table-column>
-      <el-table-column :label="t('taskList.columns.status')" width="160">
-        <template #default="{ row }">
-          {{ getStatusLabel(row) }}
-        </template>
-      </el-table-column>
-      <el-table-column :label="t('taskList.columns.updated')" width="180">
-        <template #default="{ row }">
-          {{ formatProjectTimestamp(row.updatedAt) }}
-        </template>
-      </el-table-column>
-      <el-table-column type="expand" width="54">
-        <template #default="{ row }">
-          <div class="project-list__details">
-            <div class="project-list__detail-row">
-              <span class="project-list__detail-label">{{ t('taskList.details.workingDirectory') }}</span>
-              <button class="project-list__copy" type="button" @click="copyText(row.workingDirectory)">
-                {{ row.workingDirectory }}
-              </button>
-            </div>
-
-            <div v-if="getSiteEntries(row).length" class="project-list__links">
-              <div
-                v-for="[siteId, link] in getSiteEntries(row)"
-                :key="`${row.id}-${siteId}`"
-                class="project-list__detail-row"
-              >
-                <span class="project-list__detail-label">{{ getSiteLabel(siteId) }}</span>
-                <div class="project-list__link-actions">
-                  <a :href="link" class="project-list__link" target="_blank" rel="noreferrer">
-                    {{ link }}
-                  </a>
-                  <el-button link size="small" @click="copyText(link)">{{ t('taskList.actions.copy') }}</el-button>
-                </div>
-              </div>
-            </div>
-
-            <div v-else class="project-list__empty">{{ t('taskList.details.noLinks') }}</div>
-          </div>
-        </template>
-      </el-table-column>
-    </el-table>
+    <el-empty v-else class="project-list__empty-state" :description="t('taskList.empty.description')">
+      <template #image>
+        <div class="project-list__empty-icon">
+          <el-icon><Collection /></el-icon>
+        </div>
+      </template>
+      <template #default>
+        <div class="project-list__empty-copy">
+          <div class="project-list__empty-title">{{ t('taskList.empty.title') }}</div>
+          <div class="project-list__empty-text">{{ t('taskList.empty.description') }}</div>
+        </div>
+      </template>
+    </el-empty>
   </div>
 </template>
 
 <style scoped>
 .project-list {
+  display: grid;
+  gap: 18px;
   width: 100%;
 }
 
-.project-list__toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.project-list__table {
-  width: 100%;
-}
-
-.project-list__details {
-  display: flex;
-  flex-direction: column;
+.project-list__overview,
+.project-list__grid {
+  display: grid;
   gap: 14px;
-  padding: 8px 6px;
 }
 
-.project-list__detail-row {
-  display: flex;
-  gap: 14px;
-  align-items: flex-start;
+.project-list__overview {
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
 }
 
-.project-list__detail-label {
-  flex: 0 0 132px;
+.project-list__metric,
+.project-list__toolbar,
+.project-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.44), transparent 38%),
+    var(--bg-panel);
+}
+
+.project-list__metric {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+}
+
+.project-list__metric-label {
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 700;
@@ -233,13 +301,185 @@ onMounted(() => {
   text-transform: uppercase;
 }
 
-.project-list__links {
+.project-list__metric-value {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 4vw, 36px);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+}
+
+.project-list__toolbar {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+}
+
+.project-list__toolbar-copy {
+  min-width: 0;
+}
+
+.project-list__toolbar-title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.project-list__toolbar-text {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.project-list__toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 12px;
 }
 
-.project-list__link-actions {
+.project-list__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.54);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.project-list__grid {
+  grid-template-columns: repeat(auto-fit, minmax(21rem, 1fr));
+}
+
+.project-card {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  box-shadow: var(--shadow-md);
+}
+
+.project-card__head,
+.project-card__footer {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.project-card__title-group {
+  min-width: 0;
+}
+
+.project-card__eyebrow {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.project-card__title {
+  margin: 8px 0 0;
+  font-family: var(--font-display);
+  font-size: 24px;
+  letter-spacing: -0.04em;
+  word-break: break-word;
+}
+
+.project-card__chips,
+.project-card__meta {
+  display: grid;
+  gap: 12px;
+}
+
+.project-card__chips {
+  grid-template-columns: repeat(auto-fit, minmax(7rem, max-content));
+  align-items: start;
+}
+
+.project-card__meta {
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.project-card__meta-card,
+.project-card__links-section {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.project-card__meta-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.project-card__meta-label,
+.project-card__section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.project-card__meta-value {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.project-card__path,
+.project-card__link {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  word-break: break-all;
+}
+
+.project-card__links-section {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.project-card__links {
+  display: grid;
+  gap: 12px;
+}
+
+.project-card__link-row {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.project-card__link-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.project-card__link-site {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.project-card__link-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -247,32 +487,80 @@ onMounted(() => {
   min-width: 0;
 }
 
-.project-list__link,
-.project-list__copy {
-  min-width: 0;
-  color: var(--accent);
-  background: none;
-  border: 0;
-  padding: 0;
-  text-align: left;
-  cursor: pointer;
-  word-break: break-all;
-}
-
-.project-list__empty {
+.project-card__empty {
   color: var(--text-secondary);
   font-size: 14px;
+  line-height: 1.6;
+}
+
+.project-card__footer {
+  flex-wrap: wrap;
+}
+
+.project-list__empty-state {
+  padding: 24px 0 8px;
+}
+
+.project-list__empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 88px;
+  height: 88px;
+  border-radius: 28px;
+  background: linear-gradient(135deg, var(--brand-soft), rgba(255, 255, 255, 0.74));
+  color: var(--brand);
+  font-size: 36px;
+}
+
+.project-list__empty-copy {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.project-list__empty-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.project-list__empty-text {
+  max-width: 28rem;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.65;
 }
 
 @media (max-width: 980px) {
   .project-list__toolbar,
-  .project-list__detail-row {
+  .project-card__head {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .project-list__detail-label {
-    flex-basis: auto;
+  .project-list__toolbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .project-list__metric,
+  .project-list__toolbar,
+  .project-card {
+    padding: 14px;
+  }
+
+  .project-card__links-section,
+  .project-card__meta-card {
+    padding: 12px;
+  }
+
+  .project-list__toggle {
+    width: 100%;
+    justify-content: space-between;
   }
 }
 </style>

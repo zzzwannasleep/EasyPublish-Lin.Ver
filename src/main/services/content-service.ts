@@ -125,7 +125,7 @@ export function createContentService(options: CreateContentServiceOptions) {
         const md = converter.turndown(content)
         fs.writeFileSync(join(task.path, 'nyaa.md'), md)
       } else {
-        fs.copyFileSync(info.path_html, join(task.path, 'bangumi.html'))
+        fs.copyFileSync(info.path_md, join(task.path, 'nyaa.md'))
       }
       if (!fs.existsSync(info.path_bbcode)) {
         if (info.path_bbcode != '') return 'noSuchFile_bbcode'

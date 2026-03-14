@@ -32,6 +32,7 @@ const notes = computed(() => [
 
 <template>
   <StageWorkspace
+    :show-intro="false"
     :eyebrow="t('stage.editor.eyebrow')"
     :title="t('stage.editor.title')"
     :description="t('stage.editor.description', { project: projectName })"

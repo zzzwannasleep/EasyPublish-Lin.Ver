@@ -918,8 +918,8 @@
 </script>
 
 <template>
-    <div v-if="loadCompleted" :style="{height: slbHeight}">
-        <el-scrollbar style="height: 100%;">
+    <div v-if="loadCompleted" class="edit-view" :style="{ height: slbHeight }">
+        <el-scrollbar class="edit-view__scroll">
             <el-row>
                 <el-col :span="3" />
                 <el-col :span="18">
@@ -938,12 +938,12 @@
                 <el-col :span="3" />
             </el-row>
             <el-row style="height: 20px;" />
-            <el-row justify="space-between">
+            <el-row class="edit-form-row" justify="space-between">
                 <el-col :span="3" />
                 <el-col :span="18">
                     <div v-if="taskType == 'template'">
                         <!-- 从模板创建 -->
-                        <el-form ref="createForm_template" :model="config" label-width="auto" style="max-width: 1050px;" :rules="rules">
+                        <el-form ref="createForm_template" class="edit-form" :model="config" label-width="auto" style="max-width: 1050px;" :rules="rules">
                             <el-form-item label="中文标题" prop="title_CN">
                                 <el-input v-model="config.title_CN" placeholder="请填写中文标题" />
                             </el-form-item>
@@ -1141,7 +1141,7 @@
                     </div>
                     <div v-else>
                         <!-- 从文件创建 -->
-                        <el-form ref="createForm_file" :model="config" label-width="auto" style="max-width: 1050px;" :rules="rules">
+                        <el-form ref="createForm_file" class="edit-form" :model="config" label-width="auto" style="max-width: 1050px;" :rules="rules">
                             <el-form-item label="标题" prop="title">
                                 <el-input v-model="config.title" maxlength="128" placeholder="请填写标题"/>
                             </el-form-item>
@@ -1206,7 +1206,7 @@
                 </el-col>
                 <el-col :span="3" />
             </el-row>
-            <el-row class="title">
+            <el-row class="edit-actions">
                 <el-col>
                     <el-button class="btn" :loading="isSaving" @click="saveConfig()" type="primary" plain>
                         保存
@@ -1222,17 +1222,124 @@
 </template>
 
 <style scoped>
+.edit-view {
+  min-height: 0;
+}
+
+.edit-view__scroll {
+  height: 100%;
+}
+
 .option-input {
   width: 100%;
   margin-bottom: 8px;
 }
 
-.title {
-    text-align: center;
-    font-size: xx-large;
+.edit-form-row {
+  margin: 0 !important;
+}
+
+.edit-actions {
+  justify-content: center;
+  margin-top: 24px;
+  text-align: center;
 }
 
 .btn {
-    width: 180px;
+  min-width: 160px;
+  padding-inline: 28px;
+}
+
+:deep(.edit-view__scroll .el-scrollbar__view > .el-row:nth-child(-n + 4)) {
+  display: none;
+}
+
+:deep(.edit-form-row > .el-col:first-child),
+:deep(.edit-form-row > .el-col:last-child) {
+  display: none;
+}
+
+:deep(.edit-form-row > .el-col:nth-child(2)) {
+  flex: 0 0 min(100%, 1080px);
+  max-width: min(100%, 1080px);
+  margin: 0 auto;
+}
+
+:deep(.edit-form) {
+  width: 100%;
+  max-width: 100% !important;
+}
+
+:deep(.edit-form .el-form-item) {
+  align-items: flex-start;
+}
+
+:deep(.edit-form .el-form-item__content) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:deep(.edit-form .el-form-item__content > .el-input),
+:deep(.edit-form .el-form-item__content > .el-textarea),
+:deep(.edit-form .el-form-item__content > .el-select-v2),
+:deep(.edit-form .el-form-item__content > .el-input-number) {
+  width: 100% !important;
+  max-width: 48rem;
+}
+
+:deep(.edit-form .el-form-item__content > .el-input .el-input__wrapper),
+:deep(.edit-form .el-form-item__content > .el-textarea .el-textarea__inner),
+:deep(.edit-form .el-form-item__content > .el-select-v2 .el-select-v2__wrapper) {
+  max-width: 100%;
+}
+
+:deep(.edit-form .el-row) {
+  width: 100%;
+  margin: 0;
+}
+
+:deep(.edit-form .el-row > span) {
+  flex: 1 1 10rem;
+  min-width: 0;
+  margin-right: 0 !important;
+}
+
+:deep(.edit-form .el-row > span .el-input) {
+  width: 100% !important;
+}
+
+@media (max-width: 960px) {
+  :deep(.edit-form-row > .el-col:nth-child(2)) {
+    flex-basis: 100%;
+    max-width: 100%;
+  }
+
+  :deep(.edit-form .el-form-item) {
+    flex-direction: column;
+  }
+
+  :deep(.edit-form .el-form-item__label) {
+    justify-content: flex-start;
+    width: 100% !important;
+    margin-bottom: 8px;
+    line-height: 1.4;
+  }
+
+  :deep(.edit-form .el-form-item__content > .el-input),
+  :deep(.edit-form .el-form-item__content > .el-textarea),
+  :deep(.edit-form .el-form-item__content > .el-select-v2),
+  :deep(.edit-form .el-form-item__content > .el-input-number) {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .edit-actions {
+    margin-top: 18px;
+  }
+
+  .btn {
+    width: min(100%, 15rem);
+  }
 }
 </style>

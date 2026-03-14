@@ -1,16 +1,9 @@
 <script setup lang="ts" name="ProjectWorkflowView">
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
-import StatusChip from '../../components/feedback/StatusChip.vue'
 import { useI18n } from '../../i18n'
 import { provideProjectContext } from '../../features/project-detail/project-context'
 import { projectBridge } from '../../services/bridge/project'
-import {
-  getProjectSourceLabel,
-  getProjectStageLabel,
-  getProjectStatusLabel,
-  projectStatusTones,
-} from '../../services/project/presentation'
 import type { PublishProject } from '../../types/project'
 
 const route = useRoute()
@@ -54,7 +47,6 @@ const activeStep = computed(() => {
     : 0
 })
 
-const currentStage = computed(() => steps.value[activeStep.value])
 const workflowId = computed(() => Number(route.params.id ?? 0))
 const project = ref<PublishProject | null>(null)
 const isLoading = ref(false)
@@ -90,23 +82,6 @@ provideProjectContext({
   refreshProject: loadProject,
 })
 
-const projectTitle = computed(() => project.value?.name ?? t('common.projectWithId', { id: workflowId.value || '--' }))
-const projectSummary = computed(() => {
-  if (errorMessage.value) {
-    return errorMessage.value
-  }
-
-  if (!project.value) {
-    return currentStage.value.description
-  }
-
-  return t('workflow.summary.withProject', {
-    description: currentStage.value.description,
-    source: getProjectSourceLabel(project.value.sourceKind),
-    stage: getProjectStageLabel(project.value.stage),
-  })
-})
-
 onMounted(() => {
   void loadProject()
   window.projectAPI.refreshProjectData(loadProject)
@@ -119,32 +94,6 @@ watch(workflowId, () => {
 
 <template>
   <div class="workflow-shell">
-    <section class="workflow-hero">
-      <div class="workflow-hero__content">
-        <div class="page-eyebrow">{{ t('workflow.hero.eyebrow') }}</div>
-        <h1 class="page-title">{{ projectTitle }}</h1>
-        <p class="page-summary">{{ projectSummary }}</p>
-        <div class="workflow-hero__stage">
-          {{ t('workflow.hero.currentWorkspace', { title: currentStage.title }) }}
-        </div>
-      </div>
-      <div class="workflow-hero__meta">
-        <StatusChip tone="info">{{ t('common.projectWithId', { id: workflowId || '--' }) }}</StatusChip>
-        <StatusChip tone="success">
-          {{ t('common.stepProgress', { current: activeStep + 1, total: steps.length }) }}
-        </StatusChip>
-        <StatusChip v-if="project" :tone="projectStatusTones[project.status]">
-          {{ getProjectStatusLabel(project.status) }}
-        </StatusChip>
-        <StatusChip v-if="project" tone="info">
-          {{ getProjectSourceLabel(project.sourceKind) }}
-        </StatusChip>
-        <StatusChip v-else-if="isLoading" tone="warning">{{ t('workflow.status.loadingContext') }}</StatusChip>
-        <StatusChip v-else-if="errorMessage" tone="danger">{{ t('workflow.status.missingContext') }}</StatusChip>
-        <StatusChip tone="warning">{{ t('workflow.status.legacyAttached') }}</StatusChip>
-      </div>
-    </section>
-
     <section class="workflow-rail">
       <article
         v-for="(item, index) in steps"
@@ -175,66 +124,60 @@ watch(workflowId, () => {
 .workflow-shell {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
   min-height: 100%;
-}
-
-.workflow-hero {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 24px 26px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-xl);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.5), transparent 56%),
-    var(--bg-panel);
-  box-shadow: var(--shadow-md);
-}
-
-.workflow-hero__content {
-  max-width: 720px;
-}
-
-.workflow-hero__meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.workflow-hero__stage {
-  margin-top: 16px;
-  color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
 }
 
 .workflow-rail {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
 }
 
 .workflow-step {
+  position: relative;
+  overflow: hidden;
+  min-height: 132px;
   padding: 16px 16px 18px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.3);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.52), transparent 44%),
+    rgba(255, 255, 255, 0.32);
+  box-shadow: var(--shadow-sm);
   transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.workflow-step::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 3px;
+  background: transparent;
 }
 
 .workflow-step.is-active {
   border-color: rgba(198, 90, 46, 0.24);
-  background: linear-gradient(135deg, var(--brand-soft), rgba(255, 255, 255, 0.4));
-  transform: translateY(-1px);
+  background:
+    linear-gradient(135deg, rgba(247, 219, 206, 0.72), rgba(255, 255, 255, 0.44)),
+    rgba(255, 255, 255, 0.36);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.workflow-step.is-active::after {
+  background: linear-gradient(90deg, var(--accent), rgba(198, 90, 46, 0.25));
 }
 
 .workflow-step.is-complete {
   border-color: rgba(29, 124, 85, 0.22);
-  background: linear-gradient(135deg, var(--success-soft), rgba(255, 255, 255, 0.34));
+  background:
+    linear-gradient(135deg, rgba(214, 239, 229, 0.72), rgba(255, 255, 255, 0.38)),
+    rgba(255, 255, 255, 0.32);
+}
+
+.workflow-step.is-complete::after {
+  background: linear-gradient(90deg, rgba(29, 124, 85, 0.82), rgba(29, 124, 85, 0.2));
 }
 
 .workflow-step__index {
@@ -248,7 +191,7 @@ watch(workflowId, () => {
 .workflow-step__title {
   margin-top: 10px;
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size: clamp(18px, 1.6vw, 20px);
   font-weight: 700;
   letter-spacing: -0.03em;
 }
@@ -277,17 +220,14 @@ watch(workflowId, () => {
   transform: translateY(8px);
 }
 
-@media (max-width: 1180px) {
-  .workflow-hero {
-    flex-direction: column;
-  }
-
-  .workflow-hero__meta {
-    justify-content: flex-start;
-  }
-
+@media (max-width: 720px) {
   .workflow-rail {
-    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .workflow-step {
+    min-height: 0;
+    padding: 14px 14px 16px;
   }
 }
 </style>

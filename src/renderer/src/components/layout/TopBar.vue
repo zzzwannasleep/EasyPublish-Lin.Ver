@@ -33,7 +33,6 @@ const { t } = useI18n()
       >
         <el-icon><Menu /></el-icon>
       </button>
-      <div class="top-bar__brand">PT</div>
       <div class="top-bar__copy">
         <h1 class="top-bar__title">{{ title }}</h1>
         <p class="top-bar__subtitle">{{ subtitle }}</p>
@@ -96,23 +95,6 @@ const { t } = useI18n()
 
 .top-bar__heading {
   min-width: 0;
-}
-
-.top-bar__brand {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, var(--brand), #e1a15b);
-  color: #fff7ed;
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  box-shadow: var(--shadow-md);
 }
 
 .top-bar__menu {
