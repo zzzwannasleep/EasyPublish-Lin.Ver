@@ -7,7 +7,13 @@ import StatusChip from './feedback/StatusChip.vue'
 import { projectBridge } from '../services/bridge/project'
 import { taskBridge } from '../services/bridge/task'
 import { getPublishedSiteIds, getSiteLabel } from '../services/project/presentation'
-import type { PublishProject, SeriesProjectEpisode, SeriesProjectVariant, SeriesProjectWorkspace } from '../types/project'
+import type {
+  PublishProject,
+  SeriesProjectEpisode,
+  SeriesProjectVariant,
+  SeriesProjectWorkspace,
+  SeriesPublishProfileSiteFieldDefaults,
+} from '../types/project'
 import type { SiteId } from '../types/site'
 
 const props = defineProps<{ id: number }>()
@@ -83,6 +89,7 @@ const suggestedBangumiTags = ref<TagOption[]>([])
 const inputBangumiTags = ref<TagOption[]>([])
 const releaseProfiles = ref<EpisodeReleaseProfile[]>([])
 const selectedReleaseProfileId = ref('')
+const configSiteFieldDefaults = ref<SeriesPublishProfileSiteFieldDefaults | undefined>(undefined)
 
 const form = reactive<EpisodeForm>({
   torrentPath: '',
@@ -178,6 +185,39 @@ function normalizeSiteIds(siteIds: SiteId[] = []) {
         .filter(Boolean),
     ),
   ]
+}
+
+function normalizeSiteFieldDefaults(value: unknown): SeriesPublishProfileSiteFieldDefaults | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined
+  }
+
+  const nextFieldDefaults: Partial<Record<SiteId, Record<string, unknown>>> = {}
+  Object.entries(value as Record<string, unknown>).forEach(([siteId, fieldDefaults]) => {
+    const normalizedSiteId = normalizeSiteIds([siteId])[0]
+    if (!normalizedSiteId || !fieldDefaults || typeof fieldDefaults !== 'object' || Array.isArray(fieldDefaults)) {
+      return
+    }
+
+    nextFieldDefaults[normalizedSiteId] = { ...(fieldDefaults as Record<string, unknown>) }
+  })
+
+  return Object.keys(nextFieldDefaults).length > 0 ? nextFieldDefaults : undefined
+}
+
+function buildConfigSiteFieldDefaults(): SeriesPublishProfileSiteFieldDefaults | undefined {
+  const nextFieldDefaults = normalizeSiteFieldDefaults(configSiteFieldDefaults.value) ?? {}
+
+  nextFieldDefaults.bangumi = {
+    ...(nextFieldDefaults.bangumi ?? {}),
+    category_bangumi: form.category_bangumi,
+  }
+  nextFieldDefaults.nyaa = {
+    ...(nextFieldDefaults.nyaa ?? {}),
+    category_nyaa: form.category_nyaa,
+  }
+
+  return Object.keys(nextFieldDefaults).length > 0 ? nextFieldDefaults : undefined
 }
 
 function formatSiteLabels(siteIds: SiteId[] = []) {
@@ -674,6 +714,7 @@ function buildPublishConfig(): Config.PublishConfig {
     information: form.information.trim(),
     category_bangumi: form.category_bangumi,
     category_nyaa: form.category_nyaa,
+    siteFieldDefaults: buildConfigSiteFieldDefaults(),
     tags: form.tags,
     completed: form.completed,
     remake: form.remake,
@@ -765,6 +806,7 @@ async function loadSeriesWorkspace() {
 async function getTaskInfo() {
   const result = await taskBridge.getPublishConfig(props.id)
   const content = result.content as Partial<Config.Content_episode>
+  configSiteFieldDefaults.value = normalizeSiteFieldDefaults(result.siteFieldDefaults)
 
   form.torrentPath = result.torrentPath ?? form.torrentPath
   form.title = result.title ?? form.title

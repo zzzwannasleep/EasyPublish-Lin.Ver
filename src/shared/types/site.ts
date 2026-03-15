@@ -55,13 +55,14 @@ export interface SiteProfile {
   customFieldMap?: Record<string, string>
 }
 
-export type SiteFieldSchemaControl = 'select' | 'text' | 'number'
+export type SiteFieldSchemaControl = 'select' | 'text' | 'number' | 'checkbox'
 
 export type SiteFieldSchemaMode = 'required' | 'optional' | 'readonly'
 
 export interface SiteFieldSchemaOption {
   label: string
   value: string
+  labelKey?: string
 }
 
 export interface SiteFieldSchemaEntry {

@@ -429,19 +429,52 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     return normalizeSiteFieldDefaults(fieldDefaults)
   }
 
+  function mergeSiteFieldDefaults(
+    baseFieldDefaults?: SeriesPublishProfileSiteFieldDefaults,
+    overrideFieldDefaults?: SeriesPublishProfileSiteFieldDefaults,
+  ) {
+    const normalizedBase = normalizeSiteFieldDefaults(baseFieldDefaults)
+    const normalizedOverride = normalizeSiteFieldDefaults(overrideFieldDefaults)
+
+    if (!normalizedBase && !normalizedOverride) {
+      return undefined
+    }
+
+    const mergedDefaults: Partial<Record<SiteId, Record<string, unknown>>> = {}
+    const siteIds = new Set<SiteId>([
+      ...Object.keys(normalizedBase ?? {}),
+      ...Object.keys(normalizedOverride ?? {}),
+    ] as SiteId[])
+
+    siteIds.forEach(siteId => {
+      const nextEntry = {
+        ...(normalizedBase?.[siteId] ?? {}),
+        ...(normalizedOverride?.[siteId] ?? {}),
+      }
+
+      if (Object.keys(nextEntry).length > 0) {
+        mergedDefaults[siteId] = nextEntry
+      }
+    })
+
+    return Object.keys(mergedDefaults).length > 0 ? mergedDefaults : undefined
+  }
+
   function buildProjectSiteFieldDefaults(config: Config.PublishConfig) {
-    const nextFieldDefaults: SeriesPublishProfileSiteFieldDefaults = {}
+    const nextFieldDefaults = normalizeSiteFieldDefaults(config.siteFieldDefaults) ?? {}
     const bangumiCategory = normalizeOptionalString(config.category_bangumi)
     const nyaaCategory = normalizeOptionalString(config.category_nyaa)
 
     if (bangumiCategory) {
       nextFieldDefaults.bangumi = {
+        ...(nextFieldDefaults.bangumi ?? {}),
         category_bangumi: bangumiCategory,
       }
     }
 
     if (nyaaCategory) {
       nextFieldDefaults.nyaa = {
+        ...(nextFieldDefaults.nyaa ?? {}),
         category_nyaa: nyaaCategory,
       }
     }
@@ -970,7 +1003,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       summaryTemplate: options?.summaryTemplate,
     })
     const summaryTemplate = resolvePrimarySiteDraftSummaryTemplate(siteDrafts, targetSites, options?.summaryTemplate)
-    const siteFieldDefaults = normalizeSiteFieldDefaults(options?.siteFieldDefaults)
+    const siteFieldDefaults = mergeSiteFieldDefaults(buildProjectSiteFieldDefaults(config), options?.siteFieldDefaults)
 
     if (targetSites.length > 0) {
       config.targetSites = [...targetSites]
@@ -998,6 +1031,12 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       if (renderedSummary) {
         config.content.summary = renderedSummary
       }
+    }
+
+    if (siteFieldDefaults) {
+      config.siteFieldDefaults = cloneSiteFieldDefaults(siteFieldDefaults)
+    } else {
+      delete config.siteFieldDefaults
     }
 
     const bangumiCategory = normalizeOptionalString(siteFieldDefaults?.bangumi?.category_bangumi)
@@ -1326,10 +1365,23 @@ export function createProjectService(options: CreateProjectServiceOptions) {
 
   function buildInitialPublishConfig(input: CreateProjectInput): Config.PublishConfig {
     const { projectMode, sourceKind } = input
+    const bangumiCategory = projectMode === 'episode' ? '549ef207fe682f7549f1ea90' : ''
+    const nyaaCategory = projectMode === 'episode' ? '1_3' : ''
     return {
       title: '',
-      category_bangumi: projectMode === 'episode' ? '549ef207fe682f7549f1ea90' : '',
-      category_nyaa: projectMode === 'episode' ? '1_3' : '',
+      category_bangumi: bangumiCategory,
+      category_nyaa: nyaaCategory,
+      siteFieldDefaults:
+        projectMode === 'episode'
+          ? {
+              bangumi: {
+                category_bangumi: bangumiCategory,
+              },
+              nyaa: {
+                category_nyaa: nyaaCategory,
+              },
+            }
+          : undefined,
       information: 'https://vcb-s.com/archives/138',
       tags: [],
       torrentName: '',
@@ -1587,7 +1639,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
           titleTemplate,
           summaryTemplate,
           siteDrafts: publishProfile?.siteDrafts,
-          siteFieldDefaults: publishProfile?.siteFieldDefaults,
+          siteFieldDefaults: normalizeSiteFieldDefaults(config.siteFieldDefaults),
         }),
       }
 
@@ -1714,7 +1766,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
             titleTemplate,
             summaryTemplate,
             siteDrafts: publishProfile?.siteDrafts,
-            siteFieldDefaults: publishProfile?.siteFieldDefaults,
+            siteFieldDefaults: normalizeSiteFieldDefaults(config.siteFieldDefaults),
           }),
         }
       })

@@ -2,7 +2,12 @@
 declare namespace Config {
   import { Cookie } from 'electron'
   import type { PublishResult } from './shared/types/publish'
-  import type { LegacyProjectType, ProjectMode, ProjectSourceKind } from './shared/types/project'
+  import type {
+    LegacyProjectType,
+    ProjectMode,
+    ProjectSourceKind,
+    SeriesPublishProfileSiteFieldDefaults,
+  } from './shared/types/project'
   import type { SiteId } from './shared/types/site'
 
   type Task = {
@@ -158,6 +163,7 @@ declare namespace Config {
     torrentName: string
     category_bangumi: string
     category_nyaa: string
+    siteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
     tags: {label: string, value: string}[]
     content: Content_file | Content_template | Content_episode
     completed?: boolean

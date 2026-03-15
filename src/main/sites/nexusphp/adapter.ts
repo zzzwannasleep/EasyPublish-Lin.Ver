@@ -1,12 +1,90 @@
 import fs from 'fs'
 import { basename } from 'path'
 import { buildSiteCapabilitySet } from '../../../shared/types/site'
-import type { SiteCatalogEntry, SiteProfile, SiteValidationIssue } from '../../../shared/types/site'
+import type { SiteCatalogEntry, SiteFieldSchemaEntry, SiteProfile, SiteValidationIssue } from '../../../shared/types/site'
 import type { SitePublishDraft } from '../../../shared/types/publish'
 import type { SiteAdapter } from '../adapter'
 import { createNexusHttpClient, getPreferredNexusAuthModes, resolveNexusAuth } from './auth'
 import { deriveNexusApiBase, joinNexusEndpoint, normalizeNexusSiteBase, sortNexusSections } from './mapper'
 import { ensureNexusApiSuccess, extractNexusData, extractNexusSections } from './schema'
+
+const NEXUS_FIELD_SCHEMAS: SiteFieldSchemaEntry[] = [
+  {
+    key: 'typeId',
+    labelKey: 'nexus.site.manualTypeId',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.nexusTypeIdHelp',
+    control: 'number',
+    mode: 'required',
+    min: 1,
+  },
+  {
+    key: 'smallDescription',
+    labelKey: 'sites.form.smallDescription',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.nexusSmallDescriptionHelp',
+    control: 'text',
+    mode: 'optional',
+  },
+  {
+    key: 'url',
+    labelKey: 'sites.form.referenceUrl',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.nexusReferenceUrlHelp',
+    control: 'text',
+    mode: 'optional',
+  },
+  {
+    key: 'technicalInfo',
+    labelKey: 'sites.form.technicalInfo',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.nexusTechnicalInfoHelp',
+    control: 'text',
+    mode: 'optional',
+  },
+  {
+    key: 'ptGen',
+    labelKey: 'sites.form.ptgen',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.nexusPtGenHelp',
+    control: 'text',
+    mode: 'optional',
+  },
+  {
+    key: 'price',
+    labelKey: 'sites.form.price',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.nexusPriceHelp',
+    control: 'number',
+    mode: 'optional',
+    min: 0,
+  },
+  {
+    key: 'posState',
+    labelKey: 'sites.form.positionState',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.nexusPositionStateHelp',
+    control: 'select',
+    mode: 'optional',
+    options: [
+      { value: 'normal', label: 'normal', labelKey: 'sites.values.normal' },
+      { value: 'sticky', label: 'sticky', labelKey: 'sites.values.sticky' },
+      { value: 'recommended', label: 'recommended', labelKey: 'sites.values.recommended' },
+    ],
+  },
+  {
+    key: 'pickType',
+    labelKey: 'sites.form.pickType',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.nexusPickTypeHelp',
+    control: 'select',
+    mode: 'optional',
+    options: [
+      { value: 'normal', label: 'normal', labelKey: 'sites.values.normal' },
+      { value: 'hot', label: 'hot', labelKey: 'sites.values.hot' },
+      { value: 'classic', label: 'classic', labelKey: 'sites.values.classic' },
+    ],
+  },
+]
+
+function cloneSiteFieldSchemas(fieldSchemas: SiteFieldSchemaEntry[] = []) {
+  return fieldSchemas.map(field => ({
+    ...field,
+    options: field.options?.map(option => ({ ...option })),
+  }))
+}
 
 function describeNexusSite(profile: SiteProfile): SiteCatalogEntry {
   const notes: string[] = []
@@ -34,6 +112,7 @@ function describeNexusSite(profile: SiteProfile): SiteCatalogEntry {
     capabilitySet: buildSiteCapabilitySet(profile.capabilities),
     notes,
     customFieldMap: profile.customFieldMap,
+    fieldSchemas: cloneSiteFieldSchemas(NEXUS_FIELD_SCHEMAS),
   }
 }
 

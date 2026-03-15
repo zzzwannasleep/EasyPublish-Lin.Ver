@@ -1,7 +1,7 @@
 import fs from 'fs'
 import { basename } from 'path'
 import { buildSiteCapabilitySet } from '../../../shared/types/site'
-import type { SiteCatalogEntry, SiteProfile, SiteValidationIssue } from '../../../shared/types/site'
+import type { SiteCatalogEntry, SiteFieldSchemaEntry, SiteProfile, SiteValidationIssue } from '../../../shared/types/site'
 import type { SiteAdapter } from '../adapter'
 import { createUnit3dHttpClient, getPreferredUnit3dAuthModes, resolveUnit3dAuth } from './auth'
 import { deriveUnit3dApiBase, joinUnit3dEndpoint, normalizeUnit3dSiteBase } from './mapper'
@@ -13,6 +13,154 @@ import {
   extractUnit3dUserSummary,
   type Unit3dTorrentRecord,
 } from './schema'
+
+const UNIT3D_FIELD_SCHEMAS: SiteFieldSchemaEntry[] = [
+  {
+    key: 'categoryId',
+    labelKey: 'nexus.site.manualCategoryId',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.unit3dCategoryIdHelp',
+    control: 'number',
+    mode: 'required',
+    min: 1,
+  },
+  {
+    key: 'typeId',
+    labelKey: 'nexus.site.manualTypeId',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.unit3dTypeIdHelp',
+    control: 'number',
+    mode: 'required',
+    min: 1,
+  },
+  {
+    key: 'resolutionId',
+    labelKey: 'nexus.site.manualResolutionId',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.unit3dResolutionIdHelp',
+    control: 'number',
+    mode: 'required',
+    min: 1,
+  },
+  {
+    key: 'tmdb',
+    labelKey: 'seriesWorkspace.profileEditor.siteFields.unit3dTmdb',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.unit3dTmdbHelp',
+    control: 'number',
+    mode: 'readonly',
+    min: 1,
+  },
+  {
+    key: 'imdb',
+    labelKey: 'seriesWorkspace.profileEditor.siteFields.unit3dImdb',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.unit3dImdbHelp',
+    control: 'number',
+    mode: 'readonly',
+    min: 1,
+  },
+  {
+    key: 'tvdb',
+    labelKey: 'seriesWorkspace.profileEditor.siteFields.unit3dTvdb',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.unit3dTvdbHelp',
+    control: 'number',
+    mode: 'readonly',
+    min: 1,
+  },
+  {
+    key: 'mal',
+    labelKey: 'seriesWorkspace.profileEditor.siteFields.unit3dMal',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.unit3dMalHelp',
+    control: 'number',
+    mode: 'readonly',
+    min: 1,
+  },
+  {
+    key: 'igdb',
+    labelKey: 'seriesWorkspace.profileEditor.siteFields.unit3dIgdb',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.unit3dIgdbHelp',
+    control: 'number',
+    mode: 'readonly',
+    min: 1,
+  },
+  {
+    key: 'free',
+    labelKey: 'seriesWorkspace.profileEditor.siteFields.unit3dFree',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.unit3dFreeHelp',
+    control: 'number',
+    mode: 'optional',
+    min: 0,
+    max: 100,
+  },
+  {
+    key: 'flUntil',
+    labelKey: 'seriesWorkspace.profileEditor.siteFields.unit3dFlUntil',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.unit3dFlUntilHelp',
+    control: 'number',
+    mode: 'optional',
+    min: 1,
+  },
+  {
+    key: 'refundable',
+    labelKey: 'seriesWorkspace.profileEditor.siteFields.unit3dRefundable',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.unit3dRefundableHelp',
+    control: 'checkbox',
+    mode: 'optional',
+  },
+  {
+    key: 'featured',
+    labelKey: 'seriesWorkspace.profileEditor.siteFields.unit3dFeatured',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.unit3dFeaturedHelp',
+    control: 'checkbox',
+    mode: 'optional',
+  },
+  {
+    key: 'doubleup',
+    labelKey: 'seriesWorkspace.profileEditor.siteFields.unit3dDoubleup',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.unit3dDoubleupHelp',
+    control: 'checkbox',
+    mode: 'optional',
+  },
+  {
+    key: 'duUntil',
+    labelKey: 'seriesWorkspace.profileEditor.siteFields.unit3dDuUntil',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.unit3dDuUntilHelp',
+    control: 'number',
+    mode: 'optional',
+    min: 1,
+  },
+  {
+    key: 'personalRelease',
+    labelKey: 'seriesWorkspace.profileEditor.siteFields.unit3dPersonalRelease',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.unit3dPersonalReleaseHelp',
+    control: 'checkbox',
+    mode: 'optional',
+  },
+  {
+    key: 'internal',
+    labelKey: 'seriesWorkspace.profileEditor.siteFields.unit3dInternal',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.unit3dInternalHelp',
+    control: 'checkbox',
+    mode: 'optional',
+  },
+  {
+    key: 'sticky',
+    labelKey: 'seriesWorkspace.profileEditor.siteFields.unit3dSticky',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.unit3dStickyHelp',
+    control: 'checkbox',
+    mode: 'optional',
+  },
+  {
+    key: 'modQueueOptIn',
+    labelKey: 'seriesWorkspace.profileEditor.siteFields.unit3dModQueueOptIn',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.unit3dModQueueOptInHelp',
+    control: 'checkbox',
+    mode: 'optional',
+  },
+]
+
+function cloneSiteFieldSchemas(fieldSchemas: SiteFieldSchemaEntry[] = []) {
+  return fieldSchemas.map(field => ({
+    ...field,
+    options: field.options?.map(option => ({ ...option })),
+  }))
+}
 
 interface Unit3dPublishDraft {
   title: string
@@ -72,6 +220,7 @@ function describeUnit3dSite(profile: SiteProfile): SiteCatalogEntry {
     capabilitySet: buildSiteCapabilitySet(profile.capabilities),
     notes,
     customFieldMap: profile.customFieldMap,
+    fieldSchemas: cloneSiteFieldSchemas(UNIT3D_FIELD_SCHEMAS),
   }
 }
 

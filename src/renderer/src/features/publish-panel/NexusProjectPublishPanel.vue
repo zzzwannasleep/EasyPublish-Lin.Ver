@@ -280,6 +280,107 @@ function createEmptyDraft(): SitePublishDraftForm {
   }
 }
 
+function normalizeStoredSiteFieldDefaults(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined
+  }
+
+  return Object.entries(value as Record<string, unknown>).reduce<Partial<Record<SiteId, Record<string, unknown>>>>(
+    (accumulator, [siteId, fieldDefaults]) => {
+      if (!fieldDefaults || typeof fieldDefaults !== 'object' || Array.isArray(fieldDefaults)) {
+        return accumulator
+      }
+
+      accumulator[siteId] = { ...(fieldDefaults as Record<string, unknown>) }
+      return accumulator
+    },
+    {},
+  )
+}
+
+function readStoredString(value: unknown) {
+  return typeof value === 'string' ? value : ''
+}
+
+function readStoredNumber(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))
+      ? Number(value)
+      : undefined
+}
+
+function readStoredBoolean(value: unknown) {
+  return value === true
+}
+
+function readStoredNumberArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is number => typeof item === 'number' && Number.isFinite(item))
+    : []
+}
+
+function readStoredNumberRecord(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+
+  return Object.entries(value as Record<string, unknown>).reduce<Record<string, number>>((accumulator, [key, raw]) => {
+    const value = readStoredNumber(raw)
+    if (typeof value === 'number' && value > 0) {
+      accumulator[key] = value
+    }
+    return accumulator
+  }, {})
+}
+
+function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefaults?: Record<string, unknown>) {
+  if (!siteFieldDefaults) {
+    return draft
+  }
+
+  draft.smallDescription = readStoredString(siteFieldDefaults.smallDescription)
+  draft.url = readStoredString(siteFieldDefaults.url)
+  draft.technicalInfo = readStoredString(siteFieldDefaults.technicalInfo)
+  draft.ptGen = readStoredString(siteFieldDefaults.ptGen)
+  draft.mediaInfo = readStoredString(siteFieldDefaults.mediaInfo)
+  draft.bdInfo = readStoredString(siteFieldDefaults.bdInfo)
+  draft.price =
+    typeof siteFieldDefaults.price === 'number' && Number.isFinite(siteFieldDefaults.price)
+      ? `${siteFieldDefaults.price}`
+      : readStoredString(siteFieldDefaults.price)
+  draft.posState = readStoredString(siteFieldDefaults.posState) || draft.posState
+  draft.posStateUntil = readStoredString(siteFieldDefaults.posStateUntil)
+  draft.pickType = readStoredString(siteFieldDefaults.pickType) || draft.pickType
+  draft.tagIds = readStoredNumberArray(siteFieldDefaults.tagIds)
+  draft.subCategories = readStoredNumberRecord(siteFieldDefaults.subCategories)
+  draft.sectionId = readStoredNumber(siteFieldDefaults.sectionId)
+  draft.categoryId = readStoredNumber(siteFieldDefaults.categoryId)
+  draft.typeId = readStoredNumber(siteFieldDefaults.typeId)
+  draft.resolutionId = readStoredNumber(siteFieldDefaults.resolutionId)
+  draft.regionId = readStoredNumber(siteFieldDefaults.regionId)
+  draft.distributorId = readStoredNumber(siteFieldDefaults.distributorId)
+  draft.seasonNumber = readStoredNumber(siteFieldDefaults.seasonNumber)
+  draft.episodeNumber = readStoredNumber(siteFieldDefaults.episodeNumber)
+  draft.tmdb = readStoredNumber(siteFieldDefaults.tmdb)
+  draft.imdb = readStoredNumber(siteFieldDefaults.imdb)
+  draft.tvdb = readStoredNumber(siteFieldDefaults.tvdb)
+  draft.mal = readStoredNumber(siteFieldDefaults.mal)
+  draft.igdb = readStoredNumber(siteFieldDefaults.igdb)
+  draft.free = readStoredNumber(siteFieldDefaults.free)
+  draft.flUntil = readStoredNumber(siteFieldDefaults.flUntil)
+  draft.duUntil = readStoredNumber(siteFieldDefaults.duUntil)
+  draft.personalRelease = readStoredBoolean(siteFieldDefaults.personalRelease)
+  draft.internal = readStoredBoolean(siteFieldDefaults.internal)
+  draft.refundable = readStoredBoolean(siteFieldDefaults.refundable)
+  draft.featured = readStoredBoolean(siteFieldDefaults.featured)
+  draft.doubleup = readStoredBoolean(siteFieldDefaults.doubleup)
+  draft.sticky = readStoredBoolean(siteFieldDefaults.sticky)
+  draft.modQueueOptIn = readStoredBoolean(siteFieldDefaults.modQueueOptIn)
+
+  return draft
+}
+
 function applySharedDraft(config: Config.PublishConfig, content: Message.Task.TaskContents) {
   sharedDraft.title = config.title ?? content.title ?? ''
   sharedDraft.description = content.html ?? ''
@@ -291,7 +392,7 @@ function applySharedDraft(config: Config.PublishConfig, content: Message.Task.Ta
   sharedDraft.anonymous = false
 }
 
-function createInitialDraft(config: Config.PublishConfig, content: Message.Task.TaskContents): SitePublishDraftForm {
+function createInitialDraft(config: Config.PublishConfig, content: Message.Task.TaskContents, siteId: SiteId): SitePublishDraftForm {
   const draft = createEmptyDraft()
   draft.title = config.title ?? content.title ?? ''
   draft.description = content.html ?? ''
@@ -300,7 +401,8 @@ function createInitialDraft(config: Config.PublishConfig, content: Message.Task.
     config.torrentName && project.value?.workingDirectory
       ? joinProjectPath(project.value.workingDirectory, config.torrentName)
       : config.torrentPath ?? ''
-  return draft
+  const storedFieldDefaults = normalizeStoredSiteFieldDefaults(config.siteFieldDefaults)?.[siteId]
+  return applyStoredSiteFieldDefaults(draft, storedFieldDefaults)
 }
 
 function ensureDraft(siteId: SiteId): SitePublishDraftForm {
@@ -320,10 +422,37 @@ function resetSectionDependentFields(siteId: SiteId, section?: SiteSection) {
   )
 }
 
+function resolveMetadataSectionForDraft(siteId: SiteId, metadata: SiteMetadataRecord) {
+  const draft = ensureDraft(siteId)
+  if (draft.sectionId) {
+    const matchedBySection = metadata.sections.find(section => section.id === draft.sectionId)
+    if (matchedBySection) {
+      return matchedBySection
+    }
+  }
+
+  if (draft.typeId) {
+    const matchedByType = metadata.sections.find(section =>
+      section.categories.some(category => category.id === draft.typeId),
+    )
+    if (matchedByType) {
+      return matchedByType
+    }
+  }
+
+  return metadata.sections[0]
+}
+
 function applyMetadataDefaults(siteId: SiteId, metadata: SiteMetadataRecord) {
   const draft = ensureDraft(siteId)
-  draft.sectionId = metadata.sections[0]?.id
-  resetSectionDependentFields(siteId, metadata.sections[0])
+  const section = resolveMetadataSectionForDraft(siteId, metadata)
+  draft.sectionId = section?.id
+  if (!draft.typeId || !section?.categories.some(category => category.id === draft.typeId)) {
+    draft.typeId = section?.categories[0]?.id
+  }
+  draft.subCategories = Object.fromEntries(
+    (section?.subCategories ?? []).map(subCategory => [subCategory.field, draft.subCategories[subCategory.field]]),
+  )
 }
 
 function getSelectedSection(siteId: SiteId) {
@@ -554,7 +683,7 @@ async function bootstrap() {
     sites.value = siteResult.data.sites.filter(site => site.adapter === 'nexusphp' || site.adapter === 'unit3d')
     applySharedDraft(config, content)
     sites.value.forEach(site => {
-      publishDrafts.value[site.id] = createInitialDraft(config, content)
+      publishDrafts.value[site.id] = createInitialDraft(config, content, site.id)
       publishErrorBySite.value[site.id] = ''
       publishResultBySite.value[site.id] = undefined
       publishValidationBySite.value[site.id] = undefined

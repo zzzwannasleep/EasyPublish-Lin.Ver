@@ -132,6 +132,8 @@ const activatingVariantId = ref<number | null>(null)
 const syncingVariantId = ref<number | null>(null)
 const removingProfileId = ref<number | null>(null)
 const workspaceError = ref('')
+const siteCatalogError = ref('')
+const profileSaveError = ref('')
 
 const episodeDialogVisible = ref(false)
 const episodeGuideVisible = ref(false)
@@ -188,8 +190,18 @@ function normalizeSiteFieldNumber(value: unknown) {
   return undefined
 }
 
+function normalizeSiteFieldBoolean(value: unknown) {
+  if (value === true || value === false) {
+    return value
+  }
+
+  return undefined
+}
+
 function getSiteFieldDefaultValue(field: PublishProfileSiteFieldSchema): PublishProfileSiteFieldValue {
   switch (field.control) {
+    case 'checkbox':
+      return undefined
     case 'number':
       return undefined
     case 'text':
@@ -201,6 +213,8 @@ function getSiteFieldDefaultValue(field: PublishProfileSiteFieldSchema): Publish
 
 function normalizeSiteFieldFormValue(value: unknown, field: PublishProfileSiteFieldSchema): PublishProfileSiteFieldValue {
   switch (field.control) {
+    case 'checkbox':
+      return normalizeSiteFieldBoolean(value)
     case 'number':
       return normalizeSiteFieldNumber(value)
     case 'text':
@@ -212,6 +226,8 @@ function normalizeSiteFieldFormValue(value: unknown, field: PublishProfileSiteFi
 
 function hasSiteFieldValue(field: PublishProfileSiteFieldSchema, value: unknown) {
   switch (field.control) {
+    case 'checkbox':
+      return typeof normalizeSiteFieldBoolean(value) === 'boolean'
     case 'number':
       return typeof normalizeSiteFieldNumber(value) === 'number'
     case 'text':
@@ -223,6 +239,8 @@ function hasSiteFieldValue(field: PublishProfileSiteFieldSchema, value: unknown)
 
 function serializeSiteFieldValue(field: PublishProfileSiteFieldSchema, value: unknown) {
   switch (field.control) {
+    case 'checkbox':
+      return normalizeSiteFieldBoolean(value)
     case 'number':
       return normalizeSiteFieldNumber(value)
     case 'text':
@@ -406,10 +424,27 @@ const projectSiteFieldDefaults = computed(() => workspace.value?.projectSiteFiel
 
 const publishableTargetSiteIds = computed(() => filterPublishableSiteIds(profileForm.targetSites))
 
-const hiddenSiteFieldLabels = computed(() =>
-  profileForm.targetSites
-    .filter(siteId => !publishableTargetSiteIds.value.includes(siteId))
-    .map(siteId => getDisplaySiteLabel(siteId)),
+const hiddenSiteFieldDetails = computed(() =>
+  targetSiteCards.value
+    .filter(card => card.enabled && !card.selectable)
+    .map(card => ({
+      siteId: card.siteId,
+      label: card.label,
+      reason: card.text,
+    })),
+)
+
+const hiddenSiteFieldLabels = computed(() => hiddenSiteFieldDetails.value.map(detail => detail.label))
+
+const hiddenSiteFieldDescription = computed(() =>
+  hiddenSiteFieldDetails.value
+    .map(detail =>
+      t('seriesWorkspace.profileEditor.siteFields.hiddenReason', {
+        site: detail.label,
+        reason: detail.reason,
+      }),
+    )
+    .join('\n'),
 )
 
 const siteDraftCards = computed(() =>
@@ -433,11 +468,13 @@ const siteFieldCards = computed(() =>
     const fields = getSiteFieldSchemas(siteId).map(field => {
       const explicitValue = getSiteFieldValue(profileForm.siteFieldDefaults, siteId, field)
       const inheritedValue = getSiteFieldValue(projectSiteFieldDefaults.value, siteId, field)
+      const resolvedValue = hasSiteFieldValue(field, explicitValue) ? explicitValue : inheritedValue
       return {
         ...field,
         source: (hasSiteFieldValue(field, explicitValue) ? 'profile' : hasSiteFieldValue(field, inheritedValue) ? 'project' : 'unset') as PublishProfileSiteFieldSource,
         inheritedValue,
         inheritedLabel: hasSiteFieldValue(field, inheritedValue) ? getSiteFieldValueLabel(field, inheritedValue) : '',
+        resolvedLabel: hasSiteFieldValue(field, resolvedValue) ? getSiteFieldValueLabel(field, resolvedValue) : '',
         missing:
           field.mode === 'required' &&
           !hasSiteFieldValue(field, explicitValue) &&
@@ -828,12 +865,24 @@ function getSiteFieldValueLabel(field: PublishProfileSiteFieldSchema, value: unk
       return ''
     }
 
-    return field.options?.find(option => option.value === normalizedValue)?.label ?? normalizedValue
+    const option = field.options?.find(option => option.value === normalizedValue)
+    return option ? (option.labelKey ? t(option.labelKey) : option.label) : normalizedValue
   }
 
   if (field.control === 'number') {
     const normalizedValue = normalizeSiteFieldNumber(value)
     return normalizedValue !== undefined ? `${normalizedValue}` : ''
+  }
+
+  if (field.control === 'checkbox') {
+    const normalizedValue = normalizeSiteFieldBoolean(value)
+    if (normalizedValue === undefined) {
+      return ''
+    }
+
+    return normalizedValue
+      ? t('seriesWorkspace.profileEditor.siteFields.boolean.true')
+      : t('seriesWorkspace.profileEditor.siteFields.boolean.false')
   }
 
   return normalizeSiteFieldString(value)
@@ -1313,6 +1362,7 @@ function renderTemplate(value: string) {
 function applyProfileSelectionInternal(profileId: number | null) {
   const profile = profileId === null ? null : publishProfiles.value.find(item => item.id === profileId) ?? null
   selectedPublishProfileId.value = profile?.id ?? null
+  profileSaveError.value = ''
   profileForm.name = profile?.name ?? ''
   profileForm.isDefault = Boolean(profile?.isDefault)
   profileForm.videoProfiles = normalizeOrderedValues(profile?.videoProfiles ?? ['1080p'], PROFILE_VIDEO_ORDER)
@@ -1375,6 +1425,8 @@ function syncSelectedEpisode(preferredEpisodeId?: number) {
 async function loadWorkspace(preferredEpisodeId?: number, preferredProfileId?: number | null) {
   isWorkspaceLoading.value = true
   workspaceError.value = ''
+  siteCatalogError.value = ''
+  profileSaveError.value = ''
   try {
     const [workspaceResult, siteResult] = await Promise.all([
       projectBridge.getSeriesWorkspace(props.project.id),
@@ -1384,9 +1436,11 @@ async function loadWorkspace(preferredEpisodeId?: number, preferredProfileId?: n
     if (siteResult.ok) {
       hasLoadedSiteCatalog.value = true
       siteCatalog.value = siteResult.data.sites.filter(site => site.capabilitySet.publish.torrent)
+      siteCatalogError.value = ''
     } else {
       hasLoadedSiteCatalog.value = false
       siteCatalog.value = []
+      siteCatalogError.value = siteResult.error.message
     }
 
     if (!workspaceResult.ok) {
@@ -1470,6 +1524,7 @@ async function persistPublishProfile(options?: {
     return false
   }
 
+  profileSaveError.value = ''
   isSavingProfile.value = true
   try {
     const result = await projectBridge.saveSeriesPublishProfile({
@@ -1488,10 +1543,12 @@ async function persistPublishProfile(options?: {
       siteFieldDefaults: currentSiteFieldDefaults.value,
     })
     if (!result.ok) {
+      profileSaveError.value = result.error.message
       ElMessage.error(result.error.message)
       return false
     }
 
+    profileSaveError.value = ''
     workspace.value = result.data.workspace
     syncSelectedEpisode()
     applyProfileSelectionInternal(result.data.profile.id)
@@ -2513,9 +2570,17 @@ watch(
           <section class="series-workspace__stack-card">
             <div class="series-workspace__card-title">{{ t('seriesWorkspace.profileEditor.siteFields.title') }}</div>
             <div class="series-workspace__card-text">{{ t('seriesWorkspace.profileEditor.siteFields.text') }}</div>
+            <el-alert
+              v-if="siteCatalogError"
+              type="error"
+              :title="t('seriesWorkspace.profileEditor.siteFields.loadErrorTitle')"
+              :description="siteCatalogError"
+              :closable="false"
+              show-icon
+            />
 
             <template v-if="profileForm.targetSites.length">
-              <div v-if="siteFieldCards.length" class="series-workspace__site-grid series-workspace__site-grid--fields">
+              <div v-if="siteFieldCards.length && !siteCatalogError" class="series-workspace__site-grid series-workspace__site-grid--fields">
                 <article v-for="card in siteFieldCards" :key="card.siteId" class="series-workspace__site-card">
                   <div class="series-workspace__site-card-head">
                     <div class="series-workspace__site-card-title">{{ getDisplaySiteLabel(card.siteId) }}</div>
@@ -2562,31 +2627,38 @@ watch(
                         </el-tag>
                       </div>
                     </div>
+                    <el-input
+                      v-if="field.mode === 'readonly'"
+                      :model-value="field.resolvedLabel"
+                      readonly
+                      :placeholder="t('seriesWorkspace.profileEditor.siteFields.readonlyEmpty')"
+                    />
                     <el-select
-                      v-if="field.control === 'select'"
+                      v-else-if="field.control === 'select'"
                       v-model="card.entry[field.key]"
                       clearable
-                      :disabled="field.mode === 'readonly'"
                     >
                       <el-option
                         v-for="option in field.options ?? []"
                         :key="option.value"
-                        :label="option.label"
+                        :label="option.labelKey ? t(option.labelKey) : option.label"
                         :value="option.value"
                       />
                     </el-select>
+                    <el-switch
+                      v-else-if="field.control === 'checkbox'"
+                      v-model="card.entry[field.key]"
+                    />
                     <el-input
                       v-else-if="field.control === 'text'"
                       v-model="card.entry[field.key]"
                       clearable
-                      :disabled="field.mode === 'readonly'"
                       :placeholder="field.placeholderKey ? t(field.placeholderKey) : undefined"
                     />
                     <el-input-number
                       v-else-if="field.control === 'number'"
                       v-model="card.entry[field.key]"
                       :controls="false"
-                      :disabled="field.mode === 'readonly'"
                       :min="field.min"
                       :max="field.max"
                       :step="field.step ?? 1"
@@ -2595,7 +2667,13 @@ watch(
                       {{ t(field.helpKey) }}
                     </span>
                     <span
-                      v-if="field.source === 'project' && field.inheritedLabel"
+                      v-if="field.mode === 'readonly' && !field.resolvedLabel"
+                      class="series-workspace__field-help"
+                    >
+                      {{ t('seriesWorkspace.profileEditor.siteFields.readonlyEmpty') }}
+                    </span>
+                    <span
+                      v-else-if="field.source === 'project' && field.inheritedLabel"
                       class="series-workspace__field-help"
                     >
                       {{
@@ -2612,13 +2690,16 @@ watch(
               </div>
               <el-alert
                 v-if="hiddenSiteFieldLabels.length"
+                class="series-workspace__alert--preline"
                 :title="
                   t('seriesWorkspace.profileEditor.siteFields.hiddenAlert', {
                     sites: hiddenSiteFieldLabels.join(' / '),
                   })
                 "
+                :description="hiddenSiteFieldDescription"
                 type="info"
                 :closable="false"
+                show-icon
               />
               <el-alert
                 v-if="currentProfileMissingSiteFields.length"
@@ -2629,12 +2710,22 @@ watch(
                 "
                 type="warning"
                 :closable="false"
+                show-icon
               />
             </template>
             <div v-else class="series-workspace__empty">
               {{ t('seriesWorkspace.profileEditor.siteFields.empty') }}
             </div>
           </section>
+
+          <el-alert
+            v-if="profileSaveError"
+            type="error"
+            :title="t('seriesWorkspace.profileEditor.saveErrorTitle')"
+            :description="profileSaveError"
+            :closable="false"
+            show-icon
+          />
 
           <footer class="series-workspace__savebar">
             <div class="series-workspace__savebar-copy">
@@ -3328,6 +3419,10 @@ watch(
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--bg-panel) 84%, #0c1520);
+}
+
+.series-workspace__alert--preline :deep(.el-alert__description) {
+  white-space: pre-line;
 }
 
 .series-workspace__form-grid,

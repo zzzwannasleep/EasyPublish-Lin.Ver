@@ -358,8 +358,10 @@ const workflow = {
     'The first pass focuses on selected sites and the shared site draft. Required and optional site fields will expand from here later.',
   'seriesWorkspace.profileEditor.siteFields.empty': 'No default sites selected yet.',
   'seriesWorkspace.profileEditor.siteFields.unavailable': 'No editable default fields are available for the currently selected sites.',
+  'seriesWorkspace.profileEditor.siteFields.loadErrorTitle': 'Failed to load site default fields',
   'seriesWorkspace.profileEditor.siteFields.hiddenAlert':
     'These selected sites are currently hidden from the field editor: {sites}',
+  'seriesWorkspace.profileEditor.siteFields.hiddenReason': '{site}: {reason}',
   'seriesWorkspace.profileEditor.siteFields.schemaText':
     'These values will be written into new variants when the profile is applied, following the current site schema.',
   'seriesWorkspace.profileEditor.siteFields.bangumiCategory': 'Bangumi Category',
@@ -374,12 +376,79 @@ const workflow = {
   'seriesWorkspace.profileEditor.siteFields.mode.required': 'Required',
   'seriesWorkspace.profileEditor.siteFields.mode.optional': 'Optional',
   'seriesWorkspace.profileEditor.siteFields.mode.readonly': 'Read Only',
+  'seriesWorkspace.profileEditor.siteFields.boolean.true': 'Enabled',
+  'seriesWorkspace.profileEditor.siteFields.boolean.false': 'Disabled',
   'seriesWorkspace.profileEditor.siteFields.source.profile': 'Profile Default',
   'seriesWorkspace.profileEditor.siteFields.source.project': 'Project Default',
+  'seriesWorkspace.profileEditor.siteFields.readonlyEmpty': 'No inherited project default is available yet.',
   'seriesWorkspace.profileEditor.siteFields.inheritedValue': 'Currently inherited from the project draft default: {value}',
   'seriesWorkspace.profileEditor.siteFields.requiredMissing': 'Required value missing',
   'seriesWorkspace.profileEditor.siteFields.requiredReady': 'Default value ready',
   'seriesWorkspace.profileEditor.siteFields.missingAlert': 'These sites are still missing default fields: {sites}',
+  'seriesWorkspace.profileEditor.siteFields.nexusTypeIdHelp':
+    'Prefill the default Type ID for NexusPHP sites. When metadata is available it will also snap back to the matching section.',
+  'seriesWorkspace.profileEditor.siteFields.nexusSmallDescriptionHelp':
+    'Prefill the small description for long-lived series-level notes.',
+  'seriesWorkspace.profileEditor.siteFields.nexusReferenceUrlHelp':
+    'Prefill the reference URL for a stable project homepage or standing note.',
+  'seriesWorkspace.profileEditor.siteFields.nexusTechnicalInfoHelp':
+    'Prefill technical information when it stays mostly stable across the whole series.',
+  'seriesWorkspace.profileEditor.siteFields.nexusPtGenHelp':
+    'Prefill PT-Gen content for reusable base metadata.',
+  'seriesWorkspace.profileEditor.siteFields.nexusPriceHelp':
+    'Prefill the price only when this really follows a stable long-term rule.',
+  'seriesWorkspace.profileEditor.siteFields.nexusPositionStateHelp':
+    'Prefill the position state when the site uses a repeatable standing rule.',
+  'seriesWorkspace.profileEditor.siteFields.nexusPickTypeHelp':
+    'Prefill the pick type when the whole season follows the same publishing policy.',
+  'seriesWorkspace.profileEditor.siteFields.unit3dCategoryIdHelp': 'Prefill the default UNIT3D Category ID.',
+  'seriesWorkspace.profileEditor.siteFields.unit3dTypeIdHelp': 'Prefill the default UNIT3D Type ID.',
+  'seriesWorkspace.profileEditor.siteFields.unit3dResolutionIdHelp': 'Prefill the default UNIT3D Resolution ID.',
+  'seriesWorkspace.profileEditor.siteFields.unit3dTmdb': 'TMDB',
+  'seriesWorkspace.profileEditor.siteFields.unit3dTmdbHelp':
+    'Inherited from the current project draft default. Edit it in the active variant draft if it needs to change.',
+  'seriesWorkspace.profileEditor.siteFields.unit3dImdb': 'IMDB',
+  'seriesWorkspace.profileEditor.siteFields.unit3dImdbHelp':
+    'Inherited from the current project draft default. Edit it in the active variant draft if it needs to change.',
+  'seriesWorkspace.profileEditor.siteFields.unit3dTvdb': 'TVDB',
+  'seriesWorkspace.profileEditor.siteFields.unit3dTvdbHelp':
+    'Inherited from the current project draft default. Edit it in the active variant draft if it needs to change.',
+  'seriesWorkspace.profileEditor.siteFields.unit3dMal': 'MAL',
+  'seriesWorkspace.profileEditor.siteFields.unit3dMalHelp':
+    'Inherited from the current project draft default. Edit it in the active variant draft if it needs to change.',
+  'seriesWorkspace.profileEditor.siteFields.unit3dIgdb': 'IGDB',
+  'seriesWorkspace.profileEditor.siteFields.unit3dIgdbHelp':
+    'Inherited from the current project draft default. Edit it in the active variant draft if it needs to change.',
+  'seriesWorkspace.profileEditor.siteFields.unit3dFree': 'Free %',
+  'seriesWorkspace.profileEditor.siteFields.unit3dFreeHelp':
+    'Prefill the Freeleech percentage when the site follows a standing rule.',
+  'seriesWorkspace.profileEditor.siteFields.unit3dFlUntil': 'Freeleech Until',
+  'seriesWorkspace.profileEditor.siteFields.unit3dFlUntilHelp':
+    'Prefill the freeleech duration when the site follows a standing policy.',
+  'seriesWorkspace.profileEditor.siteFields.unit3dRefundable': 'Refundable',
+  'seriesWorkspace.profileEditor.siteFields.unit3dRefundableHelp':
+    'Mark new variants as Refundable by default.',
+  'seriesWorkspace.profileEditor.siteFields.unit3dFeatured': 'Featured',
+  'seriesWorkspace.profileEditor.siteFields.unit3dFeaturedHelp':
+    'Mark new variants as Featured by default.',
+  'seriesWorkspace.profileEditor.siteFields.unit3dDoubleup': 'Double Upload',
+  'seriesWorkspace.profileEditor.siteFields.unit3dDoubleupHelp':
+    'Mark new variants as Double Upload by default.',
+  'seriesWorkspace.profileEditor.siteFields.unit3dDuUntil': 'Double Upload Until',
+  'seriesWorkspace.profileEditor.siteFields.unit3dDuUntilHelp':
+    'Prefill the double upload duration when the site follows a standing policy.',
+  'seriesWorkspace.profileEditor.siteFields.unit3dPersonalRelease': 'Personal Release',
+  'seriesWorkspace.profileEditor.siteFields.unit3dPersonalReleaseHelp':
+    'Mark new variants as Personal Release by default.',
+  'seriesWorkspace.profileEditor.siteFields.unit3dInternal': 'Internal',
+  'seriesWorkspace.profileEditor.siteFields.unit3dInternalHelp':
+    'Mark new variants as Internal by default.',
+  'seriesWorkspace.profileEditor.siteFields.unit3dSticky': 'Sticky',
+  'seriesWorkspace.profileEditor.siteFields.unit3dStickyHelp':
+    'Mark new variants as Sticky by default.',
+  'seriesWorkspace.profileEditor.siteFields.unit3dModQueueOptIn': 'Mod Queue Opt-In',
+  'seriesWorkspace.profileEditor.siteFields.unit3dModQueueOptInHelp':
+    'Opt new variants into the moderation queue by default.',
   'seriesWorkspace.profileEditor.siteFields.applyConfirmTitle': 'Apply Publish Profile Anyway',
   'seriesWorkspace.profileEditor.siteFields.applyConfirmText':
     'This publish profile is still missing some default site fields: {sites}. Continuing will keep the current draft values for them.',
@@ -392,6 +461,7 @@ const workflow = {
   'seriesWorkspace.profileEditor.actions.saveAs': 'Save As',
   'seriesWorkspace.profileEditor.actions.copy': 'Copy Profile',
   'seriesWorkspace.profileEditor.actions.applyToEpisode': 'Load Into Episode',
+  'seriesWorkspace.profileEditor.saveErrorTitle': 'Failed to save publish profile',
   'seriesWorkspace.profileEditor.createSuccess': 'Saved publish profile {name}',
   'seriesWorkspace.profileEditor.saveSuccess': 'Updated publish profile {name}',
   'seriesWorkspace.profileEditor.removeTitle': 'Remove Publish Profile',
