@@ -59,6 +59,11 @@ export interface ProjectAPI {
   getSeriesWorkspace: (msg: string) => Promise<string>
   createSeriesEpisode: (msg: string) => Promise<string>
   createSeriesVariant: (msg: string) => Promise<string>
+  batchCreateSeriesVariants: (msg: string) => Promise<string>
+  saveSeriesPublishProfile: (msg: string) => Promise<string>
+  removeSeriesPublishProfile: (msg: string) => Promise<string>
+  saveSeriesVariantTemplate: (msg: string) => Promise<string>
+  removeSeriesVariantTemplate: (msg: string) => Promise<string>
   inheritSeriesEpisodeVariants: (msg: string) => Promise<string>
   activateSeriesVariant: (msg: string) => Promise<string>
   syncSeriesVariantFromDraft: (msg: string) => Promise<string>

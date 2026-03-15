@@ -405,6 +405,21 @@ namespace Project {
   export function createSeriesVariant(msg: string) {
     return projectService.createSeriesVariant(msg)
   }
+  export function batchCreateSeriesVariants(msg: string) {
+    return projectService.batchCreateSeriesVariants(msg)
+  }
+  export function saveSeriesPublishProfile(msg: string) {
+    return projectService.saveSeriesPublishProfile(msg)
+  }
+  export function removeSeriesPublishProfile(msg: string) {
+    return projectService.removeSeriesPublishProfile(msg)
+  }
+  export function saveSeriesVariantTemplate(msg: string) {
+    return projectService.saveSeriesVariantTemplate(msg)
+  }
+  export function removeSeriesVariantTemplate(msg: string) {
+    return projectService.removeSeriesVariantTemplate(msg)
+  }
   export function inheritSeriesEpisodeVariants(msg: string) {
     return projectService.inheritSeriesEpisodeVariants(msg)
   }

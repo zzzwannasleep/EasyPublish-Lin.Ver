@@ -1,3 +1,5 @@
+import type { AccountAuthMode, AccountHealthStatus } from './account'
+
 export const builtinSiteIds = ['bangumi', 'mikan', 'miobt', 'nyaa', 'acgrip', 'dmhy', 'acgnx_a', 'acgnx_g', 'forum'] as const
 
 export type BuiltInSiteId = (typeof builtinSiteIds)[number]
@@ -53,6 +55,28 @@ export interface SiteProfile {
   customFieldMap?: Record<string, string>
 }
 
+export type SiteFieldSchemaControl = 'select' | 'text' | 'number'
+
+export type SiteFieldSchemaMode = 'required' | 'optional' | 'readonly'
+
+export interface SiteFieldSchemaOption {
+  label: string
+  value: string
+}
+
+export interface SiteFieldSchemaEntry {
+  key: string
+  labelKey: string
+  helpKey: string
+  control: SiteFieldSchemaControl
+  mode: SiteFieldSchemaMode
+  options?: SiteFieldSchemaOption[]
+  placeholderKey?: string
+  min?: number
+  max?: number
+  step?: number
+}
+
 export interface SiteCatalogEntry {
   id: SiteId
   name: string
@@ -65,6 +89,11 @@ export interface SiteCatalogEntry {
   capabilitySet: SiteCapabilitySet
   notes: string[]
   customFieldMap?: Record<string, string>
+  fieldSchemas?: SiteFieldSchemaEntry[]
+  accountAuthMode?: AccountAuthMode
+  accountStatus?: AccountHealthStatus
+  accountMessage?: string
+  accountConfigured?: boolean
 }
 
 export interface SiteSectionOption {

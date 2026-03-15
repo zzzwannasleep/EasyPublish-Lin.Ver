@@ -9,6 +9,16 @@ export const projectAPI = {
   getSeriesWorkspace: async (msg: string) => await ipcRenderer.invoke('project_getSeriesWorkspace', msg),
   createSeriesEpisode: async (msg: string) => await ipcRenderer.invoke('project_createSeriesEpisode', msg),
   createSeriesVariant: async (msg: string) => await ipcRenderer.invoke('project_createSeriesVariant', msg),
+  batchCreateSeriesVariants: async (msg: string) =>
+    await ipcRenderer.invoke('project_batchCreateSeriesVariants', msg),
+  saveSeriesPublishProfile: async (msg: string) =>
+    await ipcRenderer.invoke('project_saveSeriesPublishProfile', msg),
+  removeSeriesPublishProfile: async (msg: string) =>
+    await ipcRenderer.invoke('project_removeSeriesPublishProfile', msg),
+  saveSeriesVariantTemplate: async (msg: string) =>
+    await ipcRenderer.invoke('project_saveSeriesPublishProfile', msg),
+  removeSeriesVariantTemplate: async (msg: string) =>
+    await ipcRenderer.invoke('project_removeSeriesPublishProfile', msg),
   inheritSeriesEpisodeVariants: async (msg: string) =>
     await ipcRenderer.invoke('project_inheritSeriesEpisodeVariants', msg),
   activateSeriesVariant: async (msg: string) => await ipcRenderer.invoke('project_activateSeriesVariant', msg),

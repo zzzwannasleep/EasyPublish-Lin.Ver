@@ -1,5 +1,5 @@
 import { buildSiteCapabilitySet, defaultSiteProfiles } from '../../shared/types/site'
-import type { SiteAdapterKind, SiteCatalogEntry, SiteId, SiteProfile } from '../../shared/types/site'
+import type { SiteAdapterKind, SiteCatalogEntry, SiteFieldSchemaEntry, SiteId, SiteProfile } from '../../shared/types/site'
 import type { SiteAdapter } from './adapter'
 import { createNexusphpAdapter } from './nexusphp/adapter'
 import { createUnit3dAdapter } from './unit3d/adapter'
@@ -24,10 +24,52 @@ function normalizeBaseUrl(baseUrl: string): string {
   }
 }
 
+const BANGUMI_FIELD_SCHEMAS: SiteFieldSchemaEntry[] = [
+  {
+    key: 'category_bangumi',
+    labelKey: 'seriesWorkspace.profileEditor.siteFields.bangumiCategory',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.bangumiHelp',
+    control: 'select',
+    mode: 'required',
+    options: [
+      { label: '合集', value: '54967e14ff43b99e284d0bf7' },
+      { label: '剧场版', value: '549cc9369310bc7d04cddf9f' },
+      { label: '动画', value: '549ef207fe682f7549f1ea90' },
+      { label: '其他', value: '549ef250fe682f7549f1ea91' },
+    ],
+  },
+]
+
+const NYAA_FIELD_SCHEMAS: SiteFieldSchemaEntry[] = [
+  {
+    key: 'category_nyaa',
+    labelKey: 'seriesWorkspace.profileEditor.siteFields.nyaaCategory',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.nyaaHelp',
+    control: 'select',
+    mode: 'required',
+    options: [
+      { label: 'Anime - English-translated', value: '1_2' },
+      { label: 'Anime - Non-English-translated', value: '1_3' },
+      { label: 'Anime - Raw', value: '1_4' },
+      { label: 'Live Action - English-translated', value: '4_1' },
+      { label: 'Live Action - Non-English-translated', value: '4_3' },
+      { label: 'Live Action - Raw', value: '4_4' },
+    ],
+  },
+]
+
+function cloneSiteFieldSchemas(fieldSchemas: SiteFieldSchemaEntry[] = []): SiteFieldSchemaEntry[] {
+  return fieldSchemas.map(field => ({
+    ...field,
+    options: field.options?.map(option => ({ ...option })),
+  }))
+}
+
 function createStaticAdapter(
   id: Exclude<SiteAdapterKind, 'nexusphp' | 'unit3d'>,
   displayName: string,
   note: string,
+  fieldSchemas: SiteFieldSchemaEntry[] = [],
 ): SiteAdapter {
   return {
     id,
@@ -48,6 +90,7 @@ function createStaticAdapter(
         capabilitySet: buildSiteCapabilitySet(profile.capabilities),
         notes: [note],
         customFieldMap: profile.customFieldMap,
+        fieldSchemas: cloneSiteFieldSchemas(fieldSchemas),
       }
     },
   }
@@ -56,10 +99,20 @@ function createStaticAdapter(
 export function createSiteRegistry(options: CreateSiteRegistryOptions = {}) {
   const { getCustomProfiles } = options
   const adapters: SiteAdapter[] = [
-    createStaticAdapter('bangumi', 'Bangumi', 'Legacy Bangumi workflow remains bridged through the existing BT service.'),
+    createStaticAdapter(
+      'bangumi',
+      'Bangumi',
+      'Legacy Bangumi workflow remains bridged through the existing BT service.',
+      BANGUMI_FIELD_SCHEMAS,
+    ),
     createStaticAdapter('mikan', 'Mikan', 'Mikan publishing currently runs through the legacy BT service with token-based API auth.'),
     createStaticAdapter('miobt', 'MioBT', 'MioBT publishing currently runs through the legacy BT service with API key auth.'),
-    createStaticAdapter('nyaa', 'Nyaa', 'Legacy Nyaa workflow remains bridged through the existing BT service.'),
+    createStaticAdapter(
+      'nyaa',
+      'Nyaa',
+      'Legacy Nyaa workflow remains bridged through the existing BT service.',
+      NYAA_FIELD_SCHEMAS,
+    ),
     createNexusphpAdapter(),
     createUnit3dAdapter(),
     createStaticAdapter('wordpress', 'WordPress', 'Forum publishing still routes through the legacy forum service for now.'),

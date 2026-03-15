@@ -1,5 +1,6 @@
 import type { ApiResult } from '../../types/api'
 import type {
+  BatchCreateSeriesVariantsInput,
   CreateProjectInput,
   CreateSeriesEpisodeInput,
   CreateSeriesVariantInput,
@@ -8,8 +9,13 @@ import type {
   ProjectListPayload,
   ProjectRemovalPayload,
   ProjectStatsPayload,
+  RemoveSeriesPublishProfileInput,
+  SaveSeriesPublishProfileInput,
   SeriesEpisodeInheritancePayload,
+  SeriesEpisodeVariantBatchPayload,
   SeriesEpisodePayload,
+  SeriesPublishProfilePayload,
+  SeriesPublishProfileRemovalPayload,
   SeriesVariantDraftInput,
   SeriesVariantPayload,
   SeriesWorkspacePayload,
@@ -42,6 +48,24 @@ export const projectBridge = {
 
   createSeriesVariant(input: CreateSeriesVariantInput) {
     return parseResult<SeriesVariantPayload>(window.projectAPI.createSeriesVariant(JSON.stringify(input)))
+  },
+
+  batchCreateSeriesVariants(input: BatchCreateSeriesVariantsInput) {
+    return parseResult<SeriesEpisodeVariantBatchPayload>(
+      window.projectAPI.batchCreateSeriesVariants(JSON.stringify(input)),
+    )
+  },
+
+  saveSeriesPublishProfile(input: SaveSeriesPublishProfileInput) {
+    return parseResult<SeriesPublishProfilePayload>(
+      window.projectAPI.saveSeriesPublishProfile(JSON.stringify(input)),
+    )
+  },
+
+  removeSeriesPublishProfile(input: RemoveSeriesPublishProfileInput) {
+    return parseResult<SeriesPublishProfileRemovalPayload>(
+      window.projectAPI.removeSeriesPublishProfile(JSON.stringify(input)),
+    )
   },
 
   inheritSeriesEpisodeVariants(input: InheritSeriesEpisodeVariantsInput) {

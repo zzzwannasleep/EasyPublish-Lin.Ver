@@ -3,6 +3,7 @@ import fs from 'fs'
 import { join } from 'path'
 import { fail, ok } from '../../shared/types/api'
 import type {
+  BatchCreateSeriesVariantsInput,
   CreateProjectInput,
   CreateSeriesEpisodeInput,
   CreateSeriesVariantInput,
@@ -10,8 +11,17 @@ import type {
   LegacyProjectType,
   ProjectMode,
   ProjectSourceKind,
+  RemoveSeriesPublishProfileInput,
+  SaveSeriesPublishProfileInput,
   SeriesProjectEpisode,
   SeriesProjectVariant,
+  SeriesPublishProfile,
+  SeriesPublishProfileSnapshot,
+  SeriesPublishProfileSiteDraft,
+  SeriesPublishProfileSiteDrafts,
+  SeriesPublishProfileSiteFieldDefaults,
+  SeriesVariantTemplateSubtitleProfile,
+  SeriesVariantTemplateVideoProfile,
   SeriesVariantSubtitleProfile,
   SeriesVariantVideoProfile,
   SeriesProjectWorkspace,
@@ -46,6 +56,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     return {
       projectId,
       episodes: [],
+      publishProfiles: [],
+      variantTemplates: [],
       activeEpisodeId: undefined,
       activeVariantId: undefined,
       createdAt: timestamp,
@@ -57,71 +69,167 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     const workspacePath = getSeriesWorkspacePath(projectPath)
     try {
       if (!fs.existsSync(workspacePath)) {
-        return createDefaultSeriesWorkspace(projectId)
+        return hydrateSeriesWorkspace(projectPath, createDefaultSeriesWorkspace(projectId))
       }
 
       const parsed = JSON.parse(fs.readFileSync(workspacePath, { encoding: 'utf-8' })) as Partial<SeriesProjectWorkspace>
+      const rawPublishProfiles = Array.isArray(parsed.publishProfiles)
+        ? parsed.publishProfiles
+        : Array.isArray(parsed.variantTemplates)
+          ? parsed.variantTemplates
+          : []
+      const publishProfiles = normalizePublishProfiles(
+        rawPublishProfiles
+          .filter((profile): profile is SeriesPublishProfile => {
+            return typeof profile === 'object' && profile !== null && typeof profile.id === 'number'
+          })
+          .map(profile => {
+            const titleTemplate = normalizeTitleTemplate(profile.titleTemplate)
+            const legacySummaryTemplate = normalizeSummaryTemplate(profile.summaryTemplate)
+            const siteDrafts = normalizeSiteDrafts(profile.siteDrafts, {
+              targetSites: normalizeSiteIds(profile.targetSites),
+              summaryTemplate: legacySummaryTemplate,
+            })
+            const targetSites = normalizeSiteIds([
+              ...normalizeSiteIds(profile.targetSites),
+              ...getEnabledSiteIdsFromSiteDrafts(siteDrafts),
+            ])
+            return {
+              id: profile.id,
+              name: profile.name ?? '',
+              isDefault: Boolean(profile.isDefault),
+              videoProfiles: Array.isArray(profile.videoProfiles)
+                ? profile.videoProfiles.filter(
+                    (item): item is SeriesVariantTemplateVideoProfile => isSeriesVariantTemplateVideoProfile(item),
+                  )
+                : [],
+              subtitleProfiles: Array.isArray(profile.subtitleProfiles)
+                ? profile.subtitleProfiles.filter(
+                    (item): item is SeriesVariantTemplateSubtitleProfile =>
+                      isSeriesVariantTemplateSubtitleProfile(item),
+                  )
+                : [],
+              targetSites,
+              titleTemplate,
+              summaryTemplate: resolvePrimarySiteDraftSummaryTemplate(siteDrafts, targetSites, legacySummaryTemplate),
+              siteDrafts,
+              siteFieldDefaults: normalizeSiteFieldDefaults(profile.siteFieldDefaults),
+              createdAt: profile.createdAt ?? new Date(profile.id).toISOString(),
+              updatedAt: profile.updatedAt ?? new Date(profile.id).toISOString(),
+            }
+          })
+          .filter(profile => profile.name && profile.videoProfiles.length && profile.subtitleProfiles.length),
+      )
       const episodes = Array.isArray(parsed.episodes)
         ? parsed.episodes
             .filter((episode): episode is SeriesProjectEpisode => {
               return typeof episode === 'object' && episode !== null && typeof episode.id === 'number'
             })
-            .map(episode => ({
-              id: episode.id,
-              episodeLabel: episode.episodeLabel ?? '',
-              episodeTitle: episode.episodeTitle || undefined,
-              sortIndex: Number.isFinite(episode.sortIndex) ? episode.sortIndex : 0,
-              directoryName: episode.directoryName ?? '',
-              variantCount: Number.isFinite(episode.variantCount)
-                ? episode.variantCount
-                : Array.isArray(episode.variants)
-                  ? episode.variants.length
-                  : 0,
-              variants: Array.isArray(episode.variants)
+            .map(episode => {
+              const nextEpisode: SeriesProjectEpisode = {
+                id: episode.id,
+                episodeLabel: episode.episodeLabel ?? '',
+                episodeTitle: episode.episodeTitle || undefined,
+                sortIndex: Number.isFinite(episode.sortIndex) ? episode.sortIndex : 0,
+                directoryName: episode.directoryName ?? '',
+                variantCount: Number.isFinite(episode.variantCount)
+                  ? episode.variantCount
+                  : Array.isArray(episode.variants)
+                    ? episode.variants.length
+                    : 0,
+                variants: [],
+                createdAt: episode.createdAt ?? new Date(episode.id).toISOString(),
+                updatedAt: episode.updatedAt ?? new Date(episode.id).toISOString(),
+              }
+
+              nextEpisode.variants = Array.isArray(episode.variants)
                 ? episode.variants
                     .filter((variant): variant is SeriesProjectVariant => {
                       return typeof variant === 'object' && variant !== null && typeof variant.id === 'number'
                     })
-                    .map(variant => ({
-                      id: variant.id,
-                      name: variant.name ?? '',
-                      directoryName: variant.directoryName ?? '',
-                      videoProfile: supportedVideoProfiles.includes(variant.videoProfile as SeriesVariantVideoProfile)
-                        ? (variant.videoProfile as SeriesVariantVideoProfile)
-                        : undefined,
-                      subtitleProfile: supportedSubtitleProfiles.includes(
-                        variant.subtitleProfile as SeriesVariantSubtitleProfile,
-                      )
-                        ? (variant.subtitleProfile as SeriesVariantSubtitleProfile)
-                        : undefined,
-                      createdAt: variant.createdAt ?? new Date(variant.id).toISOString(),
-                      updatedAt: variant.updatedAt ?? new Date(variant.id).toISOString(),
-                    }))
-                : [],
-              createdAt: episode.createdAt ?? new Date(episode.id).toISOString(),
-              updatedAt: episode.updatedAt ?? new Date(episode.id).toISOString(),
-            }))
+                    .map(variant => {
+                      const matchedProfile =
+                        typeof variant.publishProfileId === 'number'
+                          ? publishProfiles.find(profile => profile.id === variant.publishProfileId)
+                          : undefined
+                      const videoProfile = isSeriesVariantVideoProfile(variant.videoProfile)
+                        ? variant.videoProfile
+                        : undefined
+                      const subtitleProfile = isSeriesVariantSubtitleProfile(variant.subtitleProfile)
+                        ? variant.subtitleProfile
+                        : undefined
+                      const publishProfileSnapshot = normalizePublishProfileSnapshot(variant.publishProfileSnapshot, {
+                        profile: matchedProfile,
+                        variant: {
+                          name: variant.name ?? '',
+                          videoProfile,
+                          subtitleProfile,
+                          publishProfileName: normalizeOptionalString(variant.publishProfileName),
+                          targetSites: normalizeSiteIds(variant.targetSites),
+                        },
+                      })
+                      const normalizedVariant: SeriesProjectVariant = {
+                        id: variant.id,
+                        name: variant.name ?? '',
+                        directoryName: variant.directoryName ?? '',
+                        videoProfile,
+                        subtitleProfile,
+                        publishProfileId:
+                          typeof variant.publishProfileId === 'number' ? variant.publishProfileId : undefined,
+                        publishProfileName:
+                          normalizeOptionalString(variant.publishProfileName) ??
+                          (typeof variant.publishProfileId === 'number'
+                            ? publishProfileSnapshot?.name ?? matchedProfile?.name
+                            : undefined),
+                        publishProfileSnapshot,
+                        targetSites: normalizeSiteIds(variant.targetSites),
+                        title: normalizeOptionalString(variant.title),
+                        createdAt: variant.createdAt ?? new Date(variant.id).toISOString(),
+                        updatedAt: variant.updatedAt ?? new Date(variant.id).toISOString(),
+                      }
+
+                      return applyVariantSummary(normalizedVariant, readVariantConfigSummary(projectPath, nextEpisode, normalizedVariant))
+                    })
+                : []
+              nextEpisode.variantCount = nextEpisode.variants.length
+              return nextEpisode
+            })
             .sort((left, right) => left.sortIndex - right.sortIndex)
         : []
 
-      return {
+      return hydrateSeriesWorkspace(projectPath, {
         projectId,
         episodes,
+        publishProfiles,
+        variantTemplates: publishProfiles,
         activeEpisodeId:
           typeof parsed.activeEpisodeId === 'number' ? parsed.activeEpisodeId : undefined,
         activeVariantId:
           typeof parsed.activeVariantId === 'number' ? parsed.activeVariantId : undefined,
         createdAt: parsed.createdAt ?? new Date(projectId).toISOString(),
         updatedAt: parsed.updatedAt ?? parsed.createdAt ?? new Date(projectId).toISOString(),
-      }
+      })
     } catch {
-      return createDefaultSeriesWorkspace(projectId)
+      return hydrateSeriesWorkspace(projectPath, createDefaultSeriesWorkspace(projectId))
     }
   }
 
   function writeSeriesWorkspace(projectPath: string, workspace: SeriesProjectWorkspace) {
     const workspacePath = getSeriesWorkspacePath(projectPath)
-    fs.writeFileSync(workspacePath, JSON.stringify(workspace, null, 2))
+    const { projectSiteFieldDefaults: _projectSiteFieldDefaults, ...persistedWorkspace } = workspace
+    const publishProfiles = normalizePublishProfiles(workspace.publishProfiles ?? workspace.variantTemplates ?? [])
+    fs.writeFileSync(
+      workspacePath,
+      JSON.stringify(
+        {
+          ...persistedWorkspace,
+          publishProfiles,
+          variantTemplates: publishProfiles,
+        },
+        null,
+        2,
+      ),
+    )
   }
 
   function writeEpisodeRecord(projectPath: string, episode: SeriesProjectEpisode) {
@@ -148,6 +256,685 @@ export function createProjectService(options: CreateProjectServiceOptions) {
 
   function isSeriesVariantSubtitleProfile(value: unknown): value is SeriesVariantSubtitleProfile {
     return supportedSubtitleProfiles.includes(value as SeriesVariantSubtitleProfile)
+  }
+
+  function isSeriesVariantTemplateVideoProfile(value: unknown): value is SeriesVariantTemplateVideoProfile {
+    return value !== 'custom' && isSeriesVariantVideoProfile(value)
+  }
+
+  function isSeriesVariantTemplateSubtitleProfile(value: unknown): value is SeriesVariantTemplateSubtitleProfile {
+    return value !== 'custom' && isSeriesVariantSubtitleProfile(value)
+  }
+
+  function normalizeVariantVideoProfiles(profiles: SeriesVariantVideoProfile[]): SeriesVariantVideoProfile[] {
+    const profileSet = new Set(profiles)
+    return supportedVideoProfiles.filter(profile => profileSet.has(profile))
+  }
+
+  function normalizeVariantSubtitleProfiles(profiles: SeriesVariantSubtitleProfile[]): SeriesVariantSubtitleProfile[] {
+    const profileSet = new Set(profiles)
+    return supportedSubtitleProfiles.filter(profile => profileSet.has(profile))
+  }
+
+  function normalizeTemplateVideoProfiles(
+    profiles: SeriesVariantTemplateVideoProfile[],
+  ): SeriesVariantTemplateVideoProfile[] {
+    return normalizeVariantVideoProfiles(profiles as SeriesVariantVideoProfile[]).filter(
+      (profile): profile is SeriesVariantTemplateVideoProfile => profile !== 'custom',
+    )
+  }
+
+  function normalizeTemplateSubtitleProfiles(
+    profiles: SeriesVariantTemplateSubtitleProfile[],
+  ): SeriesVariantTemplateSubtitleProfile[] {
+    return normalizeVariantSubtitleProfiles(profiles as SeriesVariantSubtitleProfile[]).filter(
+      (profile): profile is SeriesVariantTemplateSubtitleProfile => profile !== 'custom',
+    )
+  }
+
+  function normalizeSiteIds(value: unknown): SiteId[] {
+    if (!Array.isArray(value)) {
+      return []
+    }
+
+    return [
+      ...new Set(
+        value
+          .filter((item): item is string => typeof item === 'string')
+          .map(item => item.trim())
+          .filter(Boolean),
+      ),
+    ]
+  }
+
+  function normalizeTitleTemplate(value: unknown) {
+    if (typeof value !== 'string') {
+      return undefined
+    }
+
+    const trimmedValue = value.trim()
+    return trimmedValue || undefined
+  }
+
+  function normalizeSummaryTemplate(value: unknown) {
+    if (typeof value !== 'string') {
+      return undefined
+    }
+
+    const trimmedValue = value.trim()
+    return trimmedValue || undefined
+  }
+
+  function normalizeOptionalString(value: unknown) {
+    if (typeof value !== 'string') {
+      return undefined
+    }
+
+    const trimmedValue = value.trim()
+    return trimmedValue || undefined
+  }
+
+  function normalizeSiteFieldDefaults(value: unknown): SeriesPublishProfileSiteFieldDefaults | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return undefined
+    }
+
+    const nextFieldDefaults: Partial<Record<SiteId, Record<string, unknown>>> = {}
+    Object.entries(value as Record<string, unknown>).forEach(([siteId, fieldDefaults]) => {
+      const normalizedSiteId = normalizeSiteIds([siteId])[0]
+      if (!normalizedSiteId || !fieldDefaults || typeof fieldDefaults !== 'object' || Array.isArray(fieldDefaults)) {
+        return
+      }
+
+      nextFieldDefaults[normalizedSiteId] = { ...(fieldDefaults as Record<string, unknown>) }
+    })
+
+    return Object.keys(nextFieldDefaults).length > 0 ? nextFieldDefaults : undefined
+  }
+
+  function cloneSiteFieldDefaults(fieldDefaults?: SeriesPublishProfileSiteFieldDefaults) {
+    return normalizeSiteFieldDefaults(fieldDefaults)
+  }
+
+  function buildProjectSiteFieldDefaults(config: Config.PublishConfig) {
+    const nextFieldDefaults: SeriesPublishProfileSiteFieldDefaults = {}
+    const bangumiCategory = normalizeOptionalString(config.category_bangumi)
+    const nyaaCategory = normalizeOptionalString(config.category_nyaa)
+
+    if (bangumiCategory) {
+      nextFieldDefaults.bangumi = {
+        category_bangumi: bangumiCategory,
+      }
+    }
+
+    if (nyaaCategory) {
+      nextFieldDefaults.nyaa = {
+        category_nyaa: nyaaCategory,
+      }
+    }
+
+    return Object.keys(nextFieldDefaults).length > 0 ? nextFieldDefaults : undefined
+  }
+
+  function readProjectSiteFieldDefaults(projectPath: string) {
+    const draftConfigPath = getDraftConfigPath(projectPath)
+    if (!fs.existsSync(draftConfigPath)) {
+      return undefined
+    }
+
+    try {
+      const config = JSON.parse(fs.readFileSync(draftConfigPath, { encoding: 'utf-8' })) as Config.PublishConfig
+      return buildProjectSiteFieldDefaults(config)
+    } catch {
+      return undefined
+    }
+  }
+
+  function hydrateSeriesWorkspace(projectPath: string, workspace: SeriesProjectWorkspace): SeriesProjectWorkspace {
+    return {
+      ...workspace,
+      projectSiteFieldDefaults: readProjectSiteFieldDefaults(projectPath),
+    }
+  }
+
+  function normalizeSiteDraftEntry(
+    value: unknown,
+    fallback?: {
+      enabled?: boolean
+      summaryTemplate?: string
+    },
+  ): SeriesPublishProfileSiteDraft | undefined {
+    const rawDraft =
+      value && typeof value === 'object' && !Array.isArray(value)
+        ? (value as Partial<SeriesPublishProfileSiteDraft>)
+        : undefined
+    const enabled = typeof rawDraft?.enabled === 'boolean' ? rawDraft.enabled : Boolean(fallback?.enabled)
+    const useGlobalTitle = typeof rawDraft?.useGlobalTitle === 'boolean' ? rawDraft.useGlobalTitle : true
+    const titleTemplate = normalizeTitleTemplate(rawDraft?.titleTemplate)
+    const summaryTemplate = normalizeSummaryTemplate(rawDraft?.summaryTemplate ?? fallback?.summaryTemplate)
+    const note = normalizeOptionalString(rawDraft?.note)
+
+    if (!enabled && useGlobalTitle && !titleTemplate && !summaryTemplate && !note) {
+      return undefined
+    }
+
+    return {
+      enabled,
+      useGlobalTitle,
+      titleTemplate,
+      summaryTemplate,
+      note,
+    }
+  }
+
+  function normalizeSiteDrafts(
+    value: unknown,
+    fallback?: {
+      targetSites?: SiteId[]
+      summaryTemplate?: string
+    },
+  ): SeriesPublishProfileSiteDrafts | undefined {
+    const normalizedTargetSites = normalizeSiteIds(fallback?.targetSites)
+    const nextSiteDrafts: SeriesPublishProfileSiteDrafts = {}
+
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      Object.entries(value as Record<string, unknown>).forEach(([siteId, siteDraft]) => {
+        const normalizedSiteId = normalizeSiteIds([siteId])[0]
+        if (!normalizedSiteId) {
+          return
+        }
+
+        const normalizedSiteDraft = normalizeSiteDraftEntry(siteDraft, {
+          enabled: normalizedTargetSites.includes(normalizedSiteId),
+          summaryTemplate: fallback?.summaryTemplate,
+        })
+        if (normalizedSiteDraft) {
+          nextSiteDrafts[normalizedSiteId] = normalizedSiteDraft
+        }
+      })
+    }
+
+    normalizedTargetSites.forEach(siteId => {
+      if (nextSiteDrafts[siteId]) {
+        nextSiteDrafts[siteId] = {
+          ...nextSiteDrafts[siteId],
+          enabled: true,
+        }
+        return
+      }
+
+      const normalizedSiteDraft = normalizeSiteDraftEntry(undefined, {
+        enabled: true,
+        summaryTemplate: fallback?.summaryTemplate,
+      })
+      if (normalizedSiteDraft) {
+        nextSiteDrafts[siteId] = normalizedSiteDraft
+      }
+    })
+
+    return Object.keys(nextSiteDrafts).length > 0 ? nextSiteDrafts : undefined
+  }
+
+  function cloneSiteDrafts(siteDrafts?: SeriesPublishProfileSiteDrafts) {
+    return normalizeSiteDrafts(siteDrafts)
+  }
+
+  function getEnabledSiteIdsFromSiteDrafts(siteDrafts?: SeriesPublishProfileSiteDrafts) {
+    if (!siteDrafts) {
+      return []
+    }
+
+    return Object.entries(siteDrafts)
+      .filter(([_siteId, siteDraft]) => Boolean(siteDraft?.enabled))
+      .map(([siteId]) => siteId)
+      .filter((siteId): siteId is SiteId => Boolean(siteId))
+  }
+
+  function resolvePrimarySiteDraftSummaryTemplate(
+    siteDrafts?: SeriesPublishProfileSiteDrafts,
+    targetSites: SiteId[] = [],
+    fallbackSummaryTemplate?: string,
+  ) {
+    const orderedSiteIds = targetSites.length
+      ? targetSites
+      : siteDrafts
+        ? (Object.keys(siteDrafts) as SiteId[])
+        : []
+    for (const siteId of orderedSiteIds) {
+      const summaryTemplate = normalizeSummaryTemplate(siteDrafts?.[siteId]?.summaryTemplate)
+      if (summaryTemplate) {
+        return summaryTemplate
+      }
+    }
+
+    return normalizeSummaryTemplate(fallbackSummaryTemplate)
+  }
+
+  function buildPublishProfileSnapshotName(input: {
+    name?: string
+    profile?: SeriesPublishProfile | null
+    variantName?: string
+    videoProfiles?: SeriesVariantVideoProfile[]
+    subtitleProfiles?: SeriesVariantSubtitleProfile[]
+  }) {
+    const explicitName = normalizeOptionalString(input.name)
+    if (explicitName) {
+      return explicitName
+    }
+
+    const profileName = normalizeOptionalString(input.profile?.name)
+    if (profileName) {
+      return profileName
+    }
+
+    const variantName = normalizeOptionalString(input.variantName)
+    if (variantName) {
+      return variantName
+    }
+
+    const profileLabel = [
+      normalizeVariantVideoProfiles(input.videoProfiles ?? []).join('+'),
+      normalizeVariantSubtitleProfiles(input.subtitleProfiles ?? []).join('+'),
+    ]
+      .filter(Boolean)
+      .join(' / ')
+
+    return profileLabel || 'manual-publish-profile'
+  }
+
+  function buildPublishProfileSnapshot(input: {
+    name?: string
+    profile?: SeriesPublishProfile | null
+    variantName?: string
+    videoProfiles?: SeriesVariantVideoProfile[]
+    subtitleProfiles?: SeriesVariantSubtitleProfile[]
+    targetSites?: SiteId[]
+    titleTemplate?: string
+    summaryTemplate?: string
+    siteDrafts?: SeriesPublishProfileSiteDrafts
+    siteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
+  }): SeriesPublishProfileSnapshot {
+    const videoProfiles = normalizeVariantVideoProfiles(
+      input.videoProfiles?.length
+        ? input.videoProfiles
+        : input.profile
+          ? (input.profile.videoProfiles as SeriesVariantVideoProfile[])
+          : [],
+    )
+    const subtitleProfiles = normalizeVariantSubtitleProfiles(
+      input.subtitleProfiles?.length
+        ? input.subtitleProfiles
+        : input.profile
+          ? (input.profile.subtitleProfiles as SeriesVariantSubtitleProfile[])
+          : [],
+    )
+    const targetSites = normalizeSiteIds(input.targetSites ?? input.profile?.targetSites)
+    const titleTemplate = normalizeTitleTemplate(input.titleTemplate ?? input.profile?.titleTemplate)
+    const siteDrafts = Object.prototype.hasOwnProperty.call(input, 'siteDrafts')
+      ? cloneSiteDrafts(input.siteDrafts)
+      : cloneSiteDrafts(
+          normalizeSiteDrafts(input.profile?.siteDrafts, {
+            targetSites,
+            summaryTemplate: input.profile?.summaryTemplate,
+          }),
+        )
+    const summaryTemplate = resolvePrimarySiteDraftSummaryTemplate(
+      siteDrafts,
+      targetSites,
+      input.summaryTemplate ?? input.profile?.summaryTemplate,
+    )
+    const siteFieldDefaults = cloneSiteFieldDefaults(input.siteFieldDefaults ?? input.profile?.siteFieldDefaults)
+
+    return {
+      name: buildPublishProfileSnapshotName({
+        name: input.name,
+        profile: input.profile,
+        variantName: input.variantName,
+        videoProfiles,
+        subtitleProfiles,
+      }),
+      videoProfiles,
+      subtitleProfiles,
+      targetSites: targetSites.length ? targetSites : undefined,
+      titleTemplate,
+      summaryTemplate,
+      siteDrafts,
+      siteFieldDefaults,
+    }
+  }
+
+  function normalizePublishProfileSnapshot(
+    value: unknown,
+    fallback?: {
+      profile?: SeriesPublishProfile | null
+      variant?: Pick<
+        SeriesProjectVariant,
+        'name' | 'videoProfile' | 'subtitleProfile' | 'publishProfileName' | 'targetSites'
+      >
+    },
+  ) {
+    const rawSnapshot =
+      value && typeof value === 'object' && !Array.isArray(value)
+        ? (value as Partial<SeriesPublishProfileSnapshot>)
+        : undefined
+    if (!rawSnapshot && !fallback?.profile && !fallback?.variant) {
+      return undefined
+    }
+
+    const rawVideoProfiles = Array.isArray(rawSnapshot?.videoProfiles)
+      ? rawSnapshot.videoProfiles.filter((profile): profile is SeriesVariantVideoProfile => isSeriesVariantVideoProfile(profile))
+      : []
+    const rawSubtitleProfiles = Array.isArray(rawSnapshot?.subtitleProfiles)
+      ? rawSnapshot.subtitleProfiles.filter(
+          (profile): profile is SeriesVariantSubtitleProfile => isSeriesVariantSubtitleProfile(profile),
+        )
+      : []
+    const hasRawTargetSites = Array.isArray(rawSnapshot?.targetSites)
+    const fallbackTargetSites = hasRawTargetSites
+      ? normalizeSiteIds(rawSnapshot?.targetSites)
+      : fallback?.variant?.targetSites?.length
+        ? fallback.variant.targetSites
+        : normalizeSiteIds(fallback?.profile?.targetSites)
+    const variantName =
+      normalizeOptionalString(fallback?.variant?.publishProfileName) ??
+      normalizeOptionalString(fallback?.variant?.name)
+    const normalizedSiteDrafts = normalizeSiteDrafts(rawSnapshot?.siteDrafts, {
+      targetSites: fallbackTargetSites,
+      summaryTemplate:
+        rawSnapshot && 'summaryTemplate' in rawSnapshot
+          ? normalizeSummaryTemplate(rawSnapshot.summaryTemplate)
+          : fallback?.profile?.summaryTemplate,
+    })
+    const snapshot = buildPublishProfileSnapshot({
+      name: normalizeOptionalString(rawSnapshot?.name),
+      profile: fallback?.profile,
+      variantName,
+      videoProfiles: rawVideoProfiles.length
+        ? rawVideoProfiles
+        : fallback?.variant?.videoProfile
+          ? [fallback.variant.videoProfile]
+          : fallback?.profile
+            ? (fallback.profile.videoProfiles as SeriesVariantVideoProfile[])
+            : undefined,
+      subtitleProfiles: rawSubtitleProfiles.length
+        ? rawSubtitleProfiles
+        : fallback?.variant?.subtitleProfile
+          ? [fallback.variant.subtitleProfile]
+          : fallback?.profile
+            ? (fallback.profile.subtitleProfiles as SeriesVariantSubtitleProfile[])
+            : undefined,
+      targetSites: [...new Set([...fallbackTargetSites, ...getEnabledSiteIdsFromSiteDrafts(normalizedSiteDrafts)])],
+      titleTemplate:
+        rawSnapshot && 'titleTemplate' in rawSnapshot ? normalizeTitleTemplate(rawSnapshot.titleTemplate) : undefined,
+      summaryTemplate:
+        rawSnapshot && 'summaryTemplate' in rawSnapshot
+          ? normalizeSummaryTemplate(rawSnapshot.summaryTemplate)
+          : undefined,
+      siteDrafts: normalizedSiteDrafts,
+      siteFieldDefaults: normalizeSiteFieldDefaults(rawSnapshot?.siteFieldDefaults),
+    })
+
+    if (rawSnapshot && 'titleTemplate' in rawSnapshot && !normalizeTitleTemplate(rawSnapshot.titleTemplate)) {
+      snapshot.titleTemplate = undefined
+    }
+    if (rawSnapshot && 'summaryTemplate' in rawSnapshot && !normalizeSummaryTemplate(rawSnapshot.summaryTemplate)) {
+      snapshot.summaryTemplate = undefined
+    }
+
+    return snapshot
+  }
+
+  function clonePublishProfileSnapshot(snapshot?: SeriesPublishProfileSnapshot) {
+    return normalizePublishProfileSnapshot(snapshot)
+  }
+
+  function normalizePublishProfiles(profiles: SeriesPublishProfile[]) {
+    if (!profiles.length) {
+      return []
+    }
+
+    const hasDefaultProfile = profiles.some(profile => profile.isDefault)
+    return profiles.map((profile, index) => ({
+      ...profile,
+      isDefault: hasDefaultProfile ? Boolean(profile.isDefault) : index === 0,
+    }))
+  }
+
+  function resolveDefaultPublishProfileId(profiles: SeriesPublishProfile[], preferredId?: number) {
+    if (!profiles.length) {
+      return undefined
+    }
+
+    if (preferredId && profiles.some(profile => profile.id === preferredId)) {
+      return preferredId
+    }
+
+    const defaultProfile = profiles.find(profile => profile.isDefault)
+    return defaultProfile?.id ?? profiles[0]?.id
+  }
+
+  function getVariantTargetSitesFromConfig(config: Config.PublishConfig) {
+    const content = config.content as Partial<Config.Content_episode>
+    return normalizeSiteIds(config.targetSites ?? content.targetSites)
+  }
+
+  function buildVariantSummaryFromConfig(config: Config.PublishConfig) {
+    return {
+      title: normalizeOptionalString(config.title),
+      targetSites: getVariantTargetSitesFromConfig(config),
+    }
+  }
+
+  function readVariantConfigSummary(projectPath: string, episode: SeriesProjectEpisode, variant: SeriesProjectVariant) {
+    const variantConfigPath = getVariantConfigPath(projectPath, episode, variant)
+    if (!fs.existsSync(variantConfigPath)) {
+      return {
+        title: normalizeOptionalString(variant.title),
+        targetSites: normalizeSiteIds(variant.targetSites),
+      }
+    }
+
+    try {
+      const config = JSON.parse(fs.readFileSync(variantConfigPath, { encoding: 'utf-8' })) as Config.PublishConfig
+      return buildVariantSummaryFromConfig(config)
+    } catch {
+      return {
+        title: normalizeOptionalString(variant.title),
+        targetSites: normalizeSiteIds(variant.targetSites),
+      }
+    }
+  }
+
+  function applyVariantSummary(
+    variant: SeriesProjectVariant,
+    summary: {
+      title?: string
+      targetSites?: SiteId[]
+    },
+  ) {
+    return {
+      ...variant,
+      title: summary.title ?? normalizeOptionalString(variant.title),
+      targetSites: summary.targetSites?.length ? [...summary.targetSites] : normalizeSiteIds(variant.targetSites),
+    }
+  }
+
+  function getVariantTemplateIdentity(
+    videoProfiles: SeriesVariantTemplateVideoProfile[],
+    subtitleProfiles: SeriesVariantTemplateSubtitleProfile[],
+    targetSites: SiteId[] = [],
+    titleTemplate?: string,
+    summaryTemplate?: string,
+    siteDrafts?: string,
+    siteFieldDefaults?: string,
+  ) {
+    return [
+      normalizeTemplateVideoProfiles(videoProfiles).join(','),
+      normalizeTemplateSubtitleProfiles(subtitleProfiles).join(','),
+      [...targetSites].sort().join(','),
+      titleTemplate?.trim() ?? '',
+      summaryTemplate?.trim() ?? '',
+      siteDrafts ?? '',
+      siteFieldDefaults ?? '',
+    ].join('|')
+  }
+
+  function buildSeriesLabelFromContent(content: Partial<Config.Content_episode>) {
+    const titles = [content.seriesTitleCN, content.seriesTitleEN, content.seriesTitleJP]
+      .map(value => value?.trim() ?? '')
+      .filter(Boolean)
+    const dedupedTitles = [...new Set(titles)]
+    const seasonLabel = content.seasonLabel?.trim()
+
+    return seasonLabel ? [...dedupedTitles, seasonLabel].join(' / ') : dedupedTitles.join(' / ')
+  }
+
+  function buildTechLabelFromContent(content: Partial<Config.Content_episode>) {
+    return [content.sourceType, content.resolution, content.videoCodec, content.audioCodec]
+      .map(value => value?.trim() ?? '')
+      .filter(Boolean)
+      .join(' ')
+  }
+
+  function getSubtitleTemplateLabel(profile?: SeriesVariantSubtitleProfile) {
+    if (!profile) {
+      return ''
+    }
+
+    const subtitleLabelMap: Record<SeriesVariantSubtitleProfile, string> = {
+      chs: 'CHS',
+      cht: 'CHT',
+      eng: 'ENG',
+      bilingual: 'bilingual',
+      custom: 'custom',
+    }
+
+    return subtitleLabelMap[profile]
+  }
+
+  function buildSeriesVariantTemplateVariables(config: Config.PublishConfig, variant: SeriesProjectVariant) {
+    const content = config.content as Partial<Config.Content_episode>
+    return {
+      title: config.title?.trim() ?? '',
+      summary: content.summary?.trim() ?? '',
+      releaseTeam: content.releaseTeam?.trim() ?? '',
+      seriesTitleCN: content.seriesTitleCN?.trim() ?? '',
+      seriesTitleEN: content.seriesTitleEN?.trim() ?? '',
+      seriesTitleJP: content.seriesTitleJP?.trim() ?? '',
+      seasonLabel: content.seasonLabel?.trim() ?? '',
+      episodeLabel: content.episodeLabel?.trim() ?? '',
+      episodeTitle: content.episodeTitle?.trim() ?? '',
+      sourceType: content.sourceType?.trim() ?? '',
+      resolution: content.resolution?.trim() ?? '',
+      videoCodec: content.videoCodec?.trim() ?? '',
+      audioCodec: content.audioCodec?.trim() ?? '',
+      seriesLabel: buildSeriesLabelFromContent(content),
+      techLabel: buildTechLabelFromContent(content),
+      variantName: variant.name,
+      videoProfile: variant.videoProfile ?? '',
+      subtitleProfile: variant.subtitleProfile ?? '',
+      subtitleProfileLabel: getSubtitleTemplateLabel(variant.subtitleProfile),
+    }
+  }
+
+  function renderSeriesVariantTemplate(
+    template: string,
+    variables: Record<string, string>,
+    options?: {
+      collapseWhitespace?: boolean
+    },
+  ) {
+    const rendered = template
+      .replace(/\{\{\s*(\w+)\s*\}\}/g, (_match, token: string) => variables[token] ?? '')
+      .replace(/\{(\w+)\}/g, (_match, token: string) => variables[token] ?? '')
+      .trim()
+
+    if (!options?.collapseWhitespace) {
+      return rendered
+    }
+
+    return rendered.replace(/\s+/g, ' ').trim()
+  }
+
+  function buildVariantConfigFromDraft(
+    projectPath: string,
+    variant: SeriesProjectVariant,
+    options?: {
+      targetSites?: SiteId[]
+      titleTemplate?: string
+      summaryTemplate?: string
+      siteDrafts?: SeriesPublishProfileSiteDrafts
+      siteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
+    },
+  ) {
+    const config = JSON.parse(fs.readFileSync(getDraftConfigPath(projectPath), { encoding: 'utf-8' })) as Config.PublishConfig
+    const targetSites = normalizeSiteIds(options?.targetSites)
+    const titleTemplate = normalizeTitleTemplate(options?.titleTemplate)
+    const siteDrafts = normalizeSiteDrafts(options?.siteDrafts, {
+      targetSites,
+      summaryTemplate: options?.summaryTemplate,
+    })
+    const summaryTemplate = resolvePrimarySiteDraftSummaryTemplate(siteDrafts, targetSites, options?.summaryTemplate)
+    const siteFieldDefaults = normalizeSiteFieldDefaults(options?.siteFieldDefaults)
+
+    if (targetSites.length > 0) {
+      config.targetSites = [...targetSites]
+      if ('targetSites' in config.content) {
+        config.content.targetSites = [...targetSites]
+      }
+    }
+
+    if (titleTemplate) {
+      const renderedTitle = renderSeriesVariantTemplate(
+        titleTemplate,
+        buildSeriesVariantTemplateVariables(config, variant),
+        { collapseWhitespace: true },
+      )
+      if (renderedTitle) {
+        config.title = renderedTitle
+      }
+    }
+
+    if (summaryTemplate && 'summary' in config.content) {
+      const renderedSummary = renderSeriesVariantTemplate(
+        summaryTemplate,
+        buildSeriesVariantTemplateVariables(config, variant),
+      )
+      if (renderedSummary) {
+        config.content.summary = renderedSummary
+      }
+    }
+
+    const bangumiCategory = normalizeOptionalString(siteFieldDefaults?.bangumi?.category_bangumi)
+    if (bangumiCategory) {
+      config.category_bangumi = bangumiCategory
+    }
+
+    const nyaaCategory = normalizeOptionalString(siteFieldDefaults?.nyaa?.category_nyaa)
+    if (nyaaCategory) {
+      config.category_nyaa = nyaaCategory
+    }
+
+    return config
+  }
+
+  function writeVariantConfigFromDraft(
+    projectPath: string,
+    episode: SeriesProjectEpisode,
+    variant: SeriesProjectVariant,
+    options?: {
+      targetSites?: SiteId[]
+      titleTemplate?: string
+      summaryTemplate?: string
+      siteDrafts?: SeriesPublishProfileSiteDrafts
+      siteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
+    },
+  ) {
+    const variantConfigPath = getVariantConfigPath(projectPath, episode, variant)
+    fs.mkdirSync(join(variantConfigPath, '..'), { recursive: true })
+    const config = buildVariantConfigFromDraft(projectPath, variant, options)
+    fs.writeFileSync(variantConfigPath, JSON.stringify(config))
+    return config
   }
 
   function getVariantPresetName(
@@ -203,6 +990,63 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     }
 
     return getVariantPresetName(videoProfile, subtitleProfile)
+  }
+
+  function hasVariantConflict(
+    episode: SeriesProjectEpisode,
+    name: string,
+    videoProfile?: SeriesVariantVideoProfile,
+    subtitleProfile?: SeriesVariantSubtitleProfile,
+  ) {
+    const nextVariantIdentity = getVariantIdentity({ name, videoProfile, subtitleProfile })
+    return episode.variants.some(variant => {
+      const hasSameName = normalizeVariantName(variant.name) === normalizeVariantName(name)
+      const hasSameIdentity =
+        getVariantIdentity({
+          name: variant.name,
+          videoProfile: variant.videoProfile,
+          subtitleProfile: variant.subtitleProfile,
+        }) === nextVariantIdentity
+      return hasSameName || hasSameIdentity
+    })
+  }
+
+  function buildSeriesVariant(
+    episode: SeriesProjectEpisode,
+    input: {
+      id: number
+      name: string
+      videoProfile?: SeriesVariantVideoProfile
+      subtitleProfile?: SeriesVariantSubtitleProfile
+      publishProfileId?: number
+      publishProfileName?: string
+      publishProfileSnapshot?: SeriesPublishProfileSnapshot
+      targetSites?: SiteId[]
+      title?: string
+      createdAt: string
+      existingDirectoryNames?: string[]
+    },
+  ): SeriesProjectVariant {
+    const existingDirectoryNames = input.existingDirectoryNames ?? episode.variants.map(item => item.directoryName)
+    const directoryName = resolveVariantDirectoryName(input.name, existingDirectoryNames)
+    if (input.existingDirectoryNames) {
+      input.existingDirectoryNames.push(directoryName)
+    }
+
+    return {
+      id: input.id,
+      name: input.name,
+      directoryName,
+      videoProfile: input.videoProfile,
+      subtitleProfile: input.subtitleProfile,
+      publishProfileId: input.publishProfileId,
+      publishProfileName: normalizeOptionalString(input.publishProfileName),
+      publishProfileSnapshot: clonePublishProfileSnapshot(input.publishProfileSnapshot),
+      targetSites: normalizeSiteIds(input.targetSites),
+      title: normalizeOptionalString(input.title),
+      createdAt: input.createdAt,
+      updatedAt: input.createdAt,
+    }
   }
 
   function copyVariantConfig(sourcePath: string, targetPath: string) {
@@ -288,16 +1132,31 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     fs.mkdirSync(variantDirectoryPath, { recursive: true })
     fs.copyFileSync(getDraftConfigPath(projectPath), getVariantConfigPath(projectPath, episode, variant))
 
-    const nextVariant: SeriesProjectVariant = {
-      ...variant,
-      updatedAt,
-    }
+    const nextVariant = applyVariantSummary(
+      {
+        ...variant,
+        updatedAt,
+      },
+      readVariantConfigSummary(projectPath, episode, variant),
+    )
     const nextEpisode = replaceVariant(episode, nextVariant, updatedAt)
     writeEpisodeRecord(projectPath, nextEpisode)
 
     return {
       ...replaceEpisode(workspace, nextEpisode),
       updatedAt,
+    }
+  }
+
+  function readDraftConfigSummary(projectPath: string) {
+    try {
+      const config = JSON.parse(fs.readFileSync(getDraftConfigPath(projectPath), { encoding: 'utf-8' })) as Config.PublishConfig
+      return buildVariantSummaryFromConfig(config)
+    } catch {
+      return {
+        title: undefined,
+        targetSites: [],
+      }
     }
   }
 
@@ -309,6 +1168,14 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     }
 
     return sortedEpisodes[episodeIndex - 1] ?? null
+  }
+
+  function findPublishProfile(workspace: SeriesProjectWorkspace, profileId?: number) {
+    if (typeof profileId !== 'number') {
+      return null
+    }
+
+    return workspace.publishProfiles.find(profile => profile.id === profileId) ?? null
   }
 
   function buildInitialContent(projectMode: ProjectMode, sourceKind?: ProjectSourceKind) {
@@ -546,7 +1413,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       writeSeriesWorkspace(task.path, nextWorkspace)
 
       notifyProjectDataChanged()
-      return JSON.stringify(ok({ episode, workspace: nextWorkspace }))
+      return JSON.stringify(ok({ episode, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
     } catch (err) {
       dialog.showErrorBox('闂佹寧鐟ㄩ?', (err as Error).message)
       return JSON.stringify(fail('SERIES_EPISODE_CREATE_FAILED', 'Unable to create series episode', (err as Error).message))
@@ -559,6 +1426,9 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const { projectId, episodeId } = input
       const videoProfile = isSeriesVariantVideoProfile(input.videoProfile) ? input.videoProfile : undefined
       const subtitleProfile = isSeriesVariantSubtitleProfile(input.subtitleProfile) ? input.subtitleProfile : undefined
+      const targetSites = normalizeSiteIds(input.targetSites)
+      const titleTemplate = normalizeTitleTemplate(input.titleTemplate)
+      const summaryTemplate = normalizeSummaryTemplate(input.summaryTemplate)
       const name = resolveVariantName({
         name: input.name,
         videoProfile,
@@ -585,37 +1455,45 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `Episode ${episodeId} does not exist`))
       }
 
-      const nextVariantIdentity = getVariantIdentity({ name, videoProfile, subtitleProfile })
-      if (
-        episode.variants.some(variant => {
-          const hasSameName = normalizeVariantName(variant.name) === normalizeVariantName(name)
-          const hasSameIdentity =
-            getVariantIdentity({
-              name: variant.name,
-              videoProfile: variant.videoProfile,
-              subtitleProfile: variant.subtitleProfile,
-            }) === nextVariantIdentity
-          return hasSameName || hasSameIdentity
-        })
-      ) {
+      const publishProfile = findPublishProfile(workspace, input.publishProfileId)
+
+      if (hasVariantConflict(episode, name, videoProfile, subtitleProfile)) {
         return JSON.stringify(fail('SERIES_VARIANT_DUPLICATED', `Variant ${name} already exists`))
       }
 
       const timestamp = new Date().toISOString()
-      const variant: SeriesProjectVariant = {
+      let variant = buildSeriesVariant(episode, {
         id: Date.now(),
         name,
-        directoryName: resolveVariantDirectoryName(
-          name,
-          episode.variants.map(item => item.directoryName),
-        ),
         videoProfile,
         subtitleProfile,
+        publishProfileId: publishProfile?.id,
+        publishProfileName: publishProfile?.name,
         createdAt: timestamp,
-        updatedAt: timestamp,
-      }
+      })
 
-      copyVariantConfig(getDraftConfigPath(task.path), getVariantConfigPath(task.path, episode, variant))
+      const config = writeVariantConfigFromDraft(task.path, episode, variant, {
+        targetSites,
+        titleTemplate,
+        summaryTemplate,
+        siteDrafts: publishProfile?.siteDrafts,
+        siteFieldDefaults: publishProfile?.siteFieldDefaults,
+      })
+      const variantSummary = buildVariantSummaryFromConfig(config)
+      variant = {
+        ...applyVariantSummary(variant, variantSummary),
+        publishProfileSnapshot: buildPublishProfileSnapshot({
+          profile: publishProfile,
+          variantName: name,
+          videoProfiles: publishProfile ? undefined : videoProfile ? [videoProfile] : undefined,
+          subtitleProfiles: publishProfile ? undefined : subtitleProfile ? [subtitleProfile] : undefined,
+          targetSites: variantSummary.targetSites,
+          titleTemplate,
+          summaryTemplate,
+          siteDrafts: publishProfile?.siteDrafts,
+          siteFieldDefaults: publishProfile?.siteFieldDefaults,
+        }),
+      }
 
       const nextEpisode: SeriesProjectEpisode = {
         ...episode,
@@ -628,18 +1506,337 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const nextWorkspace: SeriesProjectWorkspace = {
         ...replaceEpisode(workspace, nextEpisode),
         activeEpisodeId: workspace.activeEpisodeId ?? nextEpisode.id,
-        activeVariantId: workspace.activeVariantId ?? variant.id,
+        activeVariantId: workspace.activeVariantId,
         updatedAt: timestamp,
       }
       writeSeriesWorkspace(task.path, nextWorkspace)
 
       notifyProjectDataChanged()
-      return JSON.stringify(ok({ episode: nextEpisode, variant, workspace: nextWorkspace }))
+      return JSON.stringify(ok({ episode: nextEpisode, variant, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
     } catch (err) {
       dialog.showErrorBox('闂備焦瀵ч悷銊╊敋?', (err as Error).message)
       return JSON.stringify(fail('SERIES_VARIANT_CREATE_FAILED', 'Unable to create series variant', (err as Error).message))
     }
   }
+
+  async function batchCreateSeriesVariants(msg: string) {
+    try {
+      const input: BatchCreateSeriesVariantsInput = JSON.parse(msg)
+      const { projectId, episodeId } = input
+      const videoProfiles = Array.isArray(input.videoProfiles)
+        ? input.videoProfiles.filter(profile => isSeriesVariantTemplateVideoProfile(profile))
+        : []
+      const subtitleProfiles = Array.isArray(input.subtitleProfiles)
+        ? input.subtitleProfiles.filter(profile => isSeriesVariantTemplateSubtitleProfile(profile))
+        : []
+      const targetSites = normalizeSiteIds(input.targetSites)
+      const titleTemplate = normalizeTitleTemplate(input.titleTemplate)
+      const summaryTemplate = normalizeSummaryTemplate(input.summaryTemplate)
+
+      if (!videoProfiles.length || !subtitleProfiles.length) {
+        return JSON.stringify(
+          fail('SERIES_VARIANT_BATCH_PRESET_REQUIRED', 'At least one video profile and subtitle profile are required'),
+        )
+      }
+
+      const task = projectStore.findLegacyTaskById(projectId)
+      if (!task) {
+        return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${projectId} does not exist`))
+      }
+
+      const project = projectStore.getProjectById(projectId)
+      if (!project || project.projectMode !== 'episode') {
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `Project ${projectId} is not in series mode`))
+      }
+
+      const workspace = readSeriesWorkspace(project.id, task.path)
+      const episode = workspace.episodes.find(item => item.id === episodeId)
+      if (!episode) {
+        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `Episode ${episodeId} does not exist`))
+      }
+      const publishProfile = findPublishProfile(workspace, input.publishProfileId)
+
+      const timestamp = new Date().toISOString()
+      const baseId = Date.now()
+      const existingDirectoryNames = episode.variants.map(item => item.directoryName)
+      const nextVariants: SeriesProjectVariant[] = []
+      let skippedCount = 0
+
+      videoProfiles.forEach(videoProfile => {
+        subtitleProfiles.forEach(subtitleProfile => {
+          const name = resolveVariantName({ videoProfile, subtitleProfile })
+          const nextEpisodeState: SeriesProjectEpisode = {
+            ...episode,
+            variants: [...episode.variants, ...nextVariants],
+          }
+          if (!name || hasVariantConflict(nextEpisodeState, name, videoProfile, subtitleProfile)) {
+            skippedCount += 1
+            return
+          }
+
+          nextVariants.push(
+            buildSeriesVariant(episode, {
+              id: baseId + nextVariants.length,
+              name,
+              videoProfile,
+              subtitleProfile,
+              publishProfileId: publishProfile?.id,
+              publishProfileName: publishProfile?.name,
+              createdAt: timestamp,
+              existingDirectoryNames,
+            }),
+          )
+        })
+      })
+
+      if (!nextVariants.length) {
+        return JSON.stringify(
+          fail(
+            'SERIES_VARIANT_BATCH_EMPTY',
+            `Episode ${episode.episodeLabel} already contains all selected preset variants`,
+          ),
+        )
+      }
+
+      const nextVariantsWithSummary = nextVariants.map(variant => {
+        const config = writeVariantConfigFromDraft(task.path, episode, variant, {
+          targetSites,
+          titleTemplate,
+          summaryTemplate,
+          siteDrafts: publishProfile?.siteDrafts,
+          siteFieldDefaults: publishProfile?.siteFieldDefaults,
+        })
+        const variantSummary = buildVariantSummaryFromConfig(config)
+        return {
+          ...applyVariantSummary(variant, variantSummary),
+          publishProfileSnapshot: buildPublishProfileSnapshot({
+            profile: publishProfile,
+            variantName: variant.name,
+            videoProfiles: publishProfile ? undefined : videoProfiles,
+            subtitleProfiles: publishProfile ? undefined : subtitleProfiles,
+            targetSites: variantSummary.targetSites,
+            titleTemplate,
+            summaryTemplate,
+            siteDrafts: publishProfile?.siteDrafts,
+            siteFieldDefaults: publishProfile?.siteFieldDefaults,
+          }),
+        }
+      })
+
+      const nextEpisode: SeriesProjectEpisode = {
+        ...episode,
+        variants: [...episode.variants, ...nextVariantsWithSummary],
+        variantCount: episode.variants.length + nextVariantsWithSummary.length,
+        updatedAt: timestamp,
+      }
+      writeEpisodeRecord(task.path, nextEpisode)
+
+      const nextWorkspace: SeriesProjectWorkspace = {
+        ...replaceEpisode(workspace, nextEpisode),
+        activeEpisodeId: workspace.activeEpisodeId ?? nextEpisode.id,
+        activeVariantId: workspace.activeVariantId,
+        updatedAt: timestamp,
+      }
+      writeSeriesWorkspace(task.path, nextWorkspace)
+
+      notifyProjectDataChanged()
+      return JSON.stringify(
+        ok({
+          episode: nextEpisode,
+          workspace: hydrateSeriesWorkspace(task.path, nextWorkspace),
+          createdCount: nextVariantsWithSummary.length,
+          skippedCount,
+        }),
+      )
+    } catch (err) {
+      dialog.showErrorBox('闂傚倷鐒︾€笛囨偡閵娾晩鏁?', (err as Error).message)
+      return JSON.stringify(
+        fail('SERIES_VARIANT_BATCH_FAILED', 'Unable to batch create series variants', (err as Error).message),
+      )
+    }
+  }
+
+  async function saveSeriesPublishProfile(msg: string) {
+    try {
+      const input: SaveSeriesPublishProfileInput = JSON.parse(msg)
+      const { projectId } = input
+      const name = input.name.trim()
+      const videoProfiles = Array.isArray(input.videoProfiles)
+        ? normalizeTemplateVideoProfiles(input.videoProfiles.filter(isSeriesVariantTemplateVideoProfile))
+        : []
+      const subtitleProfiles = Array.isArray(input.subtitleProfiles)
+        ? normalizeTemplateSubtitleProfiles(input.subtitleProfiles.filter(isSeriesVariantTemplateSubtitleProfile))
+        : []
+      const requestedTargetSites = normalizeSiteIds(input.targetSites)
+      const titleTemplate = normalizeTitleTemplate(input.titleTemplate)
+      const siteDrafts = normalizeSiteDrafts(input.siteDrafts, {
+        targetSites: requestedTargetSites,
+        summaryTemplate: normalizeSummaryTemplate(input.summaryTemplate),
+      })
+      const targetSites = normalizeSiteIds([...requestedTargetSites, ...getEnabledSiteIdsFromSiteDrafts(siteDrafts)])
+      const summaryTemplate = resolvePrimarySiteDraftSummaryTemplate(siteDrafts, targetSites, input.summaryTemplate)
+      const siteFieldDefaults = normalizeSiteFieldDefaults(input.siteFieldDefaults)
+      const profileId = typeof input.profileId === 'number' ? input.profileId : undefined
+      const requestedDefault = Boolean(input.isDefault)
+
+      if (!name) {
+        return JSON.stringify(fail('SERIES_PUBLISH_PROFILE_NAME_REQUIRED', 'Publish profile name is required'))
+      }
+
+      if (!videoProfiles.length || !subtitleProfiles.length) {
+        return JSON.stringify(
+          fail(
+            'SERIES_PUBLISH_PROFILE_PRESET_REQUIRED',
+            'Publish profile must contain at least one video profile and subtitle profile',
+          ),
+        )
+      }
+
+      const task = projectStore.findLegacyTaskById(projectId)
+      if (!task) {
+        return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${projectId} does not exist`))
+      }
+
+      const project = projectStore.getProjectById(projectId)
+      if (!project || project.projectMode !== 'episode') {
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `Project ${projectId} is not in series mode`))
+      }
+
+      const workspace = readSeriesWorkspace(project.id, task.path)
+      const templateIdentity = getVariantTemplateIdentity(
+        videoProfiles,
+        subtitleProfiles,
+        targetSites,
+        titleTemplate,
+        summaryTemplate,
+        JSON.stringify(normalizeSiteDrafts(siteDrafts) ?? {}),
+        JSON.stringify(siteFieldDefaults ?? {}),
+      )
+      if (
+        workspace.publishProfiles.some(profile => {
+          if (profile.id === profileId) {
+            return false
+          }
+
+          const hasSameName = normalizeVariantName(profile.name) === normalizeVariantName(name)
+          const hasSameIdentity =
+            getVariantTemplateIdentity(
+              profile.videoProfiles,
+              profile.subtitleProfiles,
+              profile.targetSites,
+              profile.titleTemplate,
+              profile.summaryTemplate,
+              JSON.stringify(normalizeSiteDrafts(profile.siteDrafts, {
+                targetSites: profile.targetSites,
+                summaryTemplate: profile.summaryTemplate,
+              }) ?? {}),
+              JSON.stringify(normalizeSiteFieldDefaults(profile.siteFieldDefaults) ?? {}),
+            ) === templateIdentity
+          return hasSameName || hasSameIdentity
+        })
+      ) {
+        return JSON.stringify(
+          fail('SERIES_PUBLISH_PROFILE_DUPLICATED', `Publish profile ${name} already exists in this project`),
+        )
+      }
+
+      const timestamp = new Date().toISOString()
+      const profile: SeriesPublishProfile = {
+        id: profileId ?? Date.now(),
+        name,
+        isDefault: requestedDefault,
+        videoProfiles,
+        subtitleProfiles,
+        targetSites: targetSites.length ? targetSites : undefined,
+        titleTemplate,
+        summaryTemplate,
+        siteDrafts,
+        siteFieldDefaults,
+        createdAt: workspace.publishProfiles.find(item => item.id === profileId)?.createdAt ?? timestamp,
+        updatedAt: timestamp,
+      }
+
+      const mergedProfiles = profileId
+        ? workspace.publishProfiles.map(item => (item.id === profile.id ? profile : item))
+        : [...workspace.publishProfiles, profile]
+      const defaultProfileId = resolveDefaultPublishProfileId(
+        mergedProfiles,
+        requestedDefault ? profile.id : workspace.publishProfiles.find(item => item.isDefault)?.id,
+      )
+      const nextProfiles = normalizePublishProfiles(
+        mergedProfiles.map(item => ({
+          ...item,
+          isDefault: item.id === defaultProfileId,
+        })),
+      )
+      const nextWorkspace: SeriesProjectWorkspace = {
+        ...workspace,
+        publishProfiles: nextProfiles,
+        variantTemplates: nextProfiles,
+        updatedAt: timestamp,
+      }
+      writeSeriesWorkspace(task.path, nextWorkspace)
+
+      notifyProjectDataChanged()
+      return JSON.stringify(
+        ok({
+          profile: nextProfiles.find(item => item.id === profile.id) ?? profile,
+          workspace: hydrateSeriesWorkspace(task.path, nextWorkspace),
+        }),
+      )
+    } catch (err) {
+      dialog.showErrorBox('闂傚倷鐒︾€笛囨偡閵娾晩鏁?', (err as Error).message)
+      return JSON.stringify(
+        fail('SERIES_PUBLISH_PROFILE_SAVE_FAILED', 'Unable to save series publish profile', (err as Error).message),
+      )
+    }
+  }
+
+  async function removeSeriesPublishProfile(msg: string) {
+    try {
+      const input: RemoveSeriesPublishProfileInput = JSON.parse(msg)
+      const { projectId, profileId } = input
+      const task = projectStore.findLegacyTaskById(projectId)
+      if (!task) {
+        return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${projectId} does not exist`))
+      }
+
+      const project = projectStore.getProjectById(projectId)
+      if (!project || project.projectMode !== 'episode') {
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `Project ${projectId} is not in series mode`))
+      }
+
+      const workspace = readSeriesWorkspace(project.id, task.path)
+      if (!workspace.publishProfiles.some(profile => profile.id === profileId)) {
+        return JSON.stringify(fail('SERIES_PUBLISH_PROFILE_NOT_FOUND', `Publish profile ${profileId} does not exist`))
+      }
+
+      const timestamp = new Date().toISOString()
+      const nextProfiles = normalizePublishProfiles(workspace.publishProfiles.filter(profile => profile.id !== profileId))
+      const nextWorkspace: SeriesProjectWorkspace = {
+        ...workspace,
+        publishProfiles: nextProfiles,
+        variantTemplates: nextProfiles,
+        updatedAt: timestamp,
+      }
+      writeSeriesWorkspace(task.path, nextWorkspace)
+
+      notifyProjectDataChanged()
+      return JSON.stringify(ok({ profileId, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
+    } catch (err) {
+      dialog.showErrorBox('闂傚倷鐒︾€笛囨偡閵娾晩鏁?', (err as Error).message)
+      return JSON.stringify(
+        fail(
+          'SERIES_PUBLISH_PROFILE_REMOVE_FAILED',
+          'Unable to remove series publish profile',
+          (err as Error).message,
+        ),
+      )
+    }
+  }
+
+  const saveSeriesVariantTemplate = saveSeriesPublishProfile
+  const removeSeriesVariantTemplate = removeSeriesPublishProfile
 
   async function inheritSeriesEpisodeVariants(msg: string) {
     try {
@@ -713,6 +1910,11 @@ export function createProjectService(options: CreateProjectServiceOptions) {
           directoryName: resolveVariantDirectoryName(nextName, existingDirectoryNames),
           videoProfile: sourceVariant.videoProfile,
           subtitleProfile: sourceVariant.subtitleProfile,
+          publishProfileId: sourceVariant.publishProfileId,
+          publishProfileName: sourceVariant.publishProfileName,
+          publishProfileSnapshot: clonePublishProfileSnapshot(sourceVariant.publishProfileSnapshot),
+          targetSites: sourceVariant.targetSites,
+          title: sourceVariant.title,
           createdAt: timestamp,
           updatedAt: timestamp,
         }
@@ -751,13 +1953,13 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const nextWorkspace: SeriesProjectWorkspace = {
         ...replaceEpisode(workspace, nextEpisode),
         activeEpisodeId: workspace.activeEpisodeId ?? nextEpisode.id,
-        activeVariantId: workspace.activeVariantId ?? copiedVariants[0]?.id,
+        activeVariantId: workspace.activeVariantId,
         updatedAt: timestamp,
       }
       writeSeriesWorkspace(task.path, nextWorkspace)
 
       notifyProjectDataChanged()
-      return JSON.stringify(ok({ episode: nextEpisode, workspace: nextWorkspace, copiedCount: copiedVariants.length }))
+      return JSON.stringify(ok({ episode: nextEpisode, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace), copiedCount: copiedVariants.length }))
     } catch (err) {
       dialog.showErrorBox('闂傚倷鐒︾€笛囨偡閵娾晩鏁?', (err as Error).message)
       return JSON.stringify(
@@ -805,10 +2007,13 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       fs.copyFileSync(variantConfigPath, getDraftConfigPath(task.path))
 
       const timestamp = new Date().toISOString()
-      const nextVariant: SeriesProjectVariant = {
-        ...variant,
-        updatedAt: timestamp,
-      }
+      const nextVariant = applyVariantSummary(
+        {
+          ...variant,
+          updatedAt: timestamp,
+        },
+        readVariantConfigSummary(task.path, episode, variant),
+      )
       const nextEpisode = replaceVariant(episode, nextVariant, timestamp)
       writeEpisodeRecord(task.path, nextEpisode)
 
@@ -821,7 +2026,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       writeSeriesWorkspace(task.path, nextWorkspace)
 
       notifyProjectDataChanged()
-      return JSON.stringify(ok({ episode: nextEpisode, variant: nextVariant, workspace: nextWorkspace }))
+      return JSON.stringify(ok({ episode: nextEpisode, variant: nextVariant, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
     } catch (err) {
       dialog.showErrorBox('闂備焦瀵ч悷銊╊敋?', (err as Error).message)
       return JSON.stringify(
@@ -860,10 +2065,13 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       fs.copyFileSync(getDraftConfigPath(task.path), getVariantConfigPath(task.path, episode, variant))
 
       const timestamp = new Date().toISOString()
-      const nextVariant: SeriesProjectVariant = {
-        ...variant,
-        updatedAt: timestamp,
-      }
+      const nextVariant = applyVariantSummary(
+        {
+          ...variant,
+          updatedAt: timestamp,
+        },
+        readDraftConfigSummary(task.path),
+      )
       const nextEpisode = replaceVariant(episode, nextVariant, timestamp)
       writeEpisodeRecord(task.path, nextEpisode)
 
@@ -874,7 +2082,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       writeSeriesWorkspace(task.path, nextWorkspace)
 
       notifyProjectDataChanged()
-      return JSON.stringify(ok({ episode: nextEpisode, variant: nextVariant, workspace: nextWorkspace }))
+      return JSON.stringify(ok({ episode: nextEpisode, variant: nextVariant, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
     } catch (err) {
       dialog.showErrorBox('闂備焦瀵ч悷銊╊敋?', (err as Error).message)
       return JSON.stringify(
@@ -990,6 +2198,11 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     getSeriesWorkspace,
     createSeriesEpisode,
     createSeriesVariant,
+    batchCreateSeriesVariants,
+    saveSeriesPublishProfile,
+    removeSeriesPublishProfile,
+    saveSeriesVariantTemplate,
+    removeSeriesVariantTemplate,
     inheritSeriesEpisodeVariants,
     activateSeriesVariant,
     syncSeriesVariantFromDraft,

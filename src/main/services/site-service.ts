@@ -1,6 +1,6 @@
 import { fail, ok } from '../../shared/types/api'
 import type { PtSiteDraft } from '../../shared/types/pt-site'
-import type { SiteId } from '../../shared/types/site'
+import type { SiteCatalogEntry, SiteId } from '../../shared/types/site'
 import { createSiteRegistry } from '../sites/registry'
 import { createCredentialStore } from '../storage/credential-store'
 import { createProjectStore } from '../storage/project-store'
@@ -15,6 +15,41 @@ interface CreateSiteServiceOptions {
 export function createSiteService(options: CreateSiteServiceOptions) {
   const { siteRegistry, credentialStore, projectStore, notifyProjectDataChanged } = options
   const ptAdapters = new Set(['nexusphp', 'unit3d'])
+
+  function hasConfiguredCredentials(siteId: SiteId) {
+    try {
+      const credentials = credentialStore.getSiteCredentialRecord(siteId)
+      return Boolean(
+        credentials.apiToken?.trim() ||
+          credentials.username?.trim() ||
+          credentials.password?.trim() ||
+          credentials.cookies?.length,
+      )
+    } catch {
+      return false
+    }
+  }
+
+  function enrichSiteCatalogEntry(site: SiteCatalogEntry): SiteCatalogEntry {
+    if (!site.capabilitySet.publish.torrent) {
+      return site
+    }
+
+    try {
+      const account = credentialStore.getSiteAccount(site.id)
+      return {
+        ...site,
+        accountAuthMode: account.authMode,
+        accountStatus: account.healthStatus,
+        accountMessage: account.legacyStatus,
+        accountConfigured:
+          hasConfiguredCredentials(site.id) ||
+          ['authenticated', 'blocked', 'error', 'disabled'].includes(account.healthStatus),
+      }
+    } catch {
+      return site
+    }
+  }
 
   function getSiteContext(id: SiteId) {
     const profile = siteRegistry.getProfileById(id)
@@ -76,7 +111,7 @@ export function createSiteService(options: CreateSiteServiceOptions) {
 
   function listSites() {
     try {
-      return JSON.stringify(ok({ sites: siteRegistry.listCatalog() }))
+      return JSON.stringify(ok({ sites: siteRegistry.listCatalog().map(enrichSiteCatalogEntry) }))
     } catch (error) {
       return JSON.stringify(
         fail('SITE_LIST_FAILED', 'Unable to load site catalog', (error as Error).message),
@@ -91,7 +126,7 @@ export function createSiteService(options: CreateSiteServiceOptions) {
       if (!site) {
         return JSON.stringify(fail('SITE_NOT_FOUND', `Site ${id} does not exist`))
       }
-      return JSON.stringify(ok({ site }))
+      return JSON.stringify(ok({ site: enrichSiteCatalogEntry(site) }))
     } catch (error) {
       return JSON.stringify(fail('SITE_READ_FAILED', 'Unable to read site information', (error as Error).message))
     }

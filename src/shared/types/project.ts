@@ -46,6 +46,8 @@ export interface SeriesProjectEpisode {
 
 export type SeriesVariantVideoProfile = '1080p' | '2160p' | 'custom'
 export type SeriesVariantSubtitleProfile = 'chs' | 'cht' | 'eng' | 'bilingual' | 'custom'
+export type SeriesVariantTemplateVideoProfile = Exclude<SeriesVariantVideoProfile, 'custom'>
+export type SeriesVariantTemplateSubtitleProfile = Exclude<SeriesVariantSubtitleProfile, 'custom'>
 
 export interface SeriesProjectVariant {
   id: number
@@ -53,13 +55,63 @@ export interface SeriesProjectVariant {
   directoryName: string
   videoProfile?: SeriesVariantVideoProfile
   subtitleProfile?: SeriesVariantSubtitleProfile
+  publishProfileId?: number
+  publishProfileName?: string
+  publishProfileSnapshot?: SeriesPublishProfileSnapshot
+  targetSites?: SiteId[]
+  title?: string
   createdAt: string
   updatedAt: string
 }
 
+export type SeriesPublishProfileVideoProfile = SeriesVariantTemplateVideoProfile
+export type SeriesPublishProfileSubtitleProfile = SeriesVariantTemplateSubtitleProfile
+export type SeriesPublishProfileSiteFieldDefaults = Partial<Record<SiteId, Record<string, unknown>>>
+
+export interface SeriesPublishProfileSiteDraft {
+  enabled: boolean
+  useGlobalTitle?: boolean
+  titleTemplate?: string
+  summaryTemplate?: string
+  note?: string
+}
+
+export type SeriesPublishProfileSiteDrafts = Partial<Record<SiteId, SeriesPublishProfileSiteDraft>>
+
+export interface SeriesPublishProfile {
+  id: number
+  name: string
+  isDefault?: boolean
+  videoProfiles: SeriesPublishProfileVideoProfile[]
+  subtitleProfiles: SeriesPublishProfileSubtitleProfile[]
+  targetSites?: SiteId[]
+  titleTemplate?: string
+  summaryTemplate?: string
+  siteDrafts?: SeriesPublishProfileSiteDrafts
+  siteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SeriesPublishProfileSnapshot {
+  name: string
+  videoProfiles: SeriesVariantVideoProfile[]
+  subtitleProfiles: SeriesVariantSubtitleProfile[]
+  targetSites?: SiteId[]
+  titleTemplate?: string
+  summaryTemplate?: string
+  siteDrafts?: SeriesPublishProfileSiteDrafts
+  siteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
+}
+
+export type SeriesVariantTemplate = SeriesPublishProfile
+
 export interface SeriesProjectWorkspace {
   projectId: number
   episodes: SeriesProjectEpisode[]
+  publishProfiles: SeriesPublishProfile[]
+  variantTemplates?: SeriesVariantTemplate[]
+  projectSiteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
   activeEpisodeId?: number
   activeVariantId?: number
   createdAt: string
@@ -78,6 +130,10 @@ export interface CreateSeriesVariantInput {
   name?: string
   videoProfile?: SeriesVariantVideoProfile
   subtitleProfile?: SeriesVariantSubtitleProfile
+  publishProfileId?: number
+  targetSites?: SiteId[]
+  titleTemplate?: string
+  summaryTemplate?: string
 }
 
 export interface SeriesVariantDraftInput {
@@ -90,6 +146,39 @@ export interface InheritSeriesEpisodeVariantsInput {
   projectId: number
   episodeId: number
 }
+
+export interface BatchCreateSeriesVariantsInput {
+  projectId: number
+  episodeId: number
+  publishProfileId?: number
+  videoProfiles: SeriesVariantTemplateVideoProfile[]
+  subtitleProfiles: SeriesVariantTemplateSubtitleProfile[]
+  targetSites?: SiteId[]
+  titleTemplate?: string
+  summaryTemplate?: string
+}
+
+export interface SaveSeriesPublishProfileInput {
+  projectId: number
+  profileId?: number
+  name: string
+  isDefault?: boolean
+  videoProfiles: SeriesVariantTemplateVideoProfile[]
+  subtitleProfiles: SeriesVariantTemplateSubtitleProfile[]
+  targetSites?: SiteId[]
+  titleTemplate?: string
+  summaryTemplate?: string
+  siteDrafts?: SeriesPublishProfileSiteDrafts
+  siteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
+}
+
+export interface RemoveSeriesPublishProfileInput {
+  projectId: number
+  profileId: number
+}
+
+export type SaveSeriesVariantTemplateInput = SaveSeriesPublishProfileInput
+export type RemoveSeriesVariantTemplateInput = RemoveSeriesPublishProfileInput
 
 export interface ProjectStats {
   total: number
@@ -137,3 +226,23 @@ export interface SeriesEpisodeInheritancePayload {
   workspace: SeriesProjectWorkspace
   copiedCount: number
 }
+
+export interface SeriesEpisodeVariantBatchPayload {
+  episode: SeriesProjectEpisode
+  workspace: SeriesProjectWorkspace
+  createdCount: number
+  skippedCount: number
+}
+
+export interface SeriesPublishProfilePayload {
+  profile: SeriesPublishProfile
+  workspace: SeriesProjectWorkspace
+}
+
+export interface SeriesPublishProfileRemovalPayload {
+  profileId: number
+  workspace: SeriesProjectWorkspace
+}
+
+export type SeriesVariantTemplatePayload = SeriesPublishProfilePayload
+export type SeriesVariantTemplateRemovalPayload = SeriesPublishProfileRemovalPayload
