@@ -156,7 +156,7 @@
   - [x] 必填
   - [ ] 选填
   - [ ] 只读
-  - [ ] 来自项目默认值
+  - [x] 来自项目默认值
 - [x] 缺少必填默认字段时展示警示
 - [x] 允许暂存，但应用到当前集时需二次提示
 
@@ -195,13 +195,13 @@
 
 ### 5.1 当前集差异字段区
 
-- [ ] 新增独立卡片：`本集差异字段`
-- [ ] 第一轮建议至少包含：
-  - [ ] 集号
-  - [ ] 分集标题
-  - [ ] 资源路径 / 种子
-  - [ ] 当前集临时站点覆盖字段
-- [ ] 不重复展示项目级长期稳定配置
+- [x] 新增独立卡片：`本集差异字段`
+- [x] 第一轮建议至少包含：
+  - [x] 集号
+  - [x] 分集标题
+  - [x] 资源路径 / 种子
+  - [x] 当前集临时站点覆盖字段
+- [x] 不重复展示项目级长期稳定配置
 
 对应参考：
 
@@ -242,19 +242,19 @@
 
 ### 6.1 发布进度统计
 
-- [ ] 每个版本卡片显示：
-  - [ ] 已发布站点数
-  - [ ] 待补发站点数
-  - [ ] 失败站点数
-- [ ] 进度统计应优先基于：
-  - [ ] `variant.targetSites`
-  - [ ] 版本级发布结果
+- [x] 每个版本卡片显示：
+  - [x] 已发布站点数
+  - [x] 待补发站点数
+  - [x] 失败站点数
+- [x] 进度统计应优先基于：
+  - [x] `variant.targetSites`
+  - [x] 版本级发布结果
 
 ### 6.2 执行状态标签
 
-- [ ] 明确标出当前正在编辑的版本
-- [ ] 明确标出是否沿用了某个发布配置
-- [ ] 明确标出缺失站点或失败站点
+- [x] 明确标出当前正在编辑的版本
+- [x] 明确标出是否沿用了某个发布配置
+- [x] 明确标出缺失站点或失败站点
 
 ### 6.3 低频动作收口
 
@@ -294,9 +294,9 @@
 
 ### 7.2 站点字段 schema 驱动
 
-- [ ] 站点适配器输出字段 schema
-- [ ] 前端按 schema 渲染字段
-- [ ] 尽量不在 UI 层继续硬编码站点分支
+- [x] 站点适配器输出字段 schema
+- [x] 前端按 schema 渲染字段
+- [x] 尽量不在 UI 层继续硬编码站点分支
 
 对应参考：
 
@@ -332,9 +332,9 @@
 
 ### 8.2 编辑器下沉
 
-- [ ] 把 `EpisodeEdit.vue` 逐步明确成版本编辑器
+- [x] 把 `EpisodeEdit.vue` 逐步明确成版本编辑器
 - [ ] 项目级默认值、发布配置默认值、当前集差异值、当前版本覆盖值要真正分层
-- [ ] 编辑器内能看出当前值来源
+- [x] 编辑器内能看出当前值来源
 
 对应位置：
 
@@ -388,24 +388,26 @@
 - [x] `feat(series): add publishProfileSnapshot to variant model`
 - [x] `feat(series): persist publish profile snapshot on variant creation`
 - [x] `feat(series): preserve publish profile snapshot during inherit`
-- [ ] `refactor(series): normalize publish profile read/write paths`
+- [x] `refactor(series): normalize publish profile read/write paths`
 
 ### Task Group B：配置编辑区
 
 - [x] `feat(series-ui): split shared site draft into per-site cards`
 - [x] `feat(series-ui): render editable site default fields for enabled sites`
 - [x] `feat(series-ui): validate required site default fields before apply`
+- [x] `feat(series-ui): source site field schema from site catalog adapters`
+- [x] `feat(series-ui): surface project draft defaults as field source`
 
 ### Task Group C：执行区
 
-- [ ] `feat(series-ui): add episode difference card`
-- [ ] `feat(series-ui): show per-variant publish progress summary`
-- [ ] `feat(series-ui): support refill missing target sites by variant`
+- [x] `feat(series-ui): add episode difference card`
+- [x] `feat(series-ui): show per-variant publish progress summary`
+- [x] `feat(series-ui): support refill missing target sites by variant`
 
 ### Task Group D：编辑器下沉
 
-- [ ] `refactor(editor): clarify EpisodeEdit as variant editor`
-- [ ] `feat(editor): surface field source from project/profile/episode/variant`
+- [x] `refactor(editor): clarify EpisodeEdit as variant editor`
+- [x] `feat(editor): surface field source from project/profile/episode/variant`
 
 ---
 
@@ -423,7 +425,34 @@
 
 - [x] 发布配置快照
 - [x] 按站点配置站点稿模板
-- [ ] 按 schema 渲染站点默认字段
-- [ ] 当前集差异字段
-- [ ] 版本级发布进度统计
+- [x] 按 schema 渲染站点默认字段
+- [x] 当前集差异字段
+- [x] 版本级发布进度统计
 - [ ] 编辑器彻底下沉为版本编辑器
+
+---
+
+## 12. 未完成项梳理（2026-03-15）
+
+### 12.1 发布配置编辑区收尾
+
+- [ ] 继续把站点字段 schema 扩到真正的 `选填 / 只读` 字段，而不只是在 UI 上预留标签
+- [ ] 把 `nexusphp / unit3d` 等 PT 站点的字段 schema 下沉到 adapter 输出
+- [ ] 为字段区补上区块级错误和更明确的禁用原因提示
+
+### 12.2 当前集执行区
+
+- [x] 新增“本集差异字段”卡片，明确项目级 / 发布配置 / 本集差异的边界
+- [x] 在版本卡片里展示已发布 / 待补发 / 失败统计
+- [x] 支持按版本补发缺失目标站点
+
+### 12.3 编辑器下沉
+
+- [x] 继续弱化 `EpisodeEdit.vue` 的旧入口语义，明确当前是在编辑版本
+- [x] 在编辑器里标出字段值来源：项目默认值 / 发布配置 / 本集覆盖 / 当前版本覆盖
+- [ ] 把版本编辑器和工作台之间的职责边界继续收口
+
+### 12.4 数据层与读写路径
+
+- [x] 继续收口发布配置读写路径，减少 `publishProfiles / variantTemplates` 双轨兼容残留
+- [ ] 后续若把更多 PT 站点字段纳入发布配置，需要同步扩展版本创建时写回 `config.json` 的链路

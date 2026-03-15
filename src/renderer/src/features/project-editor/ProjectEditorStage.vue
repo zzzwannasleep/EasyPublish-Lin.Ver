@@ -55,6 +55,7 @@ const notes = computed(() => {
     :aside-eyebrow="t('stage.shared.asideEyebrow')"
     :aside-title="t('stage.shared.asideTitle')"
     :aside-description="isSeriesProject ? t('stage.editor.series.asideDescription') : t('stage.editor.asideDescription')"
+    :aside-placement="isSeriesProject ? 'top' : 'side'"
   >
     <SeriesProjectWorkspace v-if="project?.projectMode === 'episode'" :id="id" :project="project" />
     <Edit v-else-if="project" :id="id" :project="project" />

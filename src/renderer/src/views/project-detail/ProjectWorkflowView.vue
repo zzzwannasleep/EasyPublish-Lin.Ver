@@ -148,8 +148,10 @@ watch(
         }"
       >
         <div class="workflow-step__index">0{{ index + 1 }}</div>
-        <div class="workflow-step__title">{{ item.title }}</div>
-        <div class="workflow-step__text">{{ item.description }}</div>
+        <div class="workflow-step__body">
+          <div class="workflow-step__title">{{ item.title }}</div>
+          <div class="workflow-step__text">{{ item.description }}</div>
+        </div>
       </article>
     </section>
 
@@ -172,16 +174,21 @@ watch(
 }
 
 .workflow-rail {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  display: flex;
   gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
 }
 
 .workflow-step {
   position: relative;
-  overflow: hidden;
-  min-height: 132px;
-  padding: 16px 16px 18px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  min-width: 220px;
+  padding: 14px 16px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   background:
@@ -231,8 +238,12 @@ watch(
   text-transform: uppercase;
 }
 
+.workflow-step__body {
+  display: grid;
+  gap: 6px;
+}
+
 .workflow-step__title {
-  margin-top: 10px;
   font-family: var(--font-display);
   font-size: clamp(18px, 1.6vw, 20px);
   font-weight: 700;
@@ -240,7 +251,6 @@ watch(
 }
 
 .workflow-step__text {
-  margin-top: 8px;
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.55;
@@ -269,8 +279,8 @@ watch(
   }
 
   .workflow-step {
-    min-height: 0;
-    padding: 14px 14px 16px;
+    min-width: 200px;
+    padding: 13px 14px;
   }
 }
 </style>

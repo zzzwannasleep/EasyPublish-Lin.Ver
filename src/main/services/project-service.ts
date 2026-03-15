@@ -2,6 +2,7 @@ import { app, dialog } from 'electron'
 import fs from 'fs'
 import { join } from 'path'
 import { fail, ok } from '../../shared/types/api'
+import type { PublishResult, PublishState } from '../../shared/types/publish'
 import type {
   BatchCreateSeriesVariantsInput,
   CreateProjectInput,
@@ -41,8 +42,10 @@ interface CreateProjectServiceOptions {
 export function createProjectService(options: CreateProjectServiceOptions) {
   const { projectStore, notifyProjectDataChanged } = options
   const defaultEpisodeSites: SiteId[] = ['bangumi', 'mikan', 'miobt', 'nyaa']
+  const trackedLegacyTorrentSites = ['bangumi', 'mikan', 'miobt', 'nyaa', 'acgrip', 'dmhy', 'acgnx_a', 'acgnx_g'] as const
   const supportedVideoProfiles: SeriesVariantVideoProfile[] = ['1080p', '2160p', 'custom']
   const supportedSubtitleProfiles: SeriesVariantSubtitleProfile[] = ['chs', 'cht', 'eng', 'bilingual', 'custom']
+  const supportedPublishStates: PublishState[] = ['idle', 'pending', 'published', 'failed']
   const seriesWorkspaceFileName = 'series-workspace.json'
   const episodesDirectoryName = 'episodes'
   const variantsDirectoryName = 'variants'
@@ -57,11 +60,76 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       projectId,
       episodes: [],
       publishProfiles: [],
-      variantTemplates: [],
       activeEpisodeId: undefined,
       activeVariantId: undefined,
       createdAt: timestamp,
       updatedAt: timestamp,
+    }
+  }
+
+  function readWorkspacePublishProfiles(workspace: Partial<SeriesProjectWorkspace>) {
+    const rawPublishProfiles = Array.isArray(workspace.publishProfiles)
+      ? workspace.publishProfiles
+      : Array.isArray(workspace.variantTemplates)
+        ? workspace.variantTemplates
+        : []
+
+    return normalizePublishProfiles(
+      rawPublishProfiles
+        .filter((profile): profile is SeriesPublishProfile => {
+          return typeof profile === 'object' && profile !== null && typeof profile.id === 'number'
+        })
+        .map(profile => {
+          const titleTemplate = normalizeTitleTemplate(profile.titleTemplate)
+          const legacySummaryTemplate = normalizeSummaryTemplate(profile.summaryTemplate)
+          const siteDrafts = normalizeSiteDrafts(profile.siteDrafts, {
+            targetSites: normalizeSiteIds(profile.targetSites),
+            summaryTemplate: legacySummaryTemplate,
+          })
+          const targetSites = normalizeSiteIds([
+            ...normalizeSiteIds(profile.targetSites),
+            ...getEnabledSiteIdsFromSiteDrafts(siteDrafts),
+          ])
+          return {
+            id: profile.id,
+            name: profile.name ?? '',
+            isDefault: Boolean(profile.isDefault),
+            videoProfiles: Array.isArray(profile.videoProfiles)
+              ? profile.videoProfiles.filter(
+                  (item): item is SeriesVariantTemplateVideoProfile => isSeriesVariantTemplateVideoProfile(item),
+                )
+              : [],
+            subtitleProfiles: Array.isArray(profile.subtitleProfiles)
+              ? profile.subtitleProfiles.filter(
+                  (item): item is SeriesVariantTemplateSubtitleProfile =>
+                    isSeriesVariantTemplateSubtitleProfile(item),
+                )
+              : [],
+            targetSites,
+            titleTemplate,
+            summaryTemplate: resolvePrimarySiteDraftSummaryTemplate(siteDrafts, targetSites, legacySummaryTemplate),
+            siteDrafts,
+            siteFieldDefaults: normalizeSiteFieldDefaults(profile.siteFieldDefaults),
+            createdAt: profile.createdAt ?? new Date(profile.id).toISOString(),
+            updatedAt: profile.updatedAt ?? new Date(profile.id).toISOString(),
+          }
+        })
+        .filter(profile => profile.name && profile.videoProfiles.length && profile.subtitleProfiles.length),
+    )
+  }
+
+  function serializeSeriesWorkspace(workspace: SeriesProjectWorkspace) {
+    const {
+      projectSiteFieldDefaults: _projectSiteFieldDefaults,
+      variantTemplates: _legacyVariantTemplates,
+      ...persistedWorkspace
+    } = workspace
+    const publishProfiles = normalizePublishProfiles(workspace.publishProfiles)
+
+    return {
+      ...persistedWorkspace,
+      publishProfiles,
+      variantTemplates: publishProfiles,
     }
   }
 
@@ -73,53 +141,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       }
 
       const parsed = JSON.parse(fs.readFileSync(workspacePath, { encoding: 'utf-8' })) as Partial<SeriesProjectWorkspace>
-      const rawPublishProfiles = Array.isArray(parsed.publishProfiles)
-        ? parsed.publishProfiles
-        : Array.isArray(parsed.variantTemplates)
-          ? parsed.variantTemplates
-          : []
-      const publishProfiles = normalizePublishProfiles(
-        rawPublishProfiles
-          .filter((profile): profile is SeriesPublishProfile => {
-            return typeof profile === 'object' && profile !== null && typeof profile.id === 'number'
-          })
-          .map(profile => {
-            const titleTemplate = normalizeTitleTemplate(profile.titleTemplate)
-            const legacySummaryTemplate = normalizeSummaryTemplate(profile.summaryTemplate)
-            const siteDrafts = normalizeSiteDrafts(profile.siteDrafts, {
-              targetSites: normalizeSiteIds(profile.targetSites),
-              summaryTemplate: legacySummaryTemplate,
-            })
-            const targetSites = normalizeSiteIds([
-              ...normalizeSiteIds(profile.targetSites),
-              ...getEnabledSiteIdsFromSiteDrafts(siteDrafts),
-            ])
-            return {
-              id: profile.id,
-              name: profile.name ?? '',
-              isDefault: Boolean(profile.isDefault),
-              videoProfiles: Array.isArray(profile.videoProfiles)
-                ? profile.videoProfiles.filter(
-                    (item): item is SeriesVariantTemplateVideoProfile => isSeriesVariantTemplateVideoProfile(item),
-                  )
-                : [],
-              subtitleProfiles: Array.isArray(profile.subtitleProfiles)
-                ? profile.subtitleProfiles.filter(
-                    (item): item is SeriesVariantTemplateSubtitleProfile =>
-                      isSeriesVariantTemplateSubtitleProfile(item),
-                  )
-                : [],
-              targetSites,
-              titleTemplate,
-              summaryTemplate: resolvePrimarySiteDraftSummaryTemplate(siteDrafts, targetSites, legacySummaryTemplate),
-              siteDrafts,
-              siteFieldDefaults: normalizeSiteFieldDefaults(profile.siteFieldDefaults),
-              createdAt: profile.createdAt ?? new Date(profile.id).toISOString(),
-              updatedAt: profile.updatedAt ?? new Date(profile.id).toISOString(),
-            }
-          })
-          .filter(profile => profile.name && profile.videoProfiles.length && profile.subtitleProfiles.length),
-      )
+      const publishProfiles = readWorkspacePublishProfiles(parsed)
       const episodes = Array.isArray(parsed.episodes)
         ? parsed.episodes
             .filter((episode): episode is SeriesProjectEpisode => {
@@ -182,6 +204,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
                             ? publishProfileSnapshot?.name ?? matchedProfile?.name
                             : undefined),
                         publishProfileSnapshot,
+                        publishResults: clonePublishResults(variant.publishResults),
                         targetSites: normalizeSiteIds(variant.targetSites),
                         title: normalizeOptionalString(variant.title),
                         createdAt: variant.createdAt ?? new Date(variant.id).toISOString(),
@@ -201,7 +224,6 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         projectId,
         episodes,
         publishProfiles,
-        variantTemplates: publishProfiles,
         activeEpisodeId:
           typeof parsed.activeEpisodeId === 'number' ? parsed.activeEpisodeId : undefined,
         activeVariantId:
@@ -216,19 +238,9 @@ export function createProjectService(options: CreateProjectServiceOptions) {
 
   function writeSeriesWorkspace(projectPath: string, workspace: SeriesProjectWorkspace) {
     const workspacePath = getSeriesWorkspacePath(projectPath)
-    const { projectSiteFieldDefaults: _projectSiteFieldDefaults, ...persistedWorkspace } = workspace
-    const publishProfiles = normalizePublishProfiles(workspace.publishProfiles ?? workspace.variantTemplates ?? [])
     fs.writeFileSync(
       workspacePath,
-      JSON.stringify(
-        {
-          ...persistedWorkspace,
-          publishProfiles,
-          variantTemplates: publishProfiles,
-        },
-        null,
-        2,
-      ),
+      JSON.stringify(serializeSeriesWorkspace(workspace), null, 2),
     )
   }
 
@@ -334,6 +346,67 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     return trimmedValue || undefined
   }
 
+  function clonePublishResults(value: unknown): PublishResult[] | undefined {
+    if (!Array.isArray(value)) {
+      return undefined
+    }
+
+    const nextResults = value
+      .filter((result): result is PublishResult => {
+        return (
+          typeof result === 'object' &&
+          result !== null &&
+          typeof result.siteId === 'string' &&
+          supportedPublishStates.includes(result.status as PublishState)
+        )
+      })
+      .map(result => ({
+        siteId: result.siteId,
+        status: result.status,
+        remoteId: normalizeOptionalString(result.remoteId),
+        remoteUrl: normalizeOptionalString(result.remoteUrl),
+        message: normalizeOptionalString(result.message),
+        rawResponse: result.rawResponse,
+        timestamp: normalizeOptionalString(result.timestamp),
+      }))
+
+    return nextResults.length ? nextResults : undefined
+  }
+
+  function getDraftPublishResults(projectId: number) {
+    return clonePublishResults(projectStore.getProjectById(projectId)?.publishResults)
+  }
+
+  function replaceLegacyTaskPublishState(task: Config.Task, results?: PublishResult[]) {
+    const nextResults = clonePublishResults(results)
+
+    task.publishResults = nextResults
+    task.forumLink = undefined
+    trackedLegacyTorrentSites.forEach(siteId => {
+      task[siteId] = undefined
+    })
+
+    nextResults?.forEach(result => {
+      if (result.status !== 'published' || !result.remoteUrl) {
+        return
+      }
+
+      if (result.siteId === 'forum') {
+        if (!task.forumLink) {
+          task.forumLink = result.remoteUrl
+        }
+        return
+      }
+
+      if (
+        trackedLegacyTorrentSites.includes(result.siteId as (typeof trackedLegacyTorrentSites)[number]) &&
+        !task[result.siteId as (typeof trackedLegacyTorrentSites)[number]]
+      ) {
+        task[result.siteId as (typeof trackedLegacyTorrentSites)[number]] = result.remoteUrl
+      }
+    })
+  }
+
   function normalizeSiteFieldDefaults(value: unknown): SeriesPublishProfileSiteFieldDefaults | undefined {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       return undefined
@@ -391,10 +464,32 @@ export function createProjectService(options: CreateProjectServiceOptions) {
   }
 
   function hydrateSeriesWorkspace(projectPath: string, workspace: SeriesProjectWorkspace): SeriesProjectWorkspace {
-    return {
+    const hydratedWorkspace = {
       ...workspace,
       projectSiteFieldDefaults: readProjectSiteFieldDefaults(projectPath),
     }
+
+    return withActiveVariantPublishResults(hydratedWorkspace, getDraftPublishResults(workspace.projectId))
+  }
+
+  function withActiveVariantPublishResults(workspace: SeriesProjectWorkspace, results?: PublishResult[]) {
+    if (!workspace.activeEpisodeId || !workspace.activeVariantId) {
+      return workspace
+    }
+
+    const episode = workspace.episodes.find(item => item.id === workspace.activeEpisodeId)
+    const variant = episode?.variants.find(item => item.id === workspace.activeVariantId)
+    if (!episode || !variant) {
+      return workspace
+    }
+
+    const nextVariant: SeriesProjectVariant = {
+      ...variant,
+      publishResults: clonePublishResults(results),
+    }
+    const nextEpisode = replaceVariant(episode, nextVariant, episode.updatedAt)
+
+    return replaceEpisode(workspace, nextEpisode)
   }
 
   function normalizeSiteDraftEntry(
@@ -1135,6 +1230,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     const nextVariant = applyVariantSummary(
       {
         ...variant,
+        publishResults: getDraftPublishResults(workspace.projectId),
         updatedAt,
       },
       readVariantConfigSummary(projectPath, episode, variant),
@@ -1772,7 +1868,6 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const nextWorkspace: SeriesProjectWorkspace = {
         ...workspace,
         publishProfiles: nextProfiles,
-        variantTemplates: nextProfiles,
         updatedAt: timestamp,
       }
       writeSeriesWorkspace(task.path, nextWorkspace)
@@ -1816,7 +1911,6 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const nextWorkspace: SeriesProjectWorkspace = {
         ...workspace,
         publishProfiles: nextProfiles,
-        variantTemplates: nextProfiles,
         updatedAt: timestamp,
       }
       writeSeriesWorkspace(task.path, nextWorkspace)
@@ -1986,7 +2080,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `Project ${projectId} is not in series mode`))
       }
 
-      const workspace = readSeriesWorkspace(project.id, task.path)
+      const timestamp = new Date().toISOString()
+      const workspace = syncActiveVariantDraft(task.path, readSeriesWorkspace(project.id, task.path), timestamp)
       const episode = workspace.episodes.find(item => item.id === episodeId)
       if (!episode) {
         return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `Episode ${episodeId} does not exist`))
@@ -2005,8 +2100,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       }
 
       fs.copyFileSync(variantConfigPath, getDraftConfigPath(task.path))
-
-      const timestamp = new Date().toISOString()
+      replaceLegacyTaskPublishState(task, variant.publishResults)
+      await projectStore.write()
       const nextVariant = applyVariantSummary(
         {
           ...variant,
@@ -2068,6 +2163,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const nextVariant = applyVariantSummary(
         {
           ...variant,
+          publishResults: getDraftPublishResults(projectId),
           updatedAt: timestamp,
         },
         readDraftConfigSummary(task.path),

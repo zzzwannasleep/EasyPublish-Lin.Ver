@@ -17,6 +17,7 @@ const props = withDefaults(
     asideEyebrow?: string
     asideTitle?: string
     asideDescription?: string
+    asidePlacement?: 'side' | 'top'
   }>(),
   {
     eyebrow: 'Workflow Stage',
@@ -28,13 +29,15 @@ const props = withDefaults(
     panelDescription: '',
     asideEyebrow: 'Handoff',
     asideTitle: '',
-    asideDescription: ''
+    asideDescription: '',
+    asidePlacement: 'side',
   }
 )
 
 const slots = useSlots()
 const showIntroBlock = computed(() => props.showIntro && Boolean(props.eyebrow || props.title || props.description || props.statusLabel))
 const hasAside = computed(() => Boolean(slots.aside || props.asideEyebrow || props.asideTitle || props.asideDescription))
+const isTopAside = computed(() => hasAside.value && props.asidePlacement === 'top')
 </script>
 
 <template>
@@ -48,7 +51,25 @@ const hasAside = computed(() => Boolean(slots.aside || props.asideEyebrow || pro
       <StatusChip v-if="statusLabel" :tone="statusTone">{{ statusLabel }}</StatusChip>
     </section>
 
-    <section class="stage-workspace__grid" :class="{ 'stage-workspace__grid--single': !hasAside }">
+    <section
+      class="stage-workspace__grid"
+      :class="{
+        'stage-workspace__grid--single': !hasAside || isTopAside,
+        'stage-workspace__grid--aside-top': isTopAside,
+      }"
+    >
+      <AppPanel
+        v-if="isTopAside"
+        class="stage-workspace__panel stage-workspace__panel--aside stage-workspace__panel--aside-top"
+        :eyebrow="asideEyebrow"
+        :title="asideTitle"
+        :description="asideDescription"
+      >
+        <div class="stack-list">
+          <slot name="aside" />
+        </div>
+      </AppPanel>
+
       <AppPanel
         class="stage-workspace__panel stage-workspace__panel--main"
         :eyebrow="panelEyebrow"
@@ -61,7 +82,7 @@ const hasAside = computed(() => Boolean(slots.aside || props.asideEyebrow || pro
       </AppPanel>
 
       <AppPanel
-        v-if="hasAside"
+        v-if="hasAside && !isTopAside"
         class="stage-workspace__panel stage-workspace__panel--aside"
         :eyebrow="asideEyebrow"
         :title="asideTitle"
@@ -136,6 +157,38 @@ const hasAside = computed(() => Boolean(slots.aside || props.asideEyebrow || pro
   padding: 20px 24px 24px;
 }
 
+.stage-workspace__panel--aside-top :deep(.app-panel__header) {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 14px 24px;
+  align-items: end;
+}
+
+.stage-workspace__panel--aside-top :deep(.app-panel__content) {
+  padding: 18px 24px 24px;
+}
+
+.stage-workspace__panel--aside-top :deep(.stack-list) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.stage-workspace__panel--aside-top :deep(.stack-list__item) {
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 44%),
+    color-mix(in srgb, var(--bg-panel) 90%, #0a121d);
+}
+
+.stage-workspace__panel--aside-top :deep(.stack-list__item:first-child) {
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+
 @media (max-width: 1240px) {
   .stage-workspace__grid {
     grid-template-columns: minmax(0, 1fr);
@@ -151,6 +204,10 @@ const hasAside = computed(() => Boolean(slots.aside || props.asideEyebrow || pro
 @media (max-width: 720px) {
   .stage-workspace {
     gap: 14px;
+  }
+
+  .stage-workspace__panel--aside-top :deep(.app-panel__header) {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .stage-workspace__panel--main :deep(.app-panel__content),

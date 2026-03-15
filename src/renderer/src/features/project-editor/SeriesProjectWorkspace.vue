@@ -5,6 +5,7 @@ import EpisodeEdit from '../../components/EpisodeEdit.vue'
 import { useI18n } from '../../i18n'
 import { projectBridge } from '../../services/bridge/project'
 import { siteBridge } from '../../services/bridge/site'
+import { taskBridge } from '../../services/bridge/task'
 import {
   formatProjectTimestamp,
   getMissingTargetSiteIds,
@@ -26,6 +27,7 @@ import type {
   SeriesVariantSubtitleProfile,
   SeriesVariantVideoProfile,
 } from '../../types/project'
+import type { PublishResult, PublishState } from '../../types/publish'
 import type { SiteCatalogEntry, SiteFieldSchemaEntry, SiteFieldSchemaMode, SiteId } from '../../types/site'
 
 const PROFILE_VIDEO_ORDER: SeriesPublishProfileVideoProfile[] = ['1080p', '2160p']
@@ -86,6 +88,25 @@ type PublishProfileSiteDraftFormEntry = {
 
 type PublishProfileSiteDraftForm = Partial<Record<SiteId, PublishProfileSiteDraftFormEntry>>
 
+type VariantProgressSummary = {
+  publishedSiteIds: SiteId[]
+  pendingSiteIds: SiteId[]
+  failedSiteIds: SiteId[]
+}
+
+type EpisodeDifferenceField = {
+  key: string
+  label: string
+  value: string
+}
+
+type EpisodeSiteOverrideSummary = {
+  key: string
+  label: string
+  value: string
+  sourceLabel: string
+}
+
 const props = defineProps<{
   id: number
   project: PublishProject
@@ -120,8 +141,10 @@ const pendingProfileSelectionId = ref<number | null>(null)
 const saveAsDialogVisible = ref(false)
 const saveAsMode = ref<'saveAs' | 'copy'>('saveAs')
 const saveAsName = ref('')
+const draftConfig = ref<Config.PublishConfig | null>(null)
 const siteCatalog = ref<SiteCatalogEntry[]>([])
 const hasLoadedSiteCatalog = ref(false)
+const refillVariantId = ref<number | null>(null)
 
 const episodeForm = reactive({
   episodeLabel: '',
@@ -261,7 +284,7 @@ const editorKey = computed(() => {
 })
 
 const episodes = computed(() => workspace.value?.episodes ?? [])
-const publishProfiles = computed(() => workspace.value?.publishProfiles ?? workspace.value?.variantTemplates ?? [])
+const publishProfiles = computed(() => workspace.value?.publishProfiles ?? [])
 
 const defaultPublishProfile = computed(() => publishProfiles.value.find(profile => profile.isDefault) ?? publishProfiles.value[0] ?? null)
 
@@ -298,6 +321,18 @@ const activeVariant = computed(() => {
   }
 
   return episode.variants.find(variant => variant.id === activeVariantId) ?? null
+})
+
+const selectedEpisodeUsesActiveDraft = computed(
+  () => Boolean(selectedEpisode.value && activeEpisode.value && selectedEpisode.value.id === activeEpisode.value.id && activeVariant.value),
+)
+
+const draftEpisodeContent = computed<Partial<Config.Content_episode> | null>(() => {
+  if (!draftConfig.value || typeof draftConfig.value.content !== 'object' || Array.isArray(draftConfig.value.content)) {
+    return null
+  }
+
+  return draftConfig.value.content as Partial<Config.Content_episode>
 })
 
 const selectedSavedProfile = computed(() => {
@@ -503,6 +538,95 @@ const selectedEpisodeProfileSummary = computed(() => {
   }
 
   return t('seriesWorkspace.execution.profile.unlinked')
+})
+
+const selectedEpisodeDifferenceFields = computed<EpisodeDifferenceField[]>(() => {
+  if (!selectedEpisode.value) {
+    return []
+  }
+
+  const episodeLabel =
+    (selectedEpisodeUsesActiveDraft.value ? draftEpisodeContent.value?.episodeLabel : '')?.trim() ||
+    selectedEpisode.value.episodeLabel
+  const episodeTitle =
+    (selectedEpisodeUsesActiveDraft.value ? draftEpisodeContent.value?.episodeTitle : '')?.trim() ||
+    selectedEpisode.value.episodeTitle ||
+    t('seriesWorkspace.execution.differences.titleFallback')
+  const torrentPath =
+    selectedEpisodeUsesActiveDraft.value && draftConfig.value?.torrentPath?.trim()
+      ? draftConfig.value.torrentPath.trim()
+      : t('seriesWorkspace.execution.differences.inactiveValue')
+  const targetSites = selectedEpisodeUsesActiveDraft.value
+    ? formatSiteLabels(getEpisodeDraftTargetSites(draftConfig.value))
+    : t('seriesWorkspace.execution.differences.inactiveValue')
+
+  return [
+    {
+      key: 'episodeLabel',
+      label: t('seriesWorkspace.execution.differences.episodeLabel'),
+      value: episodeLabel,
+    },
+    {
+      key: 'episodeTitle',
+      label: t('seriesWorkspace.execution.differences.episodeTitle'),
+      value: episodeTitle,
+    },
+    {
+      key: 'torrentPath',
+      label: t('seriesWorkspace.execution.differences.torrentPath'),
+      value: torrentPath,
+    },
+    {
+      key: 'targetSites',
+      label: t('seriesWorkspace.execution.differences.targetSites'),
+      value: targetSites,
+    },
+  ]
+})
+
+const selectedEpisodeSiteOverrides = computed<EpisodeSiteOverrideSummary[]>(() => {
+  if (!selectedEpisodeUsesActiveDraft.value || !draftConfig.value || !activeVariant.value) {
+    return []
+  }
+
+  const snapshotFieldDefaults = activeVariant.value.publishProfileSnapshot?.siteFieldDefaults
+  const projectFieldDefaults = workspace.value?.projectSiteFieldDefaults
+  const siteIds = orderSiteIds([
+    ...Object.keys(snapshotFieldDefaults ?? {}),
+    ...Object.keys(projectFieldDefaults ?? {}),
+  ] as SiteId[])
+
+  return siteIds.flatMap(siteId => {
+    return getSiteFieldSchemas(siteId).flatMap(field => {
+      const currentValue = readEpisodeDraftSiteFieldValue(draftConfig.value, siteId, field.key)
+      if (!hasSiteFieldValue(field, currentValue)) {
+        return []
+      }
+
+      const profileValue = getSiteFieldValue(snapshotFieldDefaults, siteId, field)
+      const projectValue = getSiteFieldValue(projectFieldDefaults, siteId, field)
+      const baselineValue = hasSiteFieldValue(field, profileValue) ? profileValue : projectValue
+      const baselineLabel = hasSiteFieldValue(field, baselineValue) ? getSiteFieldValueLabel(field, baselineValue) : ''
+      const currentLabel = getSiteFieldValueLabel(field, currentValue)
+
+      if (baselineLabel && baselineLabel === currentLabel) {
+        return []
+      }
+
+      return [
+        {
+          key: `${siteId}:${field.key}`,
+          label: `${getDisplaySiteLabel(siteId)} · ${t(field.labelKey)}`,
+          value: currentLabel,
+          sourceLabel: hasSiteFieldValue(field, profileValue)
+            ? t('seriesWorkspace.execution.differences.overrideFromProfile')
+            : hasSiteFieldValue(field, projectValue)
+              ? t('seriesWorkspace.execution.differences.overrideFromProject')
+              : t('seriesWorkspace.execution.differences.overrideStandalone'),
+        },
+      ]
+    })
+  })
 })
 
 const currentProfileCombinationNames = computed(() =>
@@ -1012,6 +1136,102 @@ function formatSiteLabels(siteIds?: SiteId[]) {
   return siteIds.map(siteId => getDisplaySiteLabel(siteId)).join(', ')
 }
 
+function getVariantPublishProfileLabel(variant: SeriesProjectVariant) {
+  return variant.publishProfileName?.trim() || variant.publishProfileSnapshot?.name?.trim() || ''
+}
+
+function isVariantLinkedToPublishProfile(variant: SeriesProjectVariant) {
+  return Boolean(variant.publishProfileId || getVariantPublishProfileLabel(variant))
+}
+
+function getEpisodeDraftTargetSites(config?: Config.PublishConfig | null) {
+  if (!config) {
+    return []
+  }
+
+  const content =
+    typeof config.content === 'object' && config.content && !Array.isArray(config.content)
+      ? (config.content as Partial<Config.Content_episode>)
+      : undefined
+
+  return normalizeTargetSites(config.targetSites ?? content?.targetSites ?? [])
+}
+
+function getPublishResultTimeValue(result: PublishResult) {
+  if (!result.timestamp) {
+    return 0
+  }
+
+  const value = new Date(result.timestamp).getTime()
+  return Number.isFinite(value) ? value : 0
+}
+
+function getLatestPublishResultMap(results?: PublishResult[]) {
+  const orderedResults = [...(results ?? [])].sort(
+    (left, right) => getPublishResultTimeValue(right) - getPublishResultTimeValue(left),
+  )
+  const resultMap = new Map<SiteId, PublishResult>()
+  orderedResults.forEach(result => {
+    if (!resultMap.has(result.siteId)) {
+      resultMap.set(result.siteId, result)
+    }
+  })
+
+  return resultMap
+}
+
+function getVariantProgressSummary(variant: SeriesProjectVariant): VariantProgressSummary {
+  const latestResultMap = getLatestPublishResultMap(variant.publishResults)
+  const targetSiteIds = normalizeTargetSites(variant.targetSites ?? [])
+
+  return targetSiteIds.reduce<VariantProgressSummary>(
+    (summary, siteId) => {
+      const latestStatus = latestResultMap.get(siteId)?.status as PublishState | undefined
+      if (latestStatus === 'published') {
+        summary.publishedSiteIds.push(siteId)
+      } else if (latestStatus === 'failed') {
+        summary.failedSiteIds.push(siteId)
+      } else {
+        summary.pendingSiteIds.push(siteId)
+      }
+
+      return summary
+    },
+    {
+      publishedSiteIds: [],
+      pendingSiteIds: [],
+      failedSiteIds: [],
+    },
+  )
+}
+
+function readEpisodeDraftSiteFieldValue(
+  config: Config.PublishConfig | null,
+  siteId: SiteId,
+  fieldKey: string,
+): string | number | boolean | undefined {
+  if (!config) {
+    return undefined
+  }
+
+  switch (`${siteId}:${fieldKey}`) {
+    case 'bangumi:category_bangumi':
+      return config.category_bangumi
+    case 'nyaa:category_nyaa':
+      return config.category_nyaa
+    default:
+      return undefined
+  }
+}
+
+async function loadDraftConfig() {
+  try {
+    draftConfig.value = await taskBridge.getPublishConfig(props.id)
+  } catch {
+    draftConfig.value = null
+  }
+}
+
 function getProfileCombinationNames(
   videoProfiles: SeriesPublishProfileVideoProfile[],
   subtitleProfiles: SeriesPublishProfileSubtitleProfile[],
@@ -1171,6 +1391,7 @@ async function loadWorkspace(preferredEpisodeId?: number, preferredProfileId?: n
 
     if (!workspaceResult.ok) {
       workspace.value = null
+      draftConfig.value = null
       selectedEpisodeId.value = null
       workspaceError.value = workspaceResult.error.message
       return
@@ -1179,6 +1400,7 @@ async function loadWorkspace(preferredEpisodeId?: number, preferredProfileId?: n
     workspace.value = workspaceResult.data.workspace
     syncSelectedEpisode(preferredEpisodeId)
     initializeProfileEditor(preferredProfileId)
+    await loadDraftConfig()
   } finally {
     isWorkspaceLoading.value = false
   }
@@ -1634,31 +1856,70 @@ async function createVariant() {
   }
 }
 
+async function loadVariantIntoDraft(episode: SeriesProjectEpisode, variant: SeriesProjectVariant) {
+  const result = await projectBridge.activateSeriesVariant({
+    projectId: props.project.id,
+    episodeId: episode.id,
+    variantId: variant.id,
+  })
+  if (!result.ok) {
+    ElMessage.error(result.error.message)
+    return null
+  }
+
+  workspace.value = result.data.workspace
+  syncSelectedEpisode(result.data.episode.id)
+  initializeProfileEditor()
+  await loadDraftConfig()
+
+  return result.data
+}
+
 async function activateVariant(episode: SeriesProjectEpisode, variant: SeriesProjectVariant) {
   activatingVariantId.value = variant.id
   try {
-    const result = await projectBridge.activateSeriesVariant({
-      projectId: props.project.id,
-      episodeId: episode.id,
-      variantId: variant.id,
-    })
-    if (!result.ok) {
-      ElMessage.error(result.error.message)
+    const result = await loadVariantIntoDraft(episode, variant)
+    if (!result) {
       return
     }
 
-    workspace.value = result.data.workspace
-    syncSelectedEpisode(result.data.episode.id)
-    initializeProfileEditor()
     setEditorVisible(true)
     ElMessage.success(
       t('seriesWorkspace.variants.activateSuccess', {
-        episode: result.data.episode.episodeLabel,
-        variant: result.data.variant.name,
+        episode: result.episode.episodeLabel,
+        variant: result.variant.name,
       }),
     )
   } finally {
     activatingVariantId.value = null
+  }
+}
+
+async function refillVariantPublishTargets(episode: SeriesProjectEpisode, variant: SeriesProjectVariant) {
+  const progressSummary = getVariantProgressSummary(variant)
+  if (!progressSummary.pendingSiteIds.length && !progressSummary.failedSiteIds.length) {
+    return
+  }
+
+  refillVariantId.value = variant.id
+  try {
+    if (!isActiveVariant(episode.id, variant.id)) {
+      const result = await loadVariantIntoDraft(episode, variant)
+      if (!result) {
+        return
+      }
+    }
+
+    const focusSiteIds = [...progressSummary.failedSiteIds, ...progressSummary.pendingSiteIds]
+    ElMessage.success(
+      t('seriesWorkspace.variants.card.refillReady', {
+        variant: variant.name,
+        sites: formatSiteLabels(focusSiteIds),
+      }),
+    )
+    navigateToStage('bt_publish')
+  } finally {
+    refillVariantId.value = null
   }
 }
 
@@ -1678,6 +1939,7 @@ async function syncVariantFromDraft(episode: SeriesProjectEpisode, variant: Seri
     workspace.value = result.data.workspace
     syncSelectedEpisode(result.data.episode.id)
     initializeProfileEditor()
+    await loadDraftConfig()
     ElMessage.success(t('seriesWorkspace.variants.syncSuccess', { variant: result.data.variant.name }))
   } finally {
     syncingVariantId.value = null
@@ -1743,6 +2005,7 @@ watch(
   () => props.project.id,
   () => {
     workspace.value = null
+    draftConfig.value = null
     selectedEpisodeId.value = null
     selectedPublishProfileId.value = null
     hasInitializedProfileEditor.value = false
@@ -1752,6 +2015,7 @@ watch(
     episodeGuideVisible.value = false
     dirtySwitchDialogVisible.value = false
     saveAsDialogVisible.value = false
+    refillVariantId.value = null
     void loadWorkspace()
   },
 )
@@ -1800,7 +2064,7 @@ watch(
         </div>
 
         <div class="series-workspace__hero-actions">
-          <el-button type="primary" @click="beginNewPublishProfile">
+          <el-button plain @click="beginNewPublishProfile">
             {{ t('seriesWorkspace.hero.actions.newProfile') }}
           </el-button>
           <el-button plain @click="episodeDialogVisible = true">
@@ -1816,6 +2080,111 @@ watch(
             <div class="series-workspace__metric-label">{{ item.label }}</div>
             <div class="series-workspace__metric-value">{{ item.value }}</div>
             <div class="series-workspace__metric-text">{{ item.text }}</div>
+          </article>
+        </div>
+
+        <div class="series-workspace__hero-workbench">
+          <article class="series-workspace__hero-band">
+            <div class="series-workspace__card-title">{{ t('seriesWorkspace.episodes.title') }}</div>
+            <div class="series-workspace__card-text">{{ t('seriesWorkspace.episodes.text') }}</div>
+
+            <div v-if="episodes.length" class="series-workspace__episode-strip">
+              <button
+                v-for="episode in episodes"
+                :key="episode.id"
+                class="series-workspace__episode-chip"
+                :class="{ 'series-workspace__episode-chip--active': selectedEpisodeId === episode.id }"
+                type="button"
+                @click="selectEpisode(episode.id)"
+              >
+                <span class="series-workspace__episode-chip-label">{{ episode.episodeLabel }}</span>
+                <span class="series-workspace__episode-chip-meta">{{ episode.variantCount }}</span>
+              </button>
+            </div>
+            <div v-else class="series-workspace__empty">
+              {{ t('seriesWorkspace.episodes.empty') }}
+            </div>
+          </article>
+
+          <article class="series-workspace__hero-band">
+            <div class="series-workspace__card-title">{{ t('seriesWorkspace.execution.currentEpisode.title') }}</div>
+
+            <template v-if="selectedEpisode">
+              <div class="series-workspace__episode-summary-title">
+                {{ t('seriesWorkspace.execution.currentEpisode.label', { episode: selectedEpisode.episodeLabel }) }}
+              </div>
+              <div class="series-workspace__episode-summary-text">
+                {{ selectedEpisode.episodeTitle || t('seriesWorkspace.episodes.card.titleFallback') }}
+              </div>
+              <div class="series-workspace__meta-list">
+                <span>{{ t('seriesWorkspace.execution.currentEpisode.profile', { name: selectedEpisodeProfileSummary }) }}</span>
+                <span>{{ t('seriesWorkspace.execution.currentEpisode.variantCount', { count: selectedEpisode.variantCount }) }}</span>
+                <span>
+                  {{
+                    t('seriesWorkspace.execution.currentEpisode.directory', {
+                      directory: selectedEpisode.directoryName,
+                    })
+                  }}
+                </span>
+              </div>
+            </template>
+
+            <div v-else class="series-workspace__empty">
+              {{ t('seriesWorkspace.execution.currentEpisode.empty') }}
+            </div>
+          </article>
+
+          <article class="series-workspace__hero-band series-workspace__hero-band--actions">
+            <div class="series-workspace__section-head">
+              <div>
+                <div class="series-workspace__card-title">{{ t('seriesWorkspace.execution.actions.title') }}</div>
+                <p class="series-workspace__card-text">{{ defaultApplyHint }}</p>
+              </div>
+              <el-tag v-if="profileDirty" effect="plain" type="warning">
+                {{ t('seriesWorkspace.profileEditor.unsaved') }}
+              </el-tag>
+            </div>
+
+            <div class="series-workspace__hero-action-row">
+              <el-button
+                type="primary"
+                :disabled="!canApplyDefaultProfile"
+                :loading="isApplyingProfile"
+                @click="applyDefaultProfileToSelectedEpisode"
+              >
+                {{ t('seriesWorkspace.execution.actions.applyDefault') }}
+              </el-button>
+              <el-button
+                plain
+                :disabled="!canApplySavedSelectedProfile"
+                :loading="isApplyingProfile"
+                @click="applySelectedProfileToCurrentEpisode"
+              >
+                {{ t('seriesWorkspace.execution.actions.applySelected') }}
+              </el-button>
+              <el-button
+                plain
+                :disabled="!selectedEpisode || !getPreviousEpisode(selectedEpisode.id)"
+                :loading="isInheritingVariants"
+                @click="inheritVariantsFromSelectedEpisode"
+              >
+                {{ t('seriesWorkspace.execution.actions.inherit') }}
+              </el-button>
+              <el-button type="primary" plain @click="setEditorVisible(!editorVisible)">
+                {{ editorVisible ? t('seriesWorkspace.closeEditor') : t('seriesWorkspace.openEditor') }}
+              </el-button>
+              <el-button plain @click="navigateToStage('check')">
+                {{ t('seriesWorkspace.execution.actions.check') }}
+              </el-button>
+              <el-button plain @click="navigateToStage('bt_publish')">
+                {{ t('seriesWorkspace.execution.actions.publish') }}
+              </el-button>
+            </div>
+
+            <div class="series-workspace__meta-list">
+              <span>{{ applyProfileHint }}</span>
+              <span>{{ currentDraftText }}</span>
+            </div>
           </article>
         </div>
       </section>
@@ -1986,7 +2355,7 @@ watch(
             <div class="series-workspace__card-title">{{ t('seriesWorkspace.profileEditor.siteDrafts.title') }}</div>
             <div class="series-workspace__card-text">{{ t('seriesWorkspace.profileEditor.siteDrafts.text') }}</div>
 
-            <div class="series-workspace__site-grid">
+            <div class="series-workspace__site-grid series-workspace__site-grid--drafts">
               <article
                 v-for="card in siteDraftCards"
                 :key="card.siteId"
@@ -2097,7 +2466,7 @@ watch(
             <div class="series-workspace__card-title">{{ t('seriesWorkspace.profileEditor.defaultSites.title') }}</div>
             <div class="series-workspace__card-text">{{ t('seriesWorkspace.profileEditor.defaultSites.text') }}</div>
 
-            <div class="series-workspace__site-grid">
+            <div class="series-workspace__site-grid series-workspace__site-grid--targets">
               <article
                 v-for="card in targetSiteCards"
                 :key="card.siteId"
@@ -2146,7 +2515,7 @@ watch(
             <div class="series-workspace__card-text">{{ t('seriesWorkspace.profileEditor.siteFields.text') }}</div>
 
             <template v-if="profileForm.targetSites.length">
-              <div v-if="siteFieldCards.length" class="series-workspace__site-grid">
+              <div v-if="siteFieldCards.length" class="series-workspace__site-grid series-workspace__site-grid--fields">
                 <article v-for="card in siteFieldCards" :key="card.siteId" class="series-workspace__site-card">
                   <div class="series-workspace__site-card-head">
                     <div class="series-workspace__site-card-title">{{ getDisplaySiteLabel(card.siteId) }}</div>
@@ -2308,80 +2677,204 @@ watch(
             </div>
           </footer>
         </article>
-        <aside class="series-workspace__execution">
-          <article class="series-workspace__side-card">
-            <div class="series-workspace__section-head">
-              <div>
-                <div class="series-workspace__section-title">{{ t('seriesWorkspace.episodes.title') }}</div>
-                <p class="series-workspace__section-text">{{ t('seriesWorkspace.episodes.text') }}</p>
-              </div>
-            </div>
+      </section>
 
-            <div v-if="episodes.length" class="series-workspace__episode-strip">
-              <button
-                v-for="episode in episodes"
-                :key="episode.id"
-                class="series-workspace__episode-chip"
-                :class="{ 'series-workspace__episode-chip--active': selectedEpisodeId === episode.id }"
-                type="button"
-                @click="selectEpisode(episode.id)"
-              >
-                <span class="series-workspace__episode-chip-label">{{ episode.episodeLabel }}</span>
-                <span class="series-workspace__episode-chip-meta">{{ episode.variantCount }}</span>
-              </button>
-            </div>
-            <div v-else class="series-workspace__empty">
-              {{ t('seriesWorkspace.episodes.empty') }}
-            </div>
-          </article>
+      <section class="series-workspace__execution-grid">
+        <article class="series-workspace__side-card">
+          <div class="series-workspace__section-title">{{ t('seriesWorkspace.variants.title') }}</div>
+          <p class="series-workspace__section-text">
+            {{
+              selectedEpisode
+                ? t('seriesWorkspace.variants.text', { episode: selectedEpisode.episodeLabel })
+                : t('seriesWorkspace.variants.selectEpisodeFirst')
+            }}
+          </p>
 
-          <article class="series-workspace__side-card">
-            <div class="series-workspace__section-title">{{ t('seriesWorkspace.execution.currentEpisode.title') }}</div>
+          <div v-if="selectedEpisode?.variants.length" class="series-workspace__variant-list">
+            <article
+              v-for="variant in selectedEpisode.variants"
+              :key="variant.id"
+              class="series-workspace__variant-card"
+              :class="{ 'series-workspace__variant-card--active': isActiveVariant(selectedEpisode.id, variant.id) }"
+            >
+              <div class="series-workspace__variant-head">
+                <div>
+                  <div class="series-workspace__variant-name">{{ variant.name }}</div>
+                  <div class="series-workspace__variant-profile">
+                    {{
+                      t('seriesWorkspace.variants.card.profile', {
+                        name: getVariantPublishProfileLabel(variant) || t('seriesWorkspace.execution.profile.unlinked'),
+                      })
+                    }}
+                  </div>
+                </div>
+                <div class="series-workspace__site-card-tags">
+                  <el-tag
+                    v-if="isVariantLinkedToPublishProfile(variant)"
+                    effect="plain"
+                    size="small"
+                    type="success"
+                  >
+                    {{ t('seriesWorkspace.variants.card.linked') }}
+                  </el-tag>
+                  <el-tag v-else effect="plain" size="small" type="info">
+                    {{ t('seriesWorkspace.variants.card.unlinked') }}
+                  </el-tag>
+                  <el-tag
+                    v-if="isActiveVariant(selectedEpisode.id, variant.id)"
+                    effect="plain"
+                    size="small"
+                    type="success"
+                  >
+                    {{ t('seriesWorkspace.variants.card.active') }}
+                  </el-tag>
+                </div>
+              </div>
 
-            <template v-if="selectedEpisode">
-              <div class="series-workspace__episode-summary-title">
-                {{ t('seriesWorkspace.execution.currentEpisode.label', { episode: selectedEpisode.episodeLabel }) }}
+              <div v-if="variant.videoProfile || variant.subtitleProfile" class="series-workspace__variant-tags">
+                <el-tag v-if="variant.videoProfile" effect="plain" size="small">
+                  {{ getVideoProfileLabel(variant.videoProfile) }}
+                </el-tag>
+                <el-tag v-if="variant.subtitleProfile" effect="plain" size="small" type="info">
+                  {{ getSubtitleProfileLabel(variant.subtitleProfile) }}
+                </el-tag>
               </div>
-              <div class="series-workspace__episode-summary-text">
-                {{ selectedEpisode.episodeTitle || t('seriesWorkspace.episodes.card.titleFallback') }}
+
+              <div class="series-workspace__variant-title">
+                {{ variant.title || t('seriesWorkspace.variants.card.titleEmpty') }}
               </div>
+
+              <div class="series-workspace__variant-progress">
+                <el-tag effect="plain" size="small" type="success">
+                  {{
+                    t('seriesWorkspace.variants.card.progress.published', {
+                      count: getVariantProgressSummary(variant).publishedSiteIds.length,
+                    })
+                  }}
+                </el-tag>
+                <el-tag effect="plain" size="small" type="warning">
+                  {{
+                    t('seriesWorkspace.variants.card.progress.pending', {
+                      count: getVariantProgressSummary(variant).pendingSiteIds.length,
+                    })
+                  }}
+                </el-tag>
+                <el-tag
+                  v-if="getVariantProgressSummary(variant).failedSiteIds.length"
+                  effect="plain"
+                  size="small"
+                  type="danger"
+                >
+                  {{
+                    t('seriesWorkspace.variants.card.progress.failed', {
+                      count: getVariantProgressSummary(variant).failedSiteIds.length,
+                    })
+                  }}
+                </el-tag>
+              </div>
+
               <div class="series-workspace__meta-list">
-                <span>{{ t('seriesWorkspace.execution.currentEpisode.profile', { name: selectedEpisodeProfileSummary }) }}</span>
-                <span>{{ t('seriesWorkspace.execution.currentEpisode.variantCount', { count: selectedEpisode.variantCount }) }}</span>
                 <span>
                   {{
-                    t('seriesWorkspace.execution.currentEpisode.directory', {
-                      directory: selectedEpisode.directoryName,
+                    t('seriesWorkspace.variants.card.targetSites', {
+                      count: variant.targetSites?.length ?? 0,
                     })
                   }}
                 </span>
+                <span>{{ t('seriesWorkspace.variants.card.directory') }}: {{ variant.directoryName }}</span>
+                <span>{{ t('seriesWorkspace.variants.card.updatedAt', { time: formatProjectTimestamp(variant.updatedAt) }) }}</span>
+              </div>
+
+              <div class="series-workspace__variant-actions">
+                <el-button
+                  size="small"
+                  type="primary"
+                  :loading="activatingVariantId === variant.id"
+                  @click="activateVariant(selectedEpisode, variant)"
+                >
+                  {{ t('seriesWorkspace.variants.card.activate') }}
+                </el-button>
+                <el-button
+                  size="small"
+                  plain
+                  :loading="syncingVariantId === variant.id"
+                  @click="syncVariantFromDraft(selectedEpisode, variant)"
+                >
+                  {{ t('seriesWorkspace.variants.card.sync') }}
+                </el-button>
+                <el-button
+                  v-if="
+                    getVariantProgressSummary(variant).pendingSiteIds.length ||
+                    getVariantProgressSummary(variant).failedSiteIds.length
+                  "
+                  size="small"
+                  plain
+                  type="warning"
+                  :loading="refillVariantId === variant.id"
+                  @click="refillVariantPublishTargets(selectedEpisode, variant)"
+                >
+                  {{ t('seriesWorkspace.variants.card.refill') }}
+                </el-button>
+              </div>
+            </article>
+          </div>
+
+          <div v-else class="series-workspace__empty">
+            {{ t('seriesWorkspace.variants.empty') }}
+          </div>
+        </article>
+
+        <div class="series-workspace__side-stack">
+          <article class="series-workspace__side-card">
+            <div class="series-workspace__section-title">{{ t('seriesWorkspace.execution.differences.title') }}</div>
+            <p class="series-workspace__section-text">{{ t('seriesWorkspace.execution.differences.text') }}</p>
+
+            <template v-if="selectedEpisode">
+              <div class="series-workspace__difference-list">
+                <article
+                  v-for="item in selectedEpisodeDifferenceFields"
+                  :key="item.key"
+                  class="series-workspace__difference-item"
+                >
+                  <div class="series-workspace__field-label">{{ item.label }}</div>
+                  <div class="series-workspace__difference-value">{{ item.value }}</div>
+                </article>
+              </div>
+
+              <el-alert
+                v-if="!selectedEpisodeUsesActiveDraft"
+                type="info"
+                :title="t('seriesWorkspace.execution.differences.inactiveNotice')"
+                :description="t('seriesWorkspace.execution.differences.inactiveHelp')"
+                :closable="false"
+                show-icon
+              />
+
+              <div class="series-workspace__preview-card series-workspace__preview-card--multiline">
+                <div class="series-workspace__preview-label">
+                  {{ t('seriesWorkspace.execution.differences.siteOverrides') }}
+                </div>
+
+                <div v-if="selectedEpisodeSiteOverrides.length" class="series-workspace__difference-overrides">
+                  <article
+                    v-for="entry in selectedEpisodeSiteOverrides"
+                    :key="entry.key"
+                    class="series-workspace__difference-override"
+                  >
+                    <div class="series-workspace__difference-value">{{ entry.label }}</div>
+                    <div class="series-workspace__card-text">{{ entry.value }}</div>
+                    <el-tag effect="plain" size="small" type="warning">{{ entry.sourceLabel }}</el-tag>
+                  </article>
+                </div>
+
+                <div v-else class="series-workspace__empty">
+                  {{ t('seriesWorkspace.execution.differences.siteOverridesEmpty') }}
+                </div>
               </div>
             </template>
 
             <div v-else class="series-workspace__empty">
-              {{ t('seriesWorkspace.execution.currentEpisode.empty') }}
-            </div>
-          </article>
-
-          <article class="series-workspace__side-card">
-            <div class="series-workspace__section-title">{{ t('seriesWorkspace.execution.actions.title') }}</div>
-            <p class="series-workspace__section-text">{{ defaultApplyHint }}</p>
-
-            <div class="series-workspace__side-actions">
-              <el-button type="primary" :disabled="!canApplyDefaultProfile" :loading="isApplyingProfile" @click="applyDefaultProfileToSelectedEpisode">
-                {{ t('seriesWorkspace.execution.actions.applyDefault') }}
-              </el-button>
-              <el-button plain :disabled="!canApplySavedSelectedProfile" :loading="isApplyingProfile" @click="applySelectedProfileToCurrentEpisode">
-                {{ t('seriesWorkspace.execution.actions.applySelected') }}
-              </el-button>
-              <el-button
-                plain
-                :disabled="!selectedEpisode || !getPreviousEpisode(selectedEpisode.id)"
-                :loading="isInheritingVariants"
-                @click="inheritVariantsFromSelectedEpisode"
-              >
-                {{ t('seriesWorkspace.execution.actions.inherit') }}
-              </el-button>
+              {{ t('seriesWorkspace.execution.differences.empty') }}
             </div>
           </article>
 
@@ -2450,113 +2943,7 @@ watch(
               {{ t('seriesWorkspace.variants.form.submit') }}
             </el-button>
           </article>
-
-          <article class="series-workspace__side-card">
-            <div class="series-workspace__section-title">{{ t('seriesWorkspace.variants.title') }}</div>
-            <p class="series-workspace__section-text">
-              {{
-                selectedEpisode
-                  ? t('seriesWorkspace.variants.text', { episode: selectedEpisode.episodeLabel })
-                  : t('seriesWorkspace.variants.selectEpisodeFirst')
-              }}
-            </p>
-
-            <div v-if="selectedEpisode?.variants.length" class="series-workspace__variant-list">
-              <article
-                v-for="variant in selectedEpisode.variants"
-                :key="variant.id"
-                class="series-workspace__variant-card"
-                :class="{ 'series-workspace__variant-card--active': isActiveVariant(selectedEpisode.id, variant.id) }"
-              >
-                <div class="series-workspace__variant-head">
-                  <div>
-                    <div class="series-workspace__variant-name">{{ variant.name }}</div>
-                    <div class="series-workspace__variant-profile">
-                      {{
-                        t('seriesWorkspace.variants.card.profile', {
-                          name: variant.publishProfileName || t('seriesWorkspace.execution.profile.unlinked'),
-                        })
-                      }}
-                    </div>
-                  </div>
-                  <el-tag
-                    v-if="isActiveVariant(selectedEpisode.id, variant.id)"
-                    effect="plain"
-                    size="small"
-                    type="success"
-                  >
-                    {{ t('seriesWorkspace.variants.card.active') }}
-                  </el-tag>
-                </div>
-
-                <div v-if="variant.videoProfile || variant.subtitleProfile" class="series-workspace__variant-tags">
-                  <el-tag v-if="variant.videoProfile" effect="plain" size="small">
-                    {{ getVideoProfileLabel(variant.videoProfile) }}
-                  </el-tag>
-                  <el-tag v-if="variant.subtitleProfile" effect="plain" size="small" type="info">
-                    {{ getSubtitleProfileLabel(variant.subtitleProfile) }}
-                  </el-tag>
-                </div>
-
-                <div class="series-workspace__variant-title">
-                  {{ variant.title || t('seriesWorkspace.variants.card.titleEmpty') }}
-                </div>
-
-                <div class="series-workspace__meta-list">
-                  <span>
-                    {{
-                      t('seriesWorkspace.variants.card.targetSites', {
-                        count: variant.targetSites?.length ?? 0,
-                      })
-                    }}
-                  </span>
-                  <span>{{ t('seriesWorkspace.variants.card.directory') }}: {{ variant.directoryName }}</span>
-                  <span>{{ t('seriesWorkspace.variants.card.updatedAt', { time: formatProjectTimestamp(variant.updatedAt) }) }}</span>
-                </div>
-
-                <div class="series-workspace__variant-actions">
-                  <el-button
-                    size="small"
-                    type="primary"
-                    :loading="activatingVariantId === variant.id"
-                    @click="activateVariant(selectedEpisode, variant)"
-                  >
-                    {{ t('seriesWorkspace.variants.card.activate') }}
-                  </el-button>
-                  <el-button
-                    size="small"
-                    plain
-                    :loading="syncingVariantId === variant.id"
-                    @click="syncVariantFromDraft(selectedEpisode, variant)"
-                  >
-                    {{ t('seriesWorkspace.variants.card.sync') }}
-                  </el-button>
-                </div>
-              </article>
-            </div>
-
-            <div v-else class="series-workspace__empty">
-              {{ t('seriesWorkspace.variants.empty') }}
-            </div>
-          </article>
-
-          <article class="series-workspace__side-card">
-            <div class="series-workspace__section-title">{{ t('seriesWorkspace.currentDraft.title') }}</div>
-            <p class="series-workspace__section-text">{{ currentDraftText }}</p>
-
-            <div class="series-workspace__side-actions">
-              <el-button type="primary" @click="setEditorVisible(!editorVisible)">
-                {{ editorVisible ? t('seriesWorkspace.closeEditor') : t('seriesWorkspace.openEditor') }}
-              </el-button>
-              <el-button plain @click="navigateToStage('check')">
-                {{ t('seriesWorkspace.execution.actions.check') }}
-              </el-button>
-              <el-button plain @click="navigateToStage('bt_publish')">
-                {{ t('seriesWorkspace.execution.actions.publish') }}
-              </el-button>
-            </div>
-          </article>
-        </aside>
+        </div>
       </section>
 
       <section v-if="editorVisible" class="series-workspace__editor">
@@ -2751,6 +3138,7 @@ watch(
 .series-workspace__hero-text,
 .series-workspace__hero-meta,
 .series-workspace__section-text,
+.series-workspace__card-text,
 .series-workspace__metric-text,
 .series-workspace__field-help,
 .series-workspace__profile-card-summary,
@@ -2762,6 +3150,7 @@ watch(
 .series-workspace__dialog-copy,
 .series-workspace__empty,
 .series-workspace__meta-list,
+.series-workspace__savebar-text,
 .series-workspace__site-card-text {
   color: var(--text-secondary);
   font-size: 13px;
@@ -2779,7 +3168,7 @@ watch(
 .series-workspace__section-actions,
 .series-workspace__savebar-actions,
 .series-workspace__variant-actions,
-.series-workspace__side-actions {
+.series-workspace__hero-action-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -2793,6 +3182,33 @@ watch(
 
 .series-workspace__metric {
   padding: 16px;
+}
+
+.series-workspace__hero-workbench,
+.series-workspace__execution-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.series-workspace__execution-grid {
+  grid-template-columns: minmax(0, 1.2fr) minmax(20rem, 0.85fr);
+  align-items: start;
+}
+
+.series-workspace__hero-band {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-panel) 86%, #0b1520);
+}
+
+.series-workspace__hero-band--actions {
+  background:
+    linear-gradient(180deg, rgba(198, 132, 72, 0.12), transparent 48%),
+    color-mix(in srgb, var(--bg-panel) 86%, #0b1520);
 }
 
 .series-workspace__metric-label,
@@ -2855,6 +3271,7 @@ watch(
   display: grid;
   gap: 10px;
   padding: 14px;
+  align-content: start;
 }
 
 .series-workspace__profile-card:hover,
@@ -2874,7 +3291,7 @@ watch(
 .series-workspace__profile-card--create {
   border-style: dashed;
   place-content: center;
-  min-height: 10rem;
+  min-height: 7.5rem;
 }
 
 .series-workspace__profile-card-head,
@@ -2898,19 +3315,12 @@ watch(
 
 .series-workspace__content {
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(20rem, 0.95fr);
   gap: 16px;
-  align-items: start;
 }
 
 .series-workspace__editor-panel,
-.series-workspace__execution {
+.series-workspace__execution-grid {
   align-self: start;
-}
-
-.series-workspace__execution {
-  display: grid;
-  gap: 16px;
 }
 
 .series-workspace__stack-card {
@@ -2922,11 +3332,24 @@ watch(
 
 .series-workspace__form-grid,
 .series-workspace__compact-grid,
-.series-workspace__dialog-grid,
-.series-workspace__site-grid {
+.series-workspace__dialog-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.series-workspace__site-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.series-workspace__site-grid--targets {
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+
+.series-workspace__site-grid--drafts,
+.series-workspace__site-grid--fields {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .series-workspace__field {
@@ -3111,6 +3534,44 @@ watch(
   gap: 8px;
 }
 
+.series-workspace__variant-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.series-workspace__difference-overrides {
+  display: grid;
+  gap: 8px;
+}
+
+.series-workspace__side-stack {
+  display: grid;
+  gap: 16px;
+  align-self: start;
+}
+
+.series-workspace__difference-list {
+  display: grid;
+  gap: 10px;
+}
+
+.series-workspace__difference-item,
+.series-workspace__difference-override {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-panel) 88%, #0a121d);
+}
+
+.series-workspace__difference-value {
+  color: var(--text-primary);
+  line-height: 1.6;
+  word-break: break-word;
+}
+
 .series-workspace__variant-actions {
   justify-content: flex-end;
 }
@@ -3145,12 +3606,10 @@ watch(
 }
 
 @media (max-width: 1180px) {
-  .series-workspace__content {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
+  .series-workspace__hero-workbench,
+  .series-workspace__execution-grid,
   .series-workspace__hero-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -3169,7 +3628,7 @@ watch(
   .series-workspace__savebar-actions,
   .series-workspace__hero-actions,
   .series-workspace__variant-actions,
-  .series-workspace__side-actions {
+  .series-workspace__hero-action-row {
     align-items: stretch;
   }
 
@@ -3177,7 +3636,7 @@ watch(
   .series-workspace__hero-actions,
   .series-workspace__savebar-actions,
   .series-workspace__variant-actions,
-  .series-workspace__side-actions {
+  .series-workspace__hero-action-row {
     flex-direction: column;
   }
 
@@ -3185,7 +3644,7 @@ watch(
   .series-workspace__hero-actions :deep(.el-button),
   .series-workspace__savebar-actions :deep(.el-button),
   .series-workspace__variant-actions :deep(.el-button),
-  .series-workspace__side-actions :deep(.el-button) {
+  .series-workspace__hero-action-row :deep(.el-button) {
     width: 100%;
   }
 }

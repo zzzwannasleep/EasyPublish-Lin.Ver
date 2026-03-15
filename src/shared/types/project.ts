@@ -58,6 +58,7 @@ export interface SeriesProjectVariant {
   publishProfileId?: number
   publishProfileName?: string
   publishProfileSnapshot?: SeriesPublishProfileSnapshot
+  publishResults?: PublishResult[]
   targetSites?: SiteId[]
   title?: string
   createdAt: string
