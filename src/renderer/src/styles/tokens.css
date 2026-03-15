@@ -9,6 +9,19 @@
   --bg-panel-strong: #fffdf8;
   --border-soft: rgba(74, 53, 36, 0.12);
   --border-strong: rgba(74, 53, 36, 0.18);
+  --field-bg: rgba(255, 255, 255, 0.96);
+  --field-bg-hover: rgba(255, 255, 255, 0.99);
+  --field-bg-focus: #fffdf9;
+  --field-disabled-bg: rgba(245, 239, 231, 0.88);
+  --field-shadow: inset 0 0 0 1px rgba(74, 53, 36, 0.14), 0 8px 20px rgba(39, 26, 13, 0.05);
+  --field-shadow-hover:
+    inset 0 0 0 1px rgba(74, 53, 36, 0.2),
+    0 10px 24px rgba(39, 26, 13, 0.07);
+  --field-shadow-focus:
+    inset 0 0 0 1px rgba(198, 90, 46, 0.34),
+    0 0 0 4px rgba(198, 90, 46, 0.1),
+    0 12px 26px rgba(39, 26, 13, 0.08);
+  --field-placeholder: #9b8e82;
   --text-primary: #1f1a16;
   --text-secondary: #665b52;
   --text-muted: #8c8177;
@@ -40,6 +53,19 @@ html.dark {
   --bg-panel-strong: #251c15;
   --border-soft: rgba(255, 241, 224, 0.08);
   --border-strong: rgba(255, 241, 224, 0.14);
+  --field-bg: rgba(43, 32, 24, 0.94);
+  --field-bg-hover: rgba(50, 37, 28, 0.98);
+  --field-bg-focus: rgba(57, 42, 32, 0.99);
+  --field-disabled-bg: rgba(37, 28, 21, 0.9);
+  --field-shadow: inset 0 0 0 1px rgba(255, 241, 224, 0.12), 0 10px 22px rgba(0, 0, 0, 0.2);
+  --field-shadow-hover:
+    inset 0 0 0 1px rgba(255, 241, 224, 0.18),
+    0 12px 26px rgba(0, 0, 0, 0.24);
+  --field-shadow-focus:
+    inset 0 0 0 1px rgba(255, 135, 89, 0.4),
+    0 0 0 4px rgba(255, 135, 89, 0.12),
+    0 14px 30px rgba(0, 0, 0, 0.28);
+  --field-placeholder: #9f8f82;
   --text-primary: #f8efe3;
   --text-secondary: #d3c3b4;
   --text-muted: #a9988a;

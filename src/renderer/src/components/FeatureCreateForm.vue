@@ -494,15 +494,15 @@ async function submitCreate(formEl: FormInstance | undefined) {
 .create-project__item :deep(.el-input__wrapper) {
   min-height: 48px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.84);
-  box-shadow: none;
+  background: var(--field-bg);
+  box-shadow: var(--field-shadow);
 }
 
 .create-project__item :deep(.el-input-group__append) {
   padding: 0 10px;
   border-radius: 0 14px 14px 0;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: none;
+  background: var(--field-bg);
+  box-shadow: var(--field-shadow);
 }
 
 .create-project__picker {

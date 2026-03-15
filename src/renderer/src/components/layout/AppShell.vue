@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
-import { useI18n } from '../../i18n'
 import SidebarNav from './SidebarNav.vue'
 import TopBar from './TopBar.vue'
 
@@ -18,7 +17,7 @@ defineProps<{
   title: string
   subtitle: string
   dark: boolean
-  sidebarOpen: boolean
+  sidebarExpanded: boolean
   locale: string
   localeOptions: readonly { value: string; label: string }[]
 }>()
@@ -29,39 +28,33 @@ defineEmits<{
   close: []
   toggleTheme: []
   toggleSidebar: []
-  closeSidebar: []
   changeLocale: [locale: string]
 }>()
-
-const { t } = useI18n()
 </script>
 
 <template>
-  <div class="app-shell" :class="{ 'app-shell--sidebar-open': sidebarOpen }">
+  <div class="app-shell" :class="{ 'app-shell--sidebar-collapsed': !sidebarExpanded }">
     <div class="app-shell__glow app-shell__glow--one" />
     <div class="app-shell__glow app-shell__glow--two" />
-    <button
-      class="app-shell__backdrop"
-      type="button"
-      :aria-label="t('common.closeNavigation')"
-      @click="$emit('closeSidebar')"
-    />
     <aside class="app-shell__sidebar">
-      <SidebarNav :items="navItems" :current-path="currentPath" @navigate="$emit('closeSidebar')" />
+      <SidebarNav
+        :items="navItems"
+        :current-path="currentPath"
+        :expanded="sidebarExpanded"
+        @toggle-sidebar="$emit('toggleSidebar')"
+      />
     </aside>
     <section class="app-shell__body">
       <TopBar
         :title="title"
         :subtitle="subtitle"
         :dark="dark"
-        :sidebar-open="sidebarOpen"
         :locale="locale"
         :locale-options="localeOptions"
         @minimize="$emit('minimize')"
         @maximize="$emit('maximize')"
         @close="$emit('close')"
         @toggle-theme="$emit('toggleTheme')"
-        @toggle-sidebar="$emit('toggleSidebar')"
         @change-locale="$emit('changeLocale', $event)"
       >
         <template #utility>
@@ -77,14 +70,21 @@ const { t } = useI18n()
 
 <style scoped>
 .app-shell {
+  --sidebar-width: 300px;
+
   position: relative;
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   gap: 18px;
   width: 100%;
   height: 100%;
   padding: 18px;
   overflow: hidden;
+  transition: grid-template-columns 220ms ease;
+}
+
+.app-shell--sidebar-collapsed {
+  --sidebar-width: 136px;
 }
 
 .app-shell__glow {
@@ -110,17 +110,6 @@ const { t } = useI18n()
   background: rgba(31, 111, 120, 0.12);
 }
 
-.app-shell__backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 4;
-  border: 0;
-  background: rgba(10, 10, 10, 0.34);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 220ms ease;
-}
-
 .app-shell__sidebar,
 .app-shell__body {
   position: relative;
@@ -136,6 +125,12 @@ const { t } = useI18n()
     linear-gradient(180deg, rgba(255, 255, 255, 0.36), transparent 24%),
     var(--bg-elevated);
   box-shadow: var(--shadow-lg);
+  overflow: visible;
+  transition: padding 220ms ease, border-radius 220ms ease;
+}
+
+.app-shell--sidebar-collapsed .app-shell__sidebar {
+  padding: 24px 14px;
 }
 
 .app-shell__body {
@@ -159,33 +154,21 @@ const { t } = useI18n()
 
 @media (max-width: 1180px) {
   .app-shell {
-    grid-template-columns: 1fr;
+    --sidebar-width: 264px;
+
     padding: 14px;
   }
 
-  .app-shell__backdrop {
-    display: block;
+  .app-shell--sidebar-collapsed {
+    --sidebar-width: 120px;
   }
 
   .app-shell__sidebar {
-    position: fixed;
-    top: 14px;
-    left: 14px;
-    bottom: 14px;
-    z-index: 5;
-    width: min(320px, calc(100vw - 28px));
     padding: 18px;
-    transform: translateX(calc(-100% - 18px));
-    transition: transform 240ms ease;
   }
 
-  .app-shell--sidebar-open .app-shell__sidebar {
-    transform: translateX(0);
-  }
-
-  .app-shell--sidebar-open .app-shell__backdrop {
-    opacity: 1;
-    pointer-events: auto;
+  .app-shell--sidebar-collapsed .app-shell__sidebar {
+    padding: 18px 12px;
   }
 
   .app-shell__main {
@@ -195,19 +178,27 @@ const { t } = useI18n()
 
 @media (max-width: 720px) {
   .app-shell {
+    --sidebar-width: 220px;
+
     gap: 12px;
     padding: 10px;
   }
 
+  .app-shell--sidebar-collapsed {
+    --sidebar-width: 112px;
+  }
+
   .app-shell__sidebar {
-    top: 10px;
-    left: 10px;
-    bottom: 10px;
-    width: min(320px, calc(100vw - 20px));
+    padding: 16px 12px;
+    border-radius: 24px;
   }
 
   .app-shell__body {
     border-radius: 24px;
+  }
+
+  .app-shell--sidebar-collapsed .app-shell__sidebar {
+    padding: 16px 10px;
   }
 
   .app-shell__main {

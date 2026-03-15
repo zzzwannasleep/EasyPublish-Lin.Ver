@@ -794,8 +794,8 @@ onMounted(() => {
 .pt-field :deep(.el-select__wrapper) {
   min-height: 44px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.84);
-  box-shadow: none;
+  background: var(--field-bg);
+  box-shadow: var(--field-shadow);
 }
 
 .pt-switch {

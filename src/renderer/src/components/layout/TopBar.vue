@@ -5,7 +5,6 @@ defineProps<{
   title: string
   subtitle: string
   dark: boolean
-  sidebarOpen: boolean
   locale: string
   localeOptions: readonly { value: string; label: string }[]
 }>()
@@ -15,7 +14,6 @@ defineEmits<{
   maximize: []
   close: []
   toggleTheme: []
-  toggleSidebar: []
   changeLocale: [locale: string]
 }>()
 
@@ -25,14 +23,6 @@ const { t } = useI18n()
 <template>
   <header class="top-bar">
     <div class="top-bar__heading">
-      <button
-        class="top-bar__menu"
-        :class="{ 'is-active': sidebarOpen }"
-        type="button"
-        @click="$emit('toggleSidebar')"
-      >
-        <el-icon><Menu /></el-icon>
-      </button>
       <div class="top-bar__copy">
         <h1 class="top-bar__title">{{ title }}</h1>
         <p class="top-bar__subtitle">{{ subtitle }}</p>
@@ -97,10 +87,6 @@ const { t } = useI18n()
   min-width: 0;
 }
 
-.top-bar__menu {
-  display: none;
-}
-
 .top-bar__locale {
   width: 124px;
   -webkit-app-region: no-drag;
@@ -127,14 +113,12 @@ const { t } = useI18n()
 .top-bar__tools,
 .top-bar__window,
 .top-bar__ghost,
-.top-bar__icon,
-.top-bar__menu {
+.top-bar__icon {
   -webkit-app-region: no-drag;
 }
 
 .top-bar__ghost,
-.top-bar__icon,
-.top-bar__menu {
+.top-bar__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -149,17 +133,14 @@ const { t } = useI18n()
   transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
 }
 
-.top-bar__icon,
-.top-bar__menu {
+.top-bar__icon {
   width: 40px;
   min-width: 40px;
   padding: 0;
 }
 
 .top-bar__ghost:hover,
-.top-bar__icon:hover,
-.top-bar__menu:hover,
-.top-bar__menu.is-active {
+.top-bar__icon:hover {
   transform: translateY(-1px);
   border-color: var(--border-strong);
 }
@@ -174,10 +155,6 @@ const { t } = useI18n()
     flex-direction: column;
     align-items: stretch;
     padding: 18px 18px 8px;
-  }
-
-  .top-bar__menu {
-    display: inline-flex;
   }
 
   .top-bar__tools {

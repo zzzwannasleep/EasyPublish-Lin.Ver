@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, useTemplateRef, watch } from 'vue'
+import { computed, onMounted, reactive, ref, useTemplateRef } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import { useDark, useToggle } from '@vueuse/core'
 import {
@@ -16,7 +16,7 @@ import { type LocaleCode, useI18n } from './i18n'
 const route = useRoute()
 const isDark = useDark()
 const toggleDark = useToggle(isDark)
-const sidebarOpen = ref(false)
+const sidebarExpanded = ref(true)
 const { locale, localeOptions, setLocale, t } = useI18n()
 
 document.body.style.overflow = 'hidden'
@@ -67,19 +67,8 @@ const navItems = computed(() => [
 const pageTitle = computed(() => t((route.meta.titleKey as string) ?? 'app.defaultTitle'))
 const pageSubtitle = computed(() => t((route.meta.subtitleKey as string) ?? 'app.defaultSubtitle'))
 
-watch(
-  () => route.fullPath,
-  () => {
-    sidebarOpen.value = false
-  },
-)
-
 function toggleSidebar() {
-  sidebarOpen.value = !sidebarOpen.value
-}
-
-function closeSidebar() {
-  sidebarOpen.value = false
+  sidebarExpanded.value = !sidebarExpanded.value
 }
 
 function winClose() {
@@ -261,7 +250,7 @@ async function removeValidation() {
       :title="pageTitle"
       :subtitle="pageSubtitle"
       :dark="isDark"
-      :sidebar-open="sidebarOpen"
+      :sidebar-expanded="sidebarExpanded"
       :locale="locale"
       :locale-options="localeOptions"
       @close="winClose"
@@ -269,7 +258,6 @@ async function removeValidation() {
       @minimize="winMini"
       @toggle-theme="toggleDark()"
       @toggle-sidebar="toggleSidebar"
-      @close-sidebar="closeSidebar"
       @change-locale="(value) => setLocale(value as LocaleCode)"
     >
       <template #utility>

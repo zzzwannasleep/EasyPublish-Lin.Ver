@@ -254,8 +254,8 @@ async function submitCreate() {
 .episode-create__item :deep(.el-input__wrapper) {
   min-height: 48px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.84);
-  box-shadow: none;
+  background: var(--field-bg);
+  box-shadow: var(--field-shadow);
 }
 
 .episode-create__actions {

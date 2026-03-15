@@ -14,10 +14,12 @@ type NavItem = {
 const props = defineProps<{
   items: NavItem[]
   currentPath: string
+  expanded: boolean
 }>()
 
 const emit = defineEmits<{
   navigate: []
+  toggleSidebar: []
 }>()
 
 const { t } = useI18n()
@@ -35,7 +37,7 @@ function handleNavigate(navigate: () => void) {
 </script>
 
 <template>
-  <nav class="sidebar-nav">
+  <nav class="sidebar-nav" :class="{ 'sidebar-nav--collapsed': !expanded }">
     <div class="sidebar-nav__header">
       <div class="sidebar-nav__brand">
         <span class="sidebar-nav__brand-icon" aria-hidden="true">
@@ -50,8 +52,36 @@ function handleNavigate(navigate: () => void) {
             />
           </svg>
         </span>
-        <h2 class="sidebar-nav__title">{{ t('nav.title') }}</h2>
+        <h2 v-if="expanded" class="sidebar-nav__title">{{ t('nav.title') }}</h2>
       </div>
+      <button
+        class="sidebar-nav__toggle"
+        type="button"
+        :aria-label="expanded ? 'Collapse sidebar' : 'Expand sidebar'"
+        :title="expanded ? 'Collapse sidebar' : 'Expand sidebar'"
+        @click="emit('toggleSidebar')"
+      >
+        <svg v-if="expanded" viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+          <path
+            d="M14.25 5.25L7.5 12l6.75 6.75"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1.8"
+          />
+        </svg>
+        <svg v-else viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+          <path
+            d="M9.75 5.25L16.5 12l-6.75 6.75"
+            fill="none"
+            stroke="currentColor"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="1.8"
+          />
+        </svg>
+      </button>
     </div>
     <div class="sidebar-nav__list">
       <RouterLink
@@ -65,12 +95,14 @@ function handleNavigate(navigate: () => void) {
           class="sidebar-nav__item"
           :class="{ 'is-active': isActive(item) }"
           type="button"
+          :aria-label="item.label"
+          :title="expanded ? undefined : item.label"
           @click="handleNavigate(navigate)"
         >
           <span class="sidebar-nav__icon">
             <el-icon><component :is="item.icon" /></el-icon>
           </span>
-          <span class="sidebar-nav__meta">
+          <span v-if="expanded" class="sidebar-nav__meta">
             <span class="sidebar-nav__label">{{ item.label }}</span>
             <span class="sidebar-nav__caption">{{ item.caption }}</span>
           </span>
@@ -90,6 +122,10 @@ function handleNavigate(navigate: () => void) {
 }
 
 .sidebar-nav__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   padding: 6px 4px 8px;
 }
 
@@ -97,6 +133,9 @@ function handleNavigate(navigate: () => void) {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+  flex: 1;
+  min-height: 32px;
 }
 
 .sidebar-nav__brand-icon {
@@ -119,6 +158,39 @@ function handleNavigate(navigate: () => void) {
   font-size: 26px;
   line-height: 1.02;
   letter-spacing: -0.04em;
+}
+
+.sidebar-nav__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.55), transparent 100%),
+    var(--bg-panel);
+  color: var(--text-secondary);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    background 160ms ease;
+}
+
+.sidebar-nav__toggle:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.sidebar-nav__toggle svg {
+  width: 18px;
+  height: 18px;
 }
 
 .sidebar-nav__list {
@@ -180,5 +252,40 @@ function handleNavigate(navigate: () => void) {
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.sidebar-nav--collapsed {
+  gap: 18px;
+}
+
+.sidebar-nav--collapsed .sidebar-nav__header,
+.sidebar-nav--collapsed .sidebar-nav__list {
+  width: 100%;
+}
+
+.sidebar-nav--collapsed .sidebar-nav__header {
+  align-items: center;
+  padding-inline: 0;
+}
+
+.sidebar-nav--collapsed .sidebar-nav__item {
+  justify-content: center;
+  width: 72px;
+  padding: 12px 0;
+  margin: 0 auto;
+}
+
+.sidebar-nav--collapsed .sidebar-nav__item:hover {
+  transform: translateY(-1px);
+}
+
+.sidebar-nav--collapsed .sidebar-nav__icon {
+  width: 46px;
+  height: 46px;
+}
+
+.sidebar-nav--collapsed .sidebar-nav__toggle {
+  width: 34px;
+  height: 34px;
 }
 </style>
