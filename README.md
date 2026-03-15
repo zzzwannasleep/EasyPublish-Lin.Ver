@@ -1,6 +1,6 @@
-# Nexus Publish
+# EasyPublish-Lin.Ver
 
-`Nexus Publish` 是一个基于 Electron + Vue 3 + TypeScript 的桌面发布工作台，面向 PT / NexusPHP 发布流程。这个仓库仍然沿用 `EasyPublish-Lin.Ver` 的历史仓库名，但当前桌面应用、构建产物和后续重构方向都已经切换到 `Nexus Publish`。
+`EasyPublish-Lin.Ver` 是一个基于 Electron + Vue 3 + TypeScript 的桌面发布工作台，面向 PT / NexusPHP 发布流程。这个仓库仍然沿用 `EasyPublish-Lin.Ver` 的历史仓库名，但当前桌面应用、构建产物和后续重构方向都已经切换到 `EasyPublish-Lin.Ver`。
 
 ## 当前定位
 
@@ -69,3 +69,7 @@ npm run build:linux
 
 - Electron 应用已经在仓库根目录运行和打包
 - 旧的 Tauri / Rust 原型不再作为当前主工作区的一部分
+
+二改自：https://github.com/vcb-s/EasyPublish
+二改自：https://github.com/vcb-s/EasyPublish
+二改自：https://github.com/vcb-s/EasyPublish
