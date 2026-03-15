@@ -423,6 +423,12 @@ namespace Project {
   export function inheritSeriesEpisodeVariants(msg: string) {
     return projectService.inheritSeriesEpisodeVariants(msg)
   }
+  export function duplicateSeriesVariant(msg: string) {
+    return projectService.duplicateSeriesVariant(msg)
+  }
+  export function removeSeriesVariant(msg: string) {
+    return projectService.removeSeriesVariant(msg)
+  }
   export function activateSeriesVariant(msg: string) {
     return projectService.activateSeriesVariant(msg)
   }

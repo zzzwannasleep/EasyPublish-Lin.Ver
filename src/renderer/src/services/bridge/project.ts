@@ -74,6 +74,14 @@ export const projectBridge = {
     )
   },
 
+  duplicateSeriesVariant(input: SeriesVariantDraftInput) {
+    return parseResult<SeriesVariantPayload>(window.projectAPI.duplicateSeriesVariant(JSON.stringify(input)))
+  },
+
+  removeSeriesVariant(input: SeriesVariantDraftInput) {
+    return parseResult<SeriesEpisodePayload>(window.projectAPI.removeSeriesVariant(JSON.stringify(input)))
+  },
+
   activateSeriesVariant(input: SeriesVariantDraftInput) {
     return parseResult<SeriesVariantPayload>(window.projectAPI.activateSeriesVariant(JSON.stringify(input)))
   },

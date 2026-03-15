@@ -21,6 +21,8 @@ export const projectAPI = {
     await ipcRenderer.invoke('project_removeSeriesPublishProfile', msg),
   inheritSeriesEpisodeVariants: async (msg: string) =>
     await ipcRenderer.invoke('project_inheritSeriesEpisodeVariants', msg),
+  duplicateSeriesVariant: async (msg: string) => await ipcRenderer.invoke('project_duplicateSeriesVariant', msg),
+  removeSeriesVariant: async (msg: string) => await ipcRenderer.invoke('project_removeSeriesVariant', msg),
   activateSeriesVariant: async (msg: string) => await ipcRenderer.invoke('project_activateSeriesVariant', msg),
   syncSeriesVariantFromDraft: async (msg: string) => await ipcRenderer.invoke('project_syncSeriesVariantFromDraft', msg),
   getProjectStats: async () => await ipcRenderer.invoke('project_getProjectStats'),

@@ -540,6 +540,14 @@ const workflow = {
   'seriesWorkspace.variants.card.progress.failed': '失败 {count}',
   'seriesWorkspace.variants.card.refill': '补齐缺失站点',
   'seriesWorkspace.variants.card.refillReady': '已载入版本“{variant}”，可继续补发这些站点：{sites}',
+  'seriesWorkspace.variants.card.duplicate': '复制版本',
+  'seriesWorkspace.variants.card.duplicateSuccess': '已复制版本“{source}”为“{variant}”',
+  'seriesWorkspace.variants.card.remove': '删除版本',
+  'seriesWorkspace.variants.card.removeTitle': '删除版本',
+  'seriesWorkspace.variants.card.removeConfirm': '确定删除版本“{variant}”吗？对应版本目录也会一并移除。',
+  'seriesWorkspace.variants.card.removeSuccess': '已删除版本“{variant}”',
+  'seriesWorkspace.variants.card.removeActiveSuccess':
+    '已删除当前激活版本“{variant}”，编辑器已收起；如需继续修改，请重新载入其他版本。',
   'seriesWorkspace.variants.card.titleEmpty': '沿用当前草稿标题',
 } as const
 

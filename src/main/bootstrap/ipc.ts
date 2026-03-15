@@ -60,6 +60,8 @@ type ProjectHandlers = {
   saveSeriesVariantTemplate: (msg: string) => Asyncish<unknown>
   removeSeriesVariantTemplate: (msg: string) => Asyncish<unknown>
   inheritSeriesEpisodeVariants: (msg: string) => Asyncish<unknown>
+  duplicateSeriesVariant: (msg: string) => Asyncish<unknown>
+  removeSeriesVariant: (msg: string) => Asyncish<unknown>
   activateSeriesVariant: (msg: string) => Asyncish<unknown>
   syncSeriesVariantFromDraft: (msg: string) => Asyncish<unknown>
   getProjectStats: () => Asyncish<unknown>
@@ -149,6 +151,8 @@ export function registerIpcHandlers({ Global, BT, Forum, Project, Site, Log, Tas
   ipcMain.handle('project_saveSeriesVariantTemplate', (_event, msg) => Project.saveSeriesVariantTemplate(msg))
   ipcMain.handle('project_removeSeriesVariantTemplate', (_event, msg) => Project.removeSeriesVariantTemplate(msg))
   ipcMain.handle('project_inheritSeriesEpisodeVariants', (_event, msg) => Project.inheritSeriesEpisodeVariants(msg))
+  ipcMain.handle('project_duplicateSeriesVariant', (_event, msg) => Project.duplicateSeriesVariant(msg))
+  ipcMain.handle('project_removeSeriesVariant', (_event, msg) => Project.removeSeriesVariant(msg))
   ipcMain.handle('project_activateSeriesVariant', (_event, msg) => Project.activateSeriesVariant(msg))
   ipcMain.handle('project_syncSeriesVariantFromDraft', (_event, msg) => Project.syncSeriesVariantFromDraft(msg))
   ipcMain.handle('project_getProjectStats', () => Project.getProjectStats())

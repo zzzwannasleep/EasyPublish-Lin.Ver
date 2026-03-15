@@ -147,6 +147,8 @@ const isCreatingVariant = ref(false)
 const isInheritingVariants = ref(false)
 const activatingVariantId = ref<number | null>(null)
 const syncingVariantId = ref<number | null>(null)
+const duplicatingVariantId = ref<number | null>(null)
+const removingVariantId = ref<number | null>(null)
 const removingProfileId = ref<number | null>(null)
 const workspaceError = ref('')
 const siteCatalogError = ref('')
@@ -2326,6 +2328,84 @@ async function syncVariantFromDraft(episode: SeriesProjectEpisode, variant: Seri
   }
 }
 
+async function duplicateVariant(episode: SeriesProjectEpisode, variant: SeriesProjectVariant) {
+  duplicatingVariantId.value = variant.id
+  try {
+    const result = await projectBridge.duplicateSeriesVariant({
+      projectId: props.project.id,
+      episodeId: episode.id,
+      variantId: variant.id,
+    })
+    if (!result.ok) {
+      ElMessage.error(result.error.message)
+      return
+    }
+
+    workspace.value = result.data.workspace
+    syncSelectedEpisode(result.data.episode.id)
+    initializeProfileEditor()
+    ElMessage.success(
+      t('seriesWorkspace.variants.card.duplicateSuccess', {
+        source: variant.name,
+        variant: result.data.variant.name,
+      }),
+    )
+  } finally {
+    duplicatingVariantId.value = null
+  }
+}
+
+async function removeVariant(episode: SeriesProjectEpisode, variant: SeriesProjectVariant) {
+  const wasActive = isActiveVariant(episode.id, variant.id)
+
+  try {
+    await ElMessageBox.confirm(
+      t('seriesWorkspace.variants.card.removeConfirm', { variant: variant.name }),
+      t('seriesWorkspace.variants.card.removeTitle'),
+      {
+        confirmButtonText: t('common.delete'),
+        cancelButtonText: t('common.cancel'),
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+
+  removingVariantId.value = variant.id
+  try {
+    const result = await projectBridge.removeSeriesVariant({
+      projectId: props.project.id,
+      episodeId: episode.id,
+      variantId: variant.id,
+    })
+    if (!result.ok) {
+      ElMessage.error(result.error.message)
+      return
+    }
+
+    workspace.value = result.data.workspace
+    syncSelectedEpisode(result.data.episode.id)
+    initializeProfileEditor()
+
+    if (wasActive) {
+      draftConfig.value = null
+      setEditorVisible(false)
+    }
+
+    ElMessage.success(
+      t(
+        wasActive
+          ? 'seriesWorkspace.variants.card.removeActiveSuccess'
+          : 'seriesWorkspace.variants.card.removeSuccess',
+        { variant: variant.name },
+      ),
+    )
+  } finally {
+    removingVariantId.value = null
+  }
+}
+
 function isActiveVariant(episodeId: number, variantId: number) {
   return workspace.value?.activeEpisodeId === episodeId && workspace.value.activeVariantId === variantId
 }
@@ -3266,6 +3346,23 @@ watch(
                   @click="refillVariantPublishTargets(selectedEpisode, variant)"
                 >
                   {{ t('seriesWorkspace.variants.card.refill') }}
+                </el-button>
+                <el-button
+                  size="small"
+                  plain
+                  :loading="duplicatingVariantId === variant.id"
+                  @click="duplicateVariant(selectedEpisode, variant)"
+                >
+                  {{ t('seriesWorkspace.variants.card.duplicate') }}
+                </el-button>
+                <el-button
+                  size="small"
+                  plain
+                  type="danger"
+                  :loading="removingVariantId === variant.id"
+                  @click="removeVariant(selectedEpisode, variant)"
+                >
+                  {{ t('seriesWorkspace.variants.card.remove') }}
                 </el-button>
               </div>
             </article>

@@ -65,6 +65,8 @@ export interface ProjectAPI {
   saveSeriesVariantTemplate: (msg: string) => Promise<string>
   removeSeriesVariantTemplate: (msg: string) => Promise<string>
   inheritSeriesEpisodeVariants: (msg: string) => Promise<string>
+  duplicateSeriesVariant: (msg: string) => Promise<string>
+  removeSeriesVariant: (msg: string) => Promise<string>
   activateSeriesVariant: (msg: string) => Promise<string>
   syncSeriesVariantFromDraft: (msg: string) => Promise<string>
   getProjectStats: () => Promise<string>

@@ -1126,6 +1126,23 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     return getVariantPresetName(videoProfile, subtitleProfile)
   }
 
+  function resolveCopiedVariantName(name: string, existingVariants: SeriesProjectVariant[]) {
+    const trimmedName = name.trim() || 'variant'
+    const baseName = `${trimmedName} 副本`
+    const existingNames = new Set(existingVariants.map(variant => normalizeVariantName(variant.name)))
+
+    if (!existingNames.has(normalizeVariantName(baseName))) {
+      return baseName
+    }
+
+    let suffix = 2
+    while (existingNames.has(normalizeVariantName(`${baseName} ${suffix}`))) {
+      suffix += 1
+    }
+
+    return `${baseName} ${suffix}`
+  }
+
   function hasVariantConflict(
     episode: SeriesProjectEpisode,
     name: string,
@@ -2118,6 +2135,157 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     }
   }
 
+  async function duplicateSeriesVariant(msg: string) {
+    try {
+      const input: SeriesVariantDraftInput = JSON.parse(msg)
+      const { projectId, episodeId, variantId } = input
+      const task = projectStore.findLegacyTaskById(projectId)
+      if (!task) {
+        return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${projectId} does not exist`))
+      }
+
+      const project = projectStore.getProjectById(projectId)
+      if (!project || project.projectMode !== 'episode') {
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `Project ${projectId} is not in series mode`))
+      }
+
+      const workspace = readSeriesWorkspace(project.id, task.path)
+      const episode = workspace.episodes.find(item => item.id === episodeId)
+      if (!episode) {
+        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `Episode ${episodeId} does not exist`))
+      }
+
+      const variant = episode.variants.find(item => item.id === variantId)
+      if (!variant) {
+        return JSON.stringify(fail('SERIES_VARIANT_NOT_FOUND', `Variant ${variantId} does not exist`))
+      }
+
+      const sourceConfigPath = getVariantConfigPath(task.path, episode, variant)
+      if (!fs.existsSync(sourceConfigPath)) {
+        return JSON.stringify(
+          fail('SERIES_VARIANT_CONFIG_NOT_FOUND', `Variant config for ${variant.name} does not exist`),
+        )
+      }
+
+      const timestamp = new Date().toISOString()
+      const existingDirectoryNames = episode.variants.map(item => item.directoryName)
+      const nextName = resolveCopiedVariantName(variant.name, episode.variants)
+      const nextVariant = buildSeriesVariant(episode, {
+        id: Date.now(),
+        name: nextName,
+        videoProfile:
+          variant.videoProfile && variant.videoProfile !== 'custom' ? undefined : variant.videoProfile,
+        subtitleProfile:
+          variant.subtitleProfile && variant.subtitleProfile !== 'custom' ? undefined : variant.subtitleProfile,
+        publishProfileId: variant.publishProfileId,
+        publishProfileName: variant.publishProfileName,
+        publishProfileSnapshot: clonePublishProfileSnapshot(variant.publishProfileSnapshot),
+        targetSites: variant.targetSites,
+        title: variant.title,
+        createdAt: timestamp,
+        existingDirectoryNames,
+      })
+      copyVariantConfig(sourceConfigPath, getVariantConfigPath(task.path, episode, nextVariant))
+
+      const nextVariantWithSummary = applyVariantSummary(
+        nextVariant,
+        readVariantConfigSummary(task.path, episode, nextVariant),
+      )
+      const nextEpisode: SeriesProjectEpisode = {
+        ...episode,
+        variants: [...episode.variants, nextVariantWithSummary],
+        variantCount: episode.variants.length + 1,
+        updatedAt: timestamp,
+      }
+      writeEpisodeRecord(task.path, nextEpisode)
+
+      const nextWorkspace: SeriesProjectWorkspace = {
+        ...replaceEpisode(workspace, nextEpisode),
+        activeEpisodeId: workspace.activeEpisodeId ?? nextEpisode.id,
+        activeVariantId: workspace.activeVariantId,
+        updatedAt: timestamp,
+      }
+      writeSeriesWorkspace(task.path, nextWorkspace)
+
+      notifyProjectDataChanged()
+      return JSON.stringify(
+        ok({
+          episode: nextEpisode,
+          variant: nextVariantWithSummary,
+          workspace: hydrateSeriesWorkspace(task.path, nextWorkspace),
+        }),
+      )
+    } catch (err) {
+      dialog.showErrorBox('闂備焦瀵ч悷銊╊敋?', (err as Error).message)
+      return JSON.stringify(
+        fail('SERIES_VARIANT_DUPLICATE_FAILED', 'Unable to duplicate series variant', (err as Error).message),
+      )
+    }
+  }
+
+  async function removeSeriesVariant(msg: string) {
+    try {
+      const input: SeriesVariantDraftInput = JSON.parse(msg)
+      const { projectId, episodeId, variantId } = input
+      const task = projectStore.findLegacyTaskById(projectId)
+      if (!task) {
+        return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${projectId} does not exist`))
+      }
+
+      const project = projectStore.getProjectById(projectId)
+      if (!project || project.projectMode !== 'episode') {
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `Project ${projectId} is not in series mode`))
+      }
+
+      const workspace = readSeriesWorkspace(project.id, task.path)
+      const episode = workspace.episodes.find(item => item.id === episodeId)
+      if (!episode) {
+        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `Episode ${episodeId} does not exist`))
+      }
+
+      const variant = episode.variants.find(item => item.id === variantId)
+      if (!variant) {
+        return JSON.stringify(fail('SERIES_VARIANT_NOT_FOUND', `Variant ${variantId} does not exist`))
+      }
+
+      const timestamp = new Date().toISOString()
+      const activeVariantRemoved =
+        workspace.activeEpisodeId === episode.id && workspace.activeVariantId === variant.id
+
+      fs.rmSync(getVariantDirectoryPath(task.path, episode, variant), { recursive: true, force: true })
+
+      const nextEpisode: SeriesProjectEpisode = {
+        ...episode,
+        variants: episode.variants.filter(item => item.id !== variant.id),
+        variantCount: Math.max(episode.variants.length - 1, 0),
+        updatedAt: timestamp,
+      }
+      writeEpisodeRecord(task.path, nextEpisode)
+
+      if (activeVariantRemoved) {
+        replaceLegacyTaskPublishState(task, undefined)
+        await projectStore.write()
+      }
+
+      const nextWorkspace: SeriesProjectWorkspace = {
+        ...replaceEpisode(workspace, nextEpisode),
+        activeEpisodeId:
+          activeVariantRemoved && workspace.activeEpisodeId === episode.id ? episode.id : workspace.activeEpisodeId,
+        activeVariantId: activeVariantRemoved ? undefined : workspace.activeVariantId,
+        updatedAt: timestamp,
+      }
+      writeSeriesWorkspace(task.path, nextWorkspace)
+
+      notifyProjectDataChanged()
+      return JSON.stringify(ok({ episode: nextEpisode, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
+    } catch (err) {
+      dialog.showErrorBox('闂備焦瀵ч悷銊╊敋?', (err as Error).message)
+      return JSON.stringify(
+        fail('SERIES_VARIANT_REMOVE_FAILED', 'Unable to remove series variant', (err as Error).message),
+      )
+    }
+  }
+
   async function activateSeriesVariant(msg: string) {
     try {
       const input: SeriesVariantDraftInput = JSON.parse(msg)
@@ -2352,6 +2520,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     saveSeriesVariantTemplate,
     removeSeriesVariantTemplate,
     inheritSeriesEpisodeVariants,
+    duplicateSeriesVariant,
+    removeSeriesVariant,
     activateSeriesVariant,
     syncSeriesVariantFromDraft,
     getProjectStats,

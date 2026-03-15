@@ -609,6 +609,15 @@ const workflow = {
   'seriesWorkspace.variants.card.refill': 'Refill Missing Sites',
   'seriesWorkspace.variants.card.refillReady':
     'Variant "{variant}" is loaded. Continue in the publish panel for these sites: {sites}',
+  'seriesWorkspace.variants.card.duplicate': 'Duplicate',
+  'seriesWorkspace.variants.card.duplicateSuccess': 'Duplicated "{source}" as "{variant}"',
+  'seriesWorkspace.variants.card.remove': 'Delete',
+  'seriesWorkspace.variants.card.removeTitle': 'Delete Variant',
+  'seriesWorkspace.variants.card.removeConfirm':
+    'Delete variant "{variant}"? Its variant directory will be removed too.',
+  'seriesWorkspace.variants.card.removeSuccess': 'Deleted variant "{variant}"',
+  'seriesWorkspace.variants.card.removeActiveSuccess':
+    'Deleted the active variant "{variant}". The editor has been collapsed; load another variant to continue.',
   'seriesWorkspace.variants.card.titleEmpty': 'Keep the current draft title',
   'seriesWorkspace.future.title': 'Next Structure',
   'seriesWorkspace.future.text': 'Next, this workspace can grow batch helpers like inherit-from-previous and preset-generated 1080p/2160p subtitle variants.',
