@@ -15,18 +15,18 @@ const projects = {
   'projectCreate.panel.eyebrow': 'Project Setup',
   'projectCreate.panel.title': 'Initialize Release Workspace',
   'projectCreate.panel.description':
-    'Choose single-episode or feature/movie mode first, then continue into the matching create form.',
+    'Choose series or feature/movie mode first, then continue into the matching create form.',
   'create.mode.dialog.title': 'Choose Project Mode',
   'create.mode.dialog.description':
-    'Decide whether this is a single-episode release or a feature/movie release before selecting the detailed flow.',
+    'Decide whether this is a series release or a feature/movie release before selecting the detailed flow.',
   'create.mode.dialog.open': 'Choose Mode',
   'create.mode.current': 'Current Mode',
   'create.mode.unselected': 'Not selected yet',
   'create.mode.back': 'Choose another mode',
-  'create.mode.episode.label': 'Single Episode',
+  'create.mode.episode.label': 'Series',
   'create.mode.episode.description':
-    'Best for frequent episode releases with explicit target-site tracking and missing-publish reminders.',
-  'create.mode.episode.action': 'Open episode form',
+    'Best for ongoing episodic releases with explicit target-site tracking and missing-publish reminders.',
+  'create.mode.episode.action': 'Open series form',
   'create.mode.feature.label': 'Feature / Movie',
   'create.mode.feature.description':
     'Keep the existing quick, file-import, and template-based creation flows for full releases.',
@@ -51,19 +51,19 @@ const projects = {
   'create.success.created': 'Project created. Opening the editor workspace.',
   'create.feature.actionsText':
     'Feature and movie projects keep the existing quick, file, and template creation paths.',
-  'create.episode.title': 'Create Episode Workspace',
+  'create.episode.title': 'Create Series Workspace',
   'create.episode.description':
-    'Create the episode project shell first, then continue into the dedicated episode editor for titles, targets, torrents, and notes.',
+    'Create the series project shell first, then enter the series workspace and open the current release draft from there.',
   'create.episode.alert':
-    'Episode projects go straight into the dedicated episode editor instead of the legacy long form.',
+    'Series-mode projects land in the series workspace first, then expand the current release draft from there.',
   'create.episode.nameHelp':
-    'A series-plus-episode naming pattern makes later catch-up publishing much easier to scan.',
+    'A series-based naming pattern makes later catch-up publishing much easier to scan.',
   'create.episode.directoryHelp':
-    'Use a dedicated working folder for episode projects or keep the default app-managed path.',
+    'Use a dedicated working folder for series projects or keep the default app-managed path.',
   'create.episode.nextTitle': 'Next Step',
   'create.episode.nextDescription':
-    'After creation, the dedicated episode editor opens so you can continue with target sites, torrent file, and publish title.',
-  'create.episode.success': 'Episode project created. Opening the dedicated editor.',
+    'After creation, the series workspace opens so you can review targets and expand the current release draft.',
+  'create.episode.success': 'Series project created. Opening the workspace.',
   'taskList.filter.showPublished': 'Show completed projects',
   'taskList.filter.mode.label': 'Project Mode',
   'taskList.filter.mode.all': 'All modes',

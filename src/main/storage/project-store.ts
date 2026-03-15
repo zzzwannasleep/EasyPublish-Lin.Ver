@@ -106,6 +106,25 @@ function getTimestamp(task: Config.Task, filePath?: string) {
   }
 }
 
+function getLatestTimestamp(task: Config.Task, filePaths: string[]) {
+  const timestamps = filePaths
+    .filter(filePath => fs.existsSync(filePath))
+    .map(filePath => {
+      try {
+        return fs.statSync(filePath).mtime.toISOString()
+      } catch {
+        return ''
+      }
+    })
+    .filter(Boolean)
+
+  if (timestamps.length === 0) {
+    return getTimestamp(task)
+  }
+
+  return timestamps.sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0]
+}
+
 function buildSiteLinks(task: Config.Task): Partial<Record<SiteId, string>> {
   return {
     bangumi: task.bangumi,
@@ -223,10 +242,14 @@ function getProjectSourceKind(task: Config.Task): ProjectSourceKind | undefined 
 function mapTaskToProject(task: Config.Task): PublishProject {
   const configPath = join(task.path, 'config.json')
   const createdAt = new Date(task.id).toISOString()
-  const updatedAt = getTimestamp(task, configPath)
+  const projectMode = getProjectMode(task)
+  const workspacePath = join(task.path, 'series-workspace.json')
+  const updatedAt =
+    projectMode === 'episode'
+      ? getLatestTimestamp(task, [configPath, workspacePath])
+      : getTimestamp(task, configPath)
   const publishResults = buildProjectPublishResults(task, updatedAt)
   const siteLinks = buildSiteLinks(task)
-  const projectMode = getProjectMode(task)
   const targetSites = readConfiguredTargetSites(configPath)
   const recordedSites = [...new Set(publishResults.map(item => item.siteId))]
 

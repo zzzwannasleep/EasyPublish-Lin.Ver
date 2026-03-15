@@ -1,828 +1,734 @@
-# 单集 / 合集电影双流程改造方案
+# 剧集项目 / 合集电影双流程改造方案
 
 ## 1. 背景
 
-当前项目的发布工作流，本质上仍以“一个项目对应一份完整发布物”为中心，流程顺序固定为：
+当前系统虽然已经引入了 `projectMode='episode' | 'feature'`，但现有实现本质上仍然是：
 
-1. 编辑项目
-2. 检查输出
-3. 发布种子
-4. 发布主站
-5. 完成结果
+- 一个项目对应一份 `config.json`
+- 一份 `config.json` 对应一个标题
+- 一个标题对应一个种子
+- 一个种子对应一组发布结果
 
-这套流程天然更适合：
+这套结构适合：
 
 - 合集
 - 剧场版
 - 电影
 - 一次性准备完整发布稿的项目
 
-但对于以下场景不够友好：
+但它不适合下面这种更常见的连载工作流：
 
-- 单集发布
-- 同时发布多部剧的单集
-- 高频重复发布
-- 需要快速判断“哪些站点还没发”的场景
+- 一个项目代表一部剧
+- 这部剧下面有很多集
+- 每一集又有多个版本
+- 每个版本可能有不同的清晰度、字幕、目标站点和发布进度
 
-现有问题主要不在“能不能发”，而在“工作流抽象不对”。
+例如：
 
-当前新建项目把“我要发什么”和“我怎么生成内容”混在了一起：
+- `Project`: 《某动画 第二季》
+- `Episode`: `01`
+- `Variant A`: `1080p / 简中`
+- `Variant B`: `2160p / 双语`
 
-- `quick`
-- `file`
-- `template`
+如果继续把“单集模式”理解成“一个项目就是一集”，后续会持续遇到这些问题：
 
-这三个字段更接近“内容来源 / 生成方式”，而不是“媒体类型”。
+1. 同一部剧无法集中管理
+2. 同一集多个版本会互相覆盖
+3. 发布进度只能按“当前这一条”看，不能按“整部剧”看
+4. 很难做“继承上一集”“补发缺失版本”“按剧分组”这类高频需求
 
-用户实际思考顺序通常是：
+因此，这条线不应该只停留在“给单集加个表单”，而应该把模型改成真正的“剧项目工作台”。
 
-1. 我现在发的是单集，还是合集 / 电影
-2. 如果是合集 / 电影，我是快速发、从文件导入，还是从模板生成
+## 2. 结论
 
-因此，项目创建入口和项目模型需要拆层。
+核心结论只有两条：
 
-## 2. 改造目标
+1. `feature` 模式继续保留“一个项目 = 一个可发布成品”的现有模型
+2. `episode` 模式应升级为“一个项目 = 一部剧”，真正可发布的最小单位改为“某一集的某个版本”
 
-本次改造的核心目标：
+也就是说，用户看到的模型应该是：
 
-1. 新建项目时，先选择媒体类型，再进入对应流程
-2. 保留旧流程用于合集 / 电影，不破坏现有稳定能力
-3. 为单集增加独立的新流程，不再复用旧的长表单
-4. 在单集流程里记录“计划发布站点”，从根源解决漏发布问题
-5. 让项目列表、发布页、完成页都能明确提示“还有哪些站点没发”
+- `剧项目`
+- `集`
+- `版本`
 
-## 3. 目标产品结构
+而不是：
 
-### 3.1 创建入口
+- `单集项目`
 
-新建项目时第一步只做一件事：
+为了控制改造成本，建议短期内保留内部字段值 `projectMode='episode'`，但用户可见文案从“单集模式”逐步改成“剧集模式”或“连载模式”。
 
-- 选择 `单集`
-- 选择 `合集 / 电影`
+## 3. 设计原则
 
-然后再进入对应工作流：
+### 3.1 先区分“容器”和“可发布单元”
 
-- `单集` -> 新发布流程
-- `合集 / 电影` -> 旧发布流程
+在剧集模式下：
 
-### 3.2 双流程结构
+- `Project` 是容器
+- `Variant` 才是可发布单元
 
-#### 单集流程
+这两个角色不能再混在一个结构里。
 
-建议固定为：
+### 3.2 先做层级拆分，再做效率功能
 
-1. 编辑项目
-2. 发布种子
-3. 完成结果
+如果底层还是“一项目一配置一发布结果”，那么下面这些功能都会越做越乱：
 
-特点：
+- 继承上一集
+- 一键复制版本规格
+- 同剧按集管理
+- 批量补发
+- 统计哪些版本还没发
 
-- 无检查输出页
-- 无主站发布页
-- 强化目标站点管理
-- 强化漏发提醒
+所以必须先拆模型，再做增强功能。
 
-#### 合集 / 电影流程
+### 3.3 默认值放上层，执行状态放下层
 
-继续使用现有旧流程：
+建议字段归属如下：
 
-1. 编辑项目
-2. 检查输出
-3. 发布种子
-4. 发布主站
-5. 完成结果
+- `Project`：剧名、季度、默认发布站点、默认分类、默认发布规格、标题模板、简介模板
+- `Episode`：集号、分集标题、分集备注、播出日期
+- `Variant`：种子、标题、清晰度、字幕语言、编码、目标站点覆盖、发布阶段、发布结果
 
-并保留现有旧入口：
+不要把所有字段都堆在同一张表单里。
 
-- 快速发布
-- 从文件导入
-- 从模板生成
+### 3.4 防漏发必须以 `Variant.targetSites` 为准
 
-## 4. 核心设计原则
+发布结果只能说明“已经发了什么”，不能说明“本来应该发什么”。
 
-### 4.1 媒体类型与内容来源分离
+因此：
 
-不要继续使用一个字段同时表达这两层信息。
+- 计划发布站点必须持久化
+- 应该挂在 `Variant` 上，而不是只挂在剧项目上
 
-建议拆成：
+原因很简单：
 
-- `projectMode`
-  - `episode`
-  - `feature`
+- 同一部剧的 `1080p / 简中` 和 `2160p / 双语` 目标站点可能不同
+- 同一集不同版本的补发进度也可能不同
 
-- `sourceKind`
-  - `quick`
-  - `file`
-  - `template`
-  - 仅在 `projectMode=feature` 时生效
+### 3.5 尽量复用现有发布器，不强行重写底层能力
 
-### 4.2 两套流程共用底层，不共用表单
+当前发布流程、内容生成、站点适配，本质上都更接近“发布某个版本”。
 
-共用：
+因此最稳的方案不是推翻它们，而是：
 
-- 项目存储
-- 工作目录
-- 账号 / Cookie / 代理
-- 发布执行
-- 结果持久化
-- 日志诊断
-- 项目列表和历史记录体系
+- 在上层新增剧项目和集的管理层
+- 在下层继续复用现有“单条发布配置”的执行链路
 
-分开：
+换句话说，现有 `episode` 编辑器更像未来的“版本编辑器”，而不是“剧项目编辑器”。
 
-- 新建项目页
-- 编辑表单
-- 工作流步骤图
-- 阶段跳转规则
-- 校验规则
-- 标题 / 简介生成逻辑
-- 完成前提醒逻辑
+## 4. 目标产品结构
 
-### 4.3 防漏发靠“计划目标站点”，不是靠结果反推
+### 4.1 创建入口
 
-这一点是本次改造的关键。
+新建项目第一步只做模式选择：
 
-当前很多页面只能看到“已经发布了什么”，看不到“本来应该发布什么”。
+- `剧集模式`
+- `合集 / 电影模式`
 
-必须显式记录：
+选择后分流：
 
-- 用户计划发到哪些站点
+- `剧集模式` -> 创建剧项目壳
+- `合集 / 电影模式` -> 继续走现有 `quick / file / template`
 
-然后基于：
-
-- `targetSites`
-- `publishResults`
-
-计算：
-
-- 已发布站点
-- 失败站点
-- 未发布站点
-
-## 5. 当前系统现状与问题拆解
-
-### 5.1 现有创建模型问题
-
-当前项目创建输入主要围绕 `sourceKind`：
+这里不应该再让用户在第一步面对：
 
 - `quick`
 - `file`
 - `template`
 
-问题：
+因为这三个概念描述的是“生成方式”，不是“我要发布什么”。
 
-1. 无法表达媒体类型
-2. UI 入口不符合用户心智
-3. 单集流程被迫挤在旧工作流里
-4. 后续判断会大量出现“如果是单集则……”的散乱分支
+### 4.2 剧集模式总流程
 
-### 5.2 现有阶段图问题
+推荐结构：
 
-当前阶段图固定为：
+1. 创建剧项目
+2. 进入剧项目主页
+3. 新增或选择某一集
+4. 在该集下新增一个或多个版本
+5. 打开某个版本进入编辑 / 生成 / 发布
+6. 在剧项目主页查看整体进度
 
-- `edit`
-- `review`
-- `torrent_publish`
-- `forum_publish`
-- `completed`
+### 4.3 合集 / 电影模式总流程
 
-问题：
+继续保留当前结构：
 
-1. 单集并不需要完整经过这些阶段
-2. 为了兼容单集，只能在现有页面里硬跳过
-3. 侧栏、完成页、项目列表都无法准确表达单集流程差异
+1. 创建项目
+2. 编辑项目
+3. 检查输出
+4. 发布种子
+5. 发布主站
+6. 完成结果
 
-### 5.3 现有漏发风险问题
+## 5. 数据模型建议
 
-当前“漏发布”的根源：
+### 5.1 命名建议
 
-1. 项目没有“目标站点计划”
-2. 完成页展示的是“已发生结果”，不是“目标完成情况”
-3. 项目列表只看已记录链接，不看未完成站点
-4. 发布页没有明确的“剩余目标站点”视角
+用户视角：
 
-## 6. 目标数据模型
+- `Project` = 项目
+- `Episode` = 集
+- `Variant` = 版本
 
-### 6.1 `ProjectSourceKind`
+实现视角建议逐步演进为：
 
-目标状态：
+- `Project`: 顶层项目
+- `PublishUnit`: 真正可发布单元
 
-- `quick`
-- `file`
-- `template`
+其中：
 
-不建议把 `episode` 继续作为长期 `sourceKind`。
+- `feature` 项目有且只有一个 `PublishUnit`
+- `episode` 项目有很多 `PublishUnit`，每个 `PublishUnit` 对应“某一集的某一版本”
 
-如果当前实现里已经把 `episode` 临时塞进 `sourceKind`，建议在后续重构中回收到 `projectMode`。
+如果短期不想一次性引入 `PublishUnit` 命名，也至少要在文档和代码层明确：
 
-### 6.2 新增 `ProjectMode`
+- 当前 `PublishProject` 更像“发布单元摘要”
+- 未来不能继续把它当成“剧项目”本身
 
-建议新增：
+### 5.2 顶层项目
 
 ```ts
 type ProjectMode = 'episode' | 'feature'
-```
 
-含义：
-
-- `episode`: 单集发布项目
-- `feature`: 合集 / 电影项目
-
-### 6.3 `CreateProjectInput`
-
-目标结构：
-
-```ts
-interface CreateProjectInput {
+interface ProjectSummary {
+  id: number
   name: string
-  workingDirectory: string
   projectMode: ProjectMode
-  sourceKind?: 'quick' | 'file' | 'template'
+  workingDirectory: string
+  status: 'draft' | 'publishing' | 'published'
+  createdAt: string
+  updatedAt: string
 }
 ```
 
-约束：
-
-- `projectMode='episode'` 时，`sourceKind` 可为空
-- `projectMode='feature'` 时，`sourceKind` 必填
-
-### 6.4 `PublishProject`
-
-目标新增字段：
+剧集项目建议扩展为：
 
 ```ts
-interface PublishProject {
-  projectMode: 'episode' | 'feature'
-  sourceKind?: 'quick' | 'file' | 'template'
-  targetSites: SiteId[]
+interface SeriesProject extends ProjectSummary {
+  projectMode: 'episode'
+  series: {
+    titleCN?: string
+    titleEN: string
+    titleJP?: string
+    seasonLabel?: string
+    releaseTeam?: string
+  }
+  defaults: {
+    targetSites: SiteId[]
+    categoryBangumi?: string
+    categoryNyaa?: string
+    sourceType?: string
+    videoCodec?: string
+    audioCodec?: string
+    summaryTemplate?: string
+    variantPresets: VariantPreset[]
+  }
+  stats: {
+    episodeCount: number
+    variantCount: number
+    pendingVariantCount: number
+    publishedVariantCount: number
+  }
 }
 ```
 
-说明：
-
-- `targetSites` 必须持久化
-- `targetSites` 优先来自项目配置
-- 不能再只从 `publishResults` 反推
-
-### 6.5 `Config.Task`
-
-旧任务记录需要兼容：
+合集 / 电影项目可以继续接近当前模型：
 
 ```ts
-type Task = {
-  ...
-  mode?: 'episode' | 'feature'
-  type?: 'quick' | 'file' | 'template'
+interface FeatureProject extends ProjectSummary {
+  projectMode: 'feature'
+  sourceKind: 'quick' | 'file' | 'template'
 }
 ```
 
-兼容规则：
-
-- 历史数据无 `mode` 时默认视为 `feature`
-- 历史数据无 `targetSites` 时允许为空
-
-### 6.6 `Config.PublishConfig`
-
-建议统一增加：
+### 5.3 集模型
 
 ```ts
-interface PublishConfig {
-  title: string
-  torrentPath: string
-  torrentName: string
-  category_bangumi: string
-  category_nyaa: string
-  targetSites?: SiteId[]
-  content: Content_file | Content_template | Content_episode
-}
-```
-
-### 6.7 `Content_episode`
-
-建议专门为单集模式定义独立内容结构：
-
-```ts
-interface Content_episode {
-  seriesTitleCN: string
-  seriesTitleEN: string
-  seriesTitleJP: string
-  seasonLabel?: string
+interface ProjectEpisode {
+  id: number
+  projectId: number
   episodeLabel: string
   episodeTitle?: string
-  releaseTeam: string
+  sortIndex: number
+  airDate?: string
+  note?: string
+  stats: {
+    variantCount: number
+    pendingVariantCount: number
+    publishedVariantCount: number
+  }
+  createdAt: string
+  updatedAt: string
+}
+```
+
+字段归属说明：
+
+- `episodeLabel`：`01`、`02`、`SP1`、`01-02`
+- `episodeTitle`：分集标题
+- `sortIndex`：用于稳定排序，不依赖字符串比较
+
+### 5.4 版本模型
+
+```ts
+interface EpisodeVariant {
+  id: number
+  projectId: number
+  episodeId: number
+  name: string
+  path: string
+  title: string
+  stage: 'edit' | 'torrent_publish' | 'completed'
+  status: 'draft' | 'publishing' | 'published'
+  targetSites: SiteId[]
+  publishResults: PublishResult[]
+  spec: {
+    sourceType: string
+    resolution: string
+    videoCodec: string
+    audioCodec: string
+    subtitleProfile: string
+    variantLabel?: string
+  }
+  torrentPath: string
+  createdAt: string
+  updatedAt: string
+}
+```
+
+这里有两个关键点：
+
+1. `resolution` 和 `subtitleProfile` 必须拆字段，不能只拼在标题里
+2. `targetSites` 必须在版本层可覆盖
+
+字幕建议不要只用一个自由字符串，但也不要一开始就过度枚举死：
+
+```ts
+type SubtitleProfile =
+  | 'chs'
+  | 'cht'
+  | 'eng'
+  | 'chs-eng'
+  | 'cht-eng'
+  | 'bilingual'
+  | 'custom'
+```
+
+如果用户的圈内命名是：
+
+- `简`
+- `繁`
+- `英`
+- `双语`
+
+完全可以在 UI 上用这些文案，底层再映射到稳定值。
+
+### 5.5 版本预设
+
+为了支持“同一部剧高频重复发不同版本”，建议增加版本预设：
+
+```ts
+interface VariantPreset {
+  id: string
+  name: string
   sourceType: string
   resolution: string
   videoCodec: string
   audioCodec: string
-  summary: string
+  subtitleProfile: string
   targetSites: SiteId[]
 }
 ```
 
-注意：
+例如：
 
-- 单集不要复用模板模式下的大量字段
-- 单集内容结构必须短、小、稳定
+- `1080p / 简中`
+- `2160p / 双语`
 
-## 7. 页面与交互改造
+新增一集时可以直接从预设生成多个版本草稿，而不是每次重复填写。
 
-### 7.1 新建项目入口
+### 5.6 当前 `config.json` 的定位
 
-#### 目标交互
+当前 `Config.PublishConfig` 仍然有价值，但未来它应该只代表“一个版本的发布配置”，而不是整个剧项目。
 
-点击“新建项目”后，先出现一个模式选择弹窗：
+因此建议：
 
-- 单集
-- 合集 / 电影
+- `feature` 项目：项目根目录直接保留当前 `config.json`
+- `episode` 项目：每个版本目录各自拥有一份 `config.json`
 
-要求：
+也就是说，在剧集模式下：
 
-1. 两个选项只讲清适用场景
-2. 不出现内部术语如 `quick`、`template`
-3. 选择后进入对应创建页
-4. 允许返回重选
+- `project.json` 描述剧项目
+- `episode.json` 描述某一集
+- `config.json` 描述某个版本
 
-#### 文案建议
+### 5.7 建议的目录结构
 
-- 单集：适合高频、连续、重复性强的单集发布
-- 合集 / 电影：适合完整稿件、模板生成、主站联动和一次性成片发布
+```text
+Series Project Root/
+  project.json
+  episodes/
+    E01/
+      episode.json
+      variants/
+        1080p-chs/
+          config.json
+          bangumi.html
+          nyaa.md
+          acgrip.bbcode
+          xxx.torrent
+        2160p-bilingual/
+          config.json
+          bangumi.html
+          nyaa.md
+          acgrip.bbcode
+          xxx.torrent
+    E02/
+      episode.json
+      variants/
+        ...
+```
 
-### 7.2 单集创建页
+这个结构的优点：
 
-应包含：
+1. 版本目录可以继续复用现有生成和发布逻辑
+2. 人工查看文件时也容易理解
+3. 后续做导入、复制、批量操作都更自然
 
-- 项目名
-- 工作目录
-- 基础标题信息
-- 集数 / 分集标题
-- 发布规格
-- 目标站点
+## 6. 字段归属建议
+
+为了避免未来表单爆炸，建议从一开始就把字段分清：
+
+### 6.1 放在剧项目上的字段
+
+- 剧名中英日
+- 季 / 篇章名称
+- 默认发布组
+- 默认 Bangumi / Nyaa 分类
+- 默认目标站点
+- 默认简介模板
+- 默认版本预设
+
+### 6.2 放在集上的字段
+
+- 集号
+- 分集标题
+- 分集备注
+- 播出日期
+
+### 6.3 放在版本上的字段
+
+- 清晰度
+- 字幕语言
+- 视频编码
+- 音频编码
+- 源类型
 - 种子文件
-- 简介 / 备注
-- 标题预览
+- 发布标题
+- 版本简介补充
+- 版本目标站点
+- 发布结果
 
-不应包含：
+一句话概括：
 
-- 模板模式的复杂成员字段
-- 长篇双语简介模板
-- 对比图导入
-- 主站预填写
-- MediaInfo 预填写
+- “这一整部剧共享的东西”放项目上
+- “这一集共享的东西”放集上
+- “这一版独有的东西”放版本上
 
-### 7.3 合集 / 电影创建页
+## 7. UI 与交互建议
 
-保留旧创建逻辑：
+### 7.1 新建项目页
 
-- 快速发布
-- 从文件导入
-- 从模板生成
+第一步：
 
-但它们应该出现在“合集 / 电影”模式下，而不是和“单集”混在同一层。
+- `剧集模式`
+- `合集 / 电影模式`
 
-### 7.4 项目详情步骤条
+第二步分流：
 
-#### 单集项目步骤条
+- 剧集模式：只创建剧项目壳，录入剧信息和默认预设
+- 合集 / 电影模式：继续现有 `quick / file / template`
 
-- 编辑项目
-- 发布种子
-- 完成结果
+### 7.2 剧项目主页
 
-#### 合集 / 电影项目步骤条
+剧项目主页应该成为剧集模式的主工作台，而不是一上来就进入当前的版本编辑表单。
 
-- 编辑项目
-- 检查输出
-- 发布种子
-- 发布主站
-- 完成结果
+建议包含：
 
-要求：
+- 剧信息卡片
+- 版本预设管理
+- 集列表
+- 最近待发布版本
+- 发布统计
+- “新增一集”
+- “从上一集复制”
 
-1. 同一个 `ProjectWorkflowView` 动态渲染步骤
-2. 路由图可继续复用现有结构
-3. 但 UI 展示和跳转规则必须按 `projectMode` 决定
+### 7.3 集详情页
 
-### 7.5 单集编辑器
+进入某一集后，重点应该是“版本列表”，而不是直接开始填发布内容。
 
-建议独立组件，不要硬塞到旧 `Edit.vue` 里。
+建议包含：
 
-组件职责：
+- 当前集基础信息
+- 版本列表
+- 每个版本的发布状态
+- 每个版本的目标站点完成度
+- “新增版本”
+- “从预设生成版本”
 
-- 维护单集字段
-- 生成标题建议
-- 记录目标站点
-- 保存 `config.json`
-- 生成可直接供旧发布器使用的简介文件
+### 7.4 版本编辑器
 
-建议文件：
+当前 `EpisodeEdit.vue` 建议逐步下沉为“版本编辑器”：
 
+- 录入标题
+- 录入种子
+- 调整版本规格
+- 选择目标站点
+- 生成 `html / md / bbcode`
+- 进入 BT 发布页
+
+也就是说，它未来更适合改名为：
+
+- `EpisodeVariantEdit.vue`
+
+而不应该承担整个剧项目的管理职责。
+
+### 7.5 发布页
+
+发布页仍然围绕“当前版本”工作，但需要补两个层次的提示：
+
+1. 当前版本还差哪些站点没发
+2. 当前剧项目还有哪些集 / 版本没完成
+
+第 1 层是主视角，第 2 层是辅助视角。
+
+### 7.6 完成页
+
+完成页不能再默认表达“整部剧都完成”，它只能表达：
+
+- 这个版本完成了什么
+- 还差哪些目标站点
+
+如果需要展示整部剧进度，应该回到剧项目主页看。
+
+### 7.7 项目列表
+
+项目列表在剧集模式下应展示聚合信息，而不是只展示一个版本的链接：
+
+- 剧项目名
+- 集数
+- 版本数
+- 未完成版本数
+- 最近更新
+- 快速进入最近未完成版本
+
+## 8. 与当前代码的对应关系
+
+下面这部分是为了让后续实现不走偏。
+
+### 8.1 当前实现的真实约束
+
+当前这些结构本质上都还是“单条发布配置”：
+
+- `src/shared/types/project.ts` 的 `PublishProject`
+- `src/config.d.ts` 的 `Content_episode`
+- `src/main/services/project-service.ts` 创建的 `config.json`
 - `src/renderer/src/components/EpisodeEdit.vue`
+- `src/main/services/content-service.ts` 的 `createWithEpisode`
 
-### 7.6 旧编辑器
+它们都只适合代表“一个可发布版本”。
 
-旧 `Edit.vue` 继续只服务合集 / 电影。
+因此，不建议继续扩展它们去兼容“剧项目 + 多集 + 多版本”的所有信息。
 
-要求：
+### 8.2 推荐的重构边界
 
-1. 尽量不改原行为
-2. 尽量不插入单集判断
-3. 通过外层壳做模式分流
+建议把当前模型拆成两层：
 
-### 7.7 发布页
+1. 顶层 `Project`
+2. 发布单元 `Variant`
 
-#### 单集项目
+过渡期可以这样理解：
 
-重点能力：
+- 当前 `feature` 项目的 `Project` 和 `Variant` 是 1:1
+- 当前 `episode` 项目在未来会变成：
+  - 一个剧项目
+  - 一个集
+  - 一个版本
 
-- 目标站点数量
-- 已发布数量
-- 待发布数量
-- 发布剩余目标站点
-- 完成前二次确认
+### 8.3 旧 `episode` 数据的迁移映射
 
-#### 合集 / 电影项目
+如果历史上已经创建了一批 `episode` 项目，迁移规则建议如下：
 
-保留当前旧行为
+1. 创建一个新的剧项目
+2. 从原 `config.json` 读取剧名、季信息
+3. 自动创建一个 `Episode`
+4. 自动创建一个 `Variant`
+5. 原 `publishResults` 全部挂到该 `Variant`
 
-### 7.8 完成页
+这样历史数据不会丢，但新的抽象层也能建立起来。
 
-完成页要明确区分：
+如果短期内不做自动迁移，也至少要允许：
 
-- 已发布
-- 失败
-- 未完成目标站点
+- 旧 `episode` 项目继续按旧方式打开
+- 新建的剧集模式项目走新结构
 
-要求：
+## 9. 推荐的实施顺序
 
-1. 如果仍有未发布目标站点，显示醒目警告
-2. 返回按钮能回到发布页继续补发
-3. 不要让用户误以为“进入完成页就代表全部完成”
-
-### 7.9 项目列表
-
-新增展示维度：
-
-- 项目模式
-- 待发布站点数量
-- 是否存在未完成目标站点
-
-建议：
-
-1. 单集项目显示 `待发布 N`
-2. 支持按 `单集 / 合集电影` 筛选
-3. 支持按“存在未完成站点”筛选
-
-## 8. 文件级改造清单
-
-下面按模块列出建议的改造点。
-
-### 8.1 共享类型层
-
-文件：
-
-- `src/shared/types/project.ts`
-- `src/config.d.ts`
-- `src/message.d.ts`
-
-任务：
-
-1. 新增 `ProjectMode`
-2. 调整 `CreateProjectInput`
-3. 调整 `PublishProject`
-4. 给 `Config.Task` 增加 `mode`
-5. 给 `Config.PublishConfig` 增加 `targetSites`
-6. 新增 `Content_episode`
-7. 保证旧数据兼容读取
-
-### 8.2 项目服务层
-
-文件：
-
-- `src/main/services/project-service.ts`
-
-任务：
-
-1. 创建项目时写入 `projectMode`
-2. `feature` 模式下继续处理 `sourceKind`
-3. `episode` 模式初始化单集专属默认配置
-4. 创建逻辑不要依赖旧 `sourceKind` 推断媒体类型
-
-### 8.3 项目存储层
-
-文件：
-
-- `src/main/storage/project-store.ts`
-
-任务：
-
-1. 读取 `projectMode`
-2. 读取配置中的 `targetSites`
-3. 构造项目对象时优先使用持久化的目标站点
-4. 旧项目缺失配置时按兼容逻辑补默认值
-5. 项目统计增加 `byMode`
-
-### 8.4 内容生成层
-
-文件：
-
-- `src/main/services/content-service.ts`
-
-任务：
-
-1. 增加 `createWithEpisode`
-2. 为单集模式生成简化版 `html / md / bbcode`
-3. 不复用长模板生成器
-4. 保证输出仍兼容旧 BT 发布器读取方式
-
-### 8.5 创建页桥接与展示层
-
-文件：
-
-- `src/renderer/src/services/bridge/project.ts`
-- `src/renderer/src/components/CreateTask.vue`
-- 建议新增：
-  - `src/renderer/src/components/ProjectModeSelectDialog.vue`
-  - `src/renderer/src/components/FeatureCreateForm.vue`
-  - `src/renderer/src/components/EpisodeCreateForm.vue`
-
-任务：
-
-1. 创建页先弹 `projectMode` 选择
-2. `feature` 模式里再选择 `quick / file / template`
-3. `episode` 模式进入独立创建表单
-
-### 8.6 项目编辑层
-
-文件：
-
-- `src/renderer/src/features/project-editor/ProjectEditorStage.vue`
-- `src/renderer/src/components/Edit.vue`
-- `src/renderer/src/components/EpisodeEdit.vue`
-
-任务：
-
-1. 根据 `projectMode` 渲染不同编辑器
-2. 保证项目上下文未加载前不误渲染旧编辑器
-3. 旧编辑器仅服务 `feature`
-4. 单集编辑器仅服务 `episode`
-
-### 8.7 工作流壳层
-
-文件：
-
-- `src/renderer/src/views/project-detail/ProjectWorkflowView.vue`
-- `src/renderer/src/router/index.ts`
-- `src/renderer/src/features/project-detail/project-context.ts`
-
-任务：
-
-1. 步骤条按 `projectMode` 动态生成
-2. 单集项目隐藏不需要的步骤
-3. “继续”逻辑按 `projectMode` 跳转
-
-### 8.8 发布页
-
-文件：
-
-- `src/renderer/src/features/publish-panel/TorrentPublishStage.vue`
-- `src/renderer/src/components/BTPublish.vue`
-- `src/renderer/src/features/publish-panel/NexusProjectPublishPanel.vue`
-
-任务：
-
-1. 单集项目默认不展示与当前场景无关的复杂面板
-2. 增加目标站点完成度统计
-3. 增加“发布剩余目标站点”按钮
-4. 完成前检测未发布目标站点
-5. 单集项目禁用无意义的下一阶段跳转
-
-### 8.9 完成页
-
-文件：
-
-- `src/renderer/src/features/publish-panel/PublishCompletionStage.vue`
-- `src/renderer/src/features/publish-panel/ProjectPublishHistoryPanel.vue`
-
-任务：
-
-1. 显示未完成目标站点
-2. 高亮风险状态
-3. 提供返回发布页补发入口
-
-### 8.10 项目列表与总览
-
-文件：
-
-- `src/renderer/src/components/TaskList.vue`
-- `src/renderer/src/views/dashboard/DashboardView.vue`
-- `src/renderer/src/services/project/presentation.ts`
-
-任务：
-
-1. 增加项目模式标签
-2. 增加待发布数量
-3. 总览页增加模式统计
-4. 最近项目优先暴露未完成单集项目
-
-### 8.11 文案与说明
-
-文件：
-
-- `src/renderer/src/locales/messages/zh-CN/projects.ts`
-- `src/renderer/src/locales/messages/zh-CN/workflow.ts`
-- `src/renderer/src/locales/messages/zh-CN/navigation.ts`
-- `src/renderer/src/locales/messages/en-US/*`
-- `GUIDE.md`
-- `QUICKSTART.md`
-
-任务：
-
-1. 统一文案
-2. 清理用户可见的内部术语混乱
-3. 增加单集模式说明
-
-## 9. 推荐的分阶段实施方案
-
-### Phase 1：模型拆分与兼容落地
+### Phase 1：先改术语和设计边界
 
 目标：
 
-- 建立 `projectMode`
-- 保持旧项目可用
+- 用户视角从“单集模式”改成“剧集模式”
+- 团队内部统一认知：真正可发布的是版本，不是剧项目
 
 任务：
 
-1. 类型层改造
-2. 存储层兼容
-3. 项目服务层改造
-4. 旧项目默认映射为 `feature`
+1. 更新文档
+2. 更新创建页文案
+3. 不急着改底层执行链
 
 验收：
 
-- 历史项目仍能打开
-- 新项目可以写入 `projectMode`
+- 后续开发不再把 `episode` 误解为“一项目一集”
 
-### Phase 2：新建项目入口重做
+### Phase 2：建立剧项目 / 集 / 版本三层结构
 
 目标：
 
-- 先选媒体类型，再选具体流程
+- 新增剧项目壳
+- 新增集与版本的存储结构
 
 任务：
 
-1. 增加模式选择弹窗
-2. 创建页分流
-3. `feature` 保留旧三种入口
-4. `episode` 进入新单集表单
+1. 新增顶层项目元数据
+2. 新增集记录
+3. 新增版本记录
+4. 建立版本目录结构
 
 验收：
 
-- 新建项目时，用户第一步一定看到 `单集 / 合集电影`
+- 一个剧项目下可以创建多集
+- 一集下可以创建多个版本
 
-### Phase 3：单集编辑器与内容生成
+### Phase 3：把当前单集编辑器下沉为版本编辑器
 
 目标：
 
-- 单集有独立编辑器和独立内容结构
+- 复用现有发布链
 
 任务：
 
-1. 完成 `EpisodeEdit.vue`
-2. 完成 `Content_episode`
-3. 完成 `createWithEpisode`
-4. 保证输出兼容旧发布器
+1. `EpisodeEdit.vue` 改造成版本编辑器
+2. `Content_episode` 只服务版本级配置
+3. `createWithEpisode` 只对版本目录生效
 
 验收：
 
-- 单集项目能完成内容生成并进入发布页
+- 任意一个版本都能独立生成内容并进入发布页
 
-### Phase 4：单集发布防漏发闭环
+### Phase 4：聚合展示与防漏发
 
 目标：
 
-- 单集流程真正具备防漏发能力
+- 让剧项目工作台真正有管理价值
 
 任务：
 
-1. 持久化 `targetSites`
-2. 发布页显示剩余目标站点
-3. 完成页显示未完成站点
-4. 项目列表显示待发布数量
+1. 剧项目主页显示集 / 版本统计
+2. 项目列表显示未完成版本数
+3. 发布页显示当前版本剩余目标站点
+4. 完成页禁止误导用户“整剧已完成”
 
 验收：
 
-- 少发一个站点时，发布页、完成页、项目列表都能看出来
+- 一眼看出哪个剧、哪一集、哪个版本还没发完
 
-### Phase 5：体验增强
+### Phase 5：效率增强
 
 目标：
 
-- 提高单集高频发布效率
+- 让剧集模式真正适合高频日常使用
 
-后续建议：
+任务：
 
-1. 从上一集继承
-2. 批量创建单集项目
-3. 按剧名分组
-4. 按未完成站点批量补发
+1. 从上一集复制
+2. 按版本预设批量生成
+3. 批量创建下一集
+4. 批量补发缺失站点
 
 ## 10. 验收标准
 
 ### 功能验收
 
-1. 新建项目时必须先看到模式选择
-2. 单集不能再进入旧长表单
-3. 合集 / 电影仍能完整走旧流程
-4. 单集项目可以完整发布到至少一个旧 BT 站点
-5. 单集项目若遗漏目标站点，必须有明确提醒
-6. 老项目仍能继续使用
+1. 新建剧集模式项目后，得到的是“剧项目工作台”，不是直接的一条单集发布记录
+2. 一个剧项目下可以有多集
+3. 一集下可以有多个版本
+4. 每个版本有独立的标题、种子、目标站点、发布结果
+5. 一个版本的发布失败不会污染其他版本状态
+6. 合集 / 电影模式保持现有能力不回退
 
 ### 交互验收
 
-1. 用户无需理解 `quick / file / template` 就能先选对大类
-2. 单集表单明显比旧表单更紧凑
-3. 发布页能直接看到“还差哪些站点”
-4. 完成页不再假装“全部完成”
+1. 用户创建项目时先按“我要发剧还是发电影”来思考
+2. 用户在剧项目页可以看到整体进度
+3. 用户在集页可以快速新增多个版本
+4. 用户在版本页可以继续沿用熟悉的发布流程
 
 ### 技术验收
 
-1. `npm run typecheck` 通过
-2. `npm run build` 通过
-3. 历史数据兼容读取
-4. 无破坏性迁移要求
+1. 现有内容生成和站点发布逻辑尽量复用
+2. 历史 `feature` 数据不需要破坏性迁移
+3. 历史 `episode` 数据有兼容策略
+4. 文件目录结构能支撑后续批量操作
 
-## 11. 风险与注意事项
+## 11. 明确不建议的方案
 
-### 11.1 最大风险：继续混用字段
+### 11.1 不建议继续把“单集项目”往上堆功能
 
-如果仍然让 `sourceKind` 同时承担“媒体类型”和“流程类型”职责，后续代码会越来越难维护。
+如果继续沿用当前“一项目一配置”的单集模型，再往上叠：
 
-### 11.2 第二风险：只改前端，不改项目数据模型
+- 多集
+- 多版本
+- 聚合进度
+- 继承复制
 
-如果只改表单，不记录 `targetSites`，漏发问题不会真正解决。
+最终只会得到一个越来越难维护的巨型对象。
 
-### 11.3 第三风险：把单集硬塞回旧编辑器
+### 11.2 不建议把多个版本塞进同一份 `config.json`
 
 这样会导致：
 
-1. 表单更臃肿
-2. 判断更复杂
-3. 单集体验无法真正变轻
+1. 发布状态不独立
+2. 文件产物互相覆盖
+3. 发布器无法复用
 
-### 11.4 第四风险：完成页仍只看成功链接
+### 11.3 不建议让项目级 `targetSites` 直接代表最终发布计划
 
-这样用户还是不知道“还有哪些目标站点没发”。
+项目级默认值可以有，但最终完成度必须按版本计算。
 
-## 12. 推荐优先级
+否则：
 
-第一优先级：
+- `1080p` 发四站
+- `2160p` 只发一站
 
-1. `projectMode`
-2. 模式选择弹窗
-3. 单集独立编辑器
-4. `targetSites` 持久化
-5. 发布页未完成提示
+这种常见场景就会失真。
 
-第二优先级：
+## 12. 推荐的后续任务单
 
-1. 项目列表模式筛选
-2. 完成页强化提示
-3. Dashboard 模式统计
+可以按下面的任务拆分：
 
-第三优先级：
-
-1. 上一集继承
-2. 批量创建
-3. 剧名分组与批量补发
-
-## 13. 实施顺序建议
-
-建议严格按下面顺序推进：
-
-1. 拆模型
-2. 做兼容
-3. 重做创建入口
-4. 落单集编辑器
-5. 打通单集内容生成
-6. 打通单集发布页
-7. 打通完成页与项目列表提醒
-8. 最后补文案和说明
-
-不要反过来先做“批量创建单集”或“上一集继承”。
-
-如果基础模型没拆干净，这些增强功能只会把问题放大。
-
-## 14. 建议的后续开发任务单
-
-可直接拆成以下任务：
-
-1. `feat(project): introduce projectMode and compatibility mapping`
-2. `feat(create): add mode selection dialog before project creation`
-3. `feat(episode): add dedicated episode create/edit workflow`
-4. `feat(content): add episode content generation pipeline`
-5. `feat(publish): persist targetSites and compute missing targets`
-6. `feat(ui): show missing publish targets in publish/completion/list views`
-7. `docs(workflow): update quickstart and guide for episode/feature split`
+1. `docs(workflow): redefine episode mode as series project with episode/variant hierarchy`
+2. `feat(create): rename episode mode to series mode in user-facing copy`
+3. `feat(project): add series project metadata and dashboard shell`
+4. `feat(episode): add episode list and per-episode variant management`
+5. `refactor(editor): turn EpisodeEdit into a variant editor`
+6. `refactor(content): scope Content_episode and createWithEpisode to variant config`
+7. `feat(progress): aggregate pending variants and missing target sites at project level`
 
 ---
 
-这份文档的目标不是描述一次临时修补，而是明确：后续应该把“单集”和“合集 / 电影”变成两个清晰、长期可维护的工作流。
+这份方案的重点不是“把单集表单再优化一点”，而是明确新的长期方向：
+
+- `feature` 继续是一条成品发布流
+- `episode` 升级为剧项目工作台
+- 真正可发布的对象是“某一集的某一版本”

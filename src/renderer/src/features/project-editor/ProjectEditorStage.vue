@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import Edit from '../../components/Edit.vue'
-import EpisodeEdit from '../../components/EpisodeEdit.vue'
 import StageWorkspace from '../../components/base/StageWorkspace.vue'
 import { useI18n } from '../../i18n'
 import ProjectStageAside from '../project-detail/ProjectStageAside.vue'
 import { useProjectContext } from '../project-detail/project-context'
+import SeriesProjectWorkspace from './SeriesProjectWorkspace.vue'
 
 const props = defineProps<{
   id: number
@@ -14,26 +14,49 @@ const props = defineProps<{
 const { t } = useI18n()
 const { project, isLoading, errorMessage } = useProjectContext()
 const projectName = computed(() => project.value?.name ?? t('common.projectWithId', { id: props.id }))
+const isSeriesProject = computed(() => project.value?.projectMode === 'episode')
+const notes = computed(() => {
+  if (!isSeriesProject.value) {
+    return []
+  }
 
-const notes = computed(() => [])
+  return [
+    {
+      title: t('stage.editor.series.note1.title'),
+      text: t('stage.editor.series.note1.text'),
+    },
+    {
+      title: t('stage.editor.series.note2.title'),
+      text: t('stage.editor.series.note2.text'),
+    },
+  ]
+})
 </script>
 
 <template>
   <StageWorkspace
     :show-intro="false"
     :eyebrow="t('stage.editor.eyebrow')"
-    :title="t('stage.editor.title')"
-    :description="t('stage.editor.description', { project: projectName })"
-    :status-label="t('stage.editor.status')"
+    :title="isSeriesProject ? t('stage.editor.series.title') : t('stage.editor.title')"
+    :description="
+      isSeriesProject
+        ? t('stage.editor.series.description', { project: projectName })
+        : t('stage.editor.description', { project: projectName })
+    "
+    :status-label="isSeriesProject ? t('stage.editor.series.status') : t('stage.editor.status')"
     status-tone="info"
-    :panel-eyebrow="t('stage.editor.panelEyebrow')"
-    :panel-title="t('stage.editor.panelTitle', { project: projectName })"
-    :panel-description="t('stage.editor.panelDescription')"
+    :panel-eyebrow="isSeriesProject ? t('stage.editor.series.panelEyebrow') : t('stage.editor.panelEyebrow')"
+    :panel-title="
+      isSeriesProject
+        ? t('stage.editor.series.panelTitle', { project: projectName })
+        : t('stage.editor.panelTitle', { project: projectName })
+    "
+    :panel-description="isSeriesProject ? t('stage.editor.series.panelDescription') : t('stage.editor.panelDescription')"
     :aside-eyebrow="t('stage.shared.asideEyebrow')"
     :aside-title="t('stage.shared.asideTitle')"
-    :aside-description="t('stage.editor.asideDescription')"
+    :aside-description="isSeriesProject ? t('stage.editor.series.asideDescription') : t('stage.editor.asideDescription')"
   >
-    <EpisodeEdit v-if="project?.projectMode === 'episode'" :id="id" />
+    <SeriesProjectWorkspace v-if="project?.projectMode === 'episode'" :id="id" :project="project" />
     <Edit v-else-if="project" :id="id" :project="project" />
     <div v-else class="project-editor-stage__loading">Loading project editor...</div>
 

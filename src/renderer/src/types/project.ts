@@ -1,5 +1,8 @@
 export type {
   CreateProjectInput,
+  CreateSeriesEpisodeInput,
+  CreateSeriesVariantInput,
+  InheritSeriesEpisodeVariantsInput,
   ProjectMode,
   ProjectDetailPayload,
   ProjectListPayload,
@@ -10,4 +13,14 @@ export type {
   ProjectStatsPayload,
   ProjectStatus,
   PublishProject,
+  SeriesEpisodePayload,
+  SeriesEpisodeInheritancePayload,
+  SeriesProjectEpisode,
+  SeriesProjectVariant,
+  SeriesProjectWorkspace,
+  SeriesVariantSubtitleProfile,
+  SeriesVariantDraftInput,
+  SeriesVariantPayload,
+  SeriesVariantVideoProfile,
+  SeriesWorkspacePayload,
 } from '../../../shared/types/project'

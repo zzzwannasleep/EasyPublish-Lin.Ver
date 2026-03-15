@@ -56,6 +56,12 @@ export interface ProjectAPI {
   createProject: (msg: string) => Promise<string>
   listProjects: () => Promise<string>
   getProject: (msg: string) => Promise<string>
+  getSeriesWorkspace: (msg: string) => Promise<string>
+  createSeriesEpisode: (msg: string) => Promise<string>
+  createSeriesVariant: (msg: string) => Promise<string>
+  inheritSeriesEpisodeVariants: (msg: string) => Promise<string>
+  activateSeriesVariant: (msg: string) => Promise<string>
+  syncSeriesVariantFromDraft: (msg: string) => Promise<string>
   getProjectStats: () => Promise<string>
   removeProject: (msg: string) => Promise<string>
 }

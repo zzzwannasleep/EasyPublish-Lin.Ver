@@ -32,6 +32,65 @@ export interface PublishProject {
   updatedAt: string
 }
 
+export interface SeriesProjectEpisode {
+  id: number
+  episodeLabel: string
+  episodeTitle?: string
+  sortIndex: number
+  directoryName: string
+  variantCount: number
+  variants: SeriesProjectVariant[]
+  createdAt: string
+  updatedAt: string
+}
+
+export type SeriesVariantVideoProfile = '1080p' | '2160p' | 'custom'
+export type SeriesVariantSubtitleProfile = 'chs' | 'cht' | 'eng' | 'bilingual' | 'custom'
+
+export interface SeriesProjectVariant {
+  id: number
+  name: string
+  directoryName: string
+  videoProfile?: SeriesVariantVideoProfile
+  subtitleProfile?: SeriesVariantSubtitleProfile
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SeriesProjectWorkspace {
+  projectId: number
+  episodes: SeriesProjectEpisode[]
+  activeEpisodeId?: number
+  activeVariantId?: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateSeriesEpisodeInput {
+  projectId: number
+  episodeLabel: string
+  episodeTitle?: string
+}
+
+export interface CreateSeriesVariantInput {
+  projectId: number
+  episodeId: number
+  name?: string
+  videoProfile?: SeriesVariantVideoProfile
+  subtitleProfile?: SeriesVariantSubtitleProfile
+}
+
+export interface SeriesVariantDraftInput {
+  projectId: number
+  episodeId: number
+  variantId: number
+}
+
+export interface InheritSeriesEpisodeVariantsInput {
+  projectId: number
+  episodeId: number
+}
+
 export interface ProjectStats {
   total: number
   active: number
@@ -56,4 +115,25 @@ export interface ProjectStatsPayload {
 
 export interface ProjectRemovalPayload {
   id: number
+}
+
+export interface SeriesWorkspacePayload {
+  workspace: SeriesProjectWorkspace
+}
+
+export interface SeriesEpisodePayload {
+  episode: SeriesProjectEpisode
+  workspace: SeriesProjectWorkspace
+}
+
+export interface SeriesVariantPayload {
+  episode: SeriesProjectEpisode
+  variant: SeriesProjectVariant
+  workspace: SeriesProjectWorkspace
+}
+
+export interface SeriesEpisodeInheritancePayload {
+  episode: SeriesProjectEpisode
+  workspace: SeriesProjectWorkspace
+  copiedCount: number
 }

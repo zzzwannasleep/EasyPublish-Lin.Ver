@@ -493,7 +493,7 @@ async function saveDraft() {
     const result = await persistConfig()
     if (result.result.includes('success')) {
       await loadProject()
-      ElMessage.success('已保存单集草稿')
+      ElMessage.success('已保存剧集草稿')
     }
   } finally {
     isSaving.value = false
@@ -509,7 +509,7 @@ async function createConfig() {
   try {
     const valid = await createForm.value.validate().catch(() => false)
     if (!valid) {
-      ElMessage.error('请先补全单集发布配置')
+      ElMessage.error('请先补全剧集发布配置')
       return
     }
 
@@ -525,7 +525,7 @@ async function createConfig() {
     }
 
     await loadProject()
-    ElMessage.success('单集项目已生成，正在进入发布页')
+    ElMessage.success('剧集项目已生成，正在进入发布页')
     setTimeout(() => {
       router.push({
         name: 'bt_publish',
@@ -559,7 +559,7 @@ watch(
 <template>
   <div v-if="loadCompleted" class="episode-edit">
     <el-alert
-      title="单集模式会直接进入种子发布页，并记录计划目标站点用于防漏发提示。"
+      title="剧集模式会直接进入种子发布页，并记录计划目标站点用于防漏发提示。"
       type="info"
       :closable="false"
       show-icon
@@ -567,10 +567,10 @@ watch(
 
     <div class="episode-edit__toolbar">
       <div class="episode-edit__title-group">
-        <div class="episode-edit__eyebrow">Episode Workflow</div>
-        <h3 class="episode-edit__title">单集发布配置</h3>
+        <div class="episode-edit__eyebrow">Series Workflow</div>
+        <h3 class="episode-edit__title">剧集发布配置</h3>
         <p class="episode-edit__description">
-          保留旧流程给合集/剧场版，单集在这里走更紧凑的输入和更明确的目标站点检查。
+          保留旧流程给合集/剧场版，剧集发布在这里走更紧凑的输入和更明确的目标站点检查。
         </p>
       </div>
 

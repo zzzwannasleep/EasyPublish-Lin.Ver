@@ -396,6 +396,24 @@ namespace Project {
   export function getProject(msg: string) {
     return projectService.getProject(msg)
   }
+  export function getSeriesWorkspace(msg: string) {
+    return projectService.getSeriesWorkspace(msg)
+  }
+  export function createSeriesEpisode(msg: string) {
+    return projectService.createSeriesEpisode(msg)
+  }
+  export function createSeriesVariant(msg: string) {
+    return projectService.createSeriesVariant(msg)
+  }
+  export function inheritSeriesEpisodeVariants(msg: string) {
+    return projectService.inheritSeriesEpisodeVariants(msg)
+  }
+  export function activateSeriesVariant(msg: string) {
+    return projectService.activateSeriesVariant(msg)
+  }
+  export function syncSeriesVariantFromDraft(msg: string) {
+    return projectService.syncSeriesVariantFromDraft(msg)
+  }
   export function getProjectStats() {
     return projectService.getProjectStats()
   }
