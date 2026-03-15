@@ -69,6 +69,18 @@ export type SeriesPublishProfileVideoProfile = SeriesVariantTemplateVideoProfile
 export type SeriesPublishProfileSubtitleProfile = SeriesVariantTemplateSubtitleProfile
 export type SeriesPublishProfileSiteFieldDefaults = Partial<Record<SiteId, Record<string, unknown>>>
 
+export interface SeriesPublishProfileTemplateContext {
+  releaseTeam?: string
+  seriesTitleCN?: string
+  seriesTitleEN?: string
+  seriesTitleJP?: string
+  seasonLabel?: string
+  sourceType?: string
+  resolution?: string
+  videoCodec?: string
+  audioCodec?: string
+}
+
 export interface SeriesPublishProfileSiteDraft {
   enabled: boolean
   useGlobalTitle?: boolean
@@ -85,6 +97,7 @@ export interface SeriesPublishProfile {
   isDefault?: boolean
   videoProfiles: SeriesPublishProfileVideoProfile[]
   subtitleProfiles: SeriesPublishProfileSubtitleProfile[]
+  templateContext?: SeriesPublishProfileTemplateContext
   targetSites?: SiteId[]
   titleTemplate?: string
   summaryTemplate?: string
@@ -98,6 +111,7 @@ export interface SeriesPublishProfileSnapshot {
   name: string
   videoProfiles: SeriesVariantVideoProfile[]
   subtitleProfiles: SeriesVariantSubtitleProfile[]
+  templateContext?: SeriesPublishProfileTemplateContext
   targetSites?: SiteId[]
   titleTemplate?: string
   summaryTemplate?: string
@@ -166,6 +180,7 @@ export interface SaveSeriesPublishProfileInput {
   isDefault?: boolean
   videoProfiles: SeriesVariantTemplateVideoProfile[]
   subtitleProfiles: SeriesVariantTemplateSubtitleProfile[]
+  templateContext?: SeriesPublishProfileTemplateContext
   targetSites?: SiteId[]
   titleTemplate?: string
   summaryTemplate?: string

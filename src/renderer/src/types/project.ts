@@ -22,6 +22,7 @@ export type {
   SeriesEpisodeVariantBatchPayload,
   SeriesPublishProfile,
   SeriesPublishProfilePayload,
+  SeriesPublishProfileTemplateContext,
   SeriesPublishProfileRemovalPayload,
   SeriesPublishProfileSiteDraft,
   SeriesPublishProfileSiteDrafts,

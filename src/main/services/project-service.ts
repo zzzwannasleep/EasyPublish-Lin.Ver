@@ -21,6 +21,7 @@ import type {
   SeriesPublishProfileSiteDraft,
   SeriesPublishProfileSiteDrafts,
   SeriesPublishProfileSiteFieldDefaults,
+  SeriesPublishProfileTemplateContext,
   SeriesVariantTemplateSubtitleProfile,
   SeriesVariantTemplateVideoProfile,
   SeriesVariantSubtitleProfile,
@@ -33,6 +34,18 @@ import { getNowFormatDate } from '../core/utils'
 import { createProjectStore } from '../storage/project-store'
 
 type ProjectChangeHandler = () => void
+
+const PUBLISH_PROFILE_TEMPLATE_CONTEXT_KEYS = [
+  'releaseTeam',
+  'seriesTitleCN',
+  'seriesTitleEN',
+  'seriesTitleJP',
+  'seasonLabel',
+  'sourceType',
+  'resolution',
+  'videoCodec',
+  'audioCodec',
+] as const
 
 interface CreateProjectServiceOptions {
   projectStore: ReturnType<typeof createProjectStore>
@@ -105,6 +118,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
                     isSeriesVariantTemplateSubtitleProfile(item),
                 )
               : [],
+            templateContext: normalizePublishProfileTemplateContext(profile.templateContext),
             targetSites,
             titleTemplate,
             summaryTemplate: resolvePrimarySiteDraftSummaryTemplate(siteDrafts, targetSites, legacySummaryTemplate),
@@ -344,6 +358,36 @@ export function createProjectService(options: CreateProjectServiceOptions) {
 
     const trimmedValue = value.trim()
     return trimmedValue || undefined
+  }
+
+  function normalizePublishProfileTemplateContext(value: unknown) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return undefined
+    }
+
+    const rawContext = value as Partial<SeriesPublishProfileTemplateContext>
+    const nextContext: SeriesPublishProfileTemplateContext = {}
+    PUBLISH_PROFILE_TEMPLATE_CONTEXT_KEYS.forEach(key => {
+      const normalizedValue = normalizeOptionalString(rawContext[key])
+      if (normalizedValue) {
+        nextContext[key] = normalizedValue
+      }
+    })
+
+    return Object.keys(nextContext).length ? nextContext : undefined
+  }
+
+  function clonePublishProfileTemplateContext(context?: SeriesPublishProfileTemplateContext) {
+    return normalizePublishProfileTemplateContext(context)
+  }
+
+  function serializePublishProfileTemplateContext(context?: SeriesPublishProfileTemplateContext) {
+    const normalizedContext = normalizePublishProfileTemplateContext(context)
+    if (!normalizedContext) {
+      return ''
+    }
+
+    return PUBLISH_PROFILE_TEMPLATE_CONTEXT_KEYS.map(key => `${key}:${normalizedContext[key] ?? ''}`).join('|')
   }
 
   function clonePublishResults(value: unknown): PublishResult[] | undefined {
@@ -676,6 +720,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     variantName?: string
     videoProfiles?: SeriesVariantVideoProfile[]
     subtitleProfiles?: SeriesVariantSubtitleProfile[]
+    templateContext?: SeriesPublishProfileTemplateContext
     targetSites?: SiteId[]
     titleTemplate?: string
     summaryTemplate?: string
@@ -697,6 +742,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
           : [],
     )
     const targetSites = normalizeSiteIds(input.targetSites ?? input.profile?.targetSites)
+    const templateContext = clonePublishProfileTemplateContext(input.templateContext ?? input.profile?.templateContext)
     const titleTemplate = normalizeTitleTemplate(input.titleTemplate ?? input.profile?.titleTemplate)
     const siteDrafts = Object.prototype.hasOwnProperty.call(input, 'siteDrafts')
       ? cloneSiteDrafts(input.siteDrafts)
@@ -723,6 +769,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       }),
       videoProfiles,
       subtitleProfiles,
+      templateContext,
       targetSites: targetSites.length ? targetSites : undefined,
       titleTemplate,
       summaryTemplate,
@@ -791,6 +838,10 @@ export function createProjectService(options: CreateProjectServiceOptions) {
           : fallback?.profile
             ? (fallback.profile.subtitleProfiles as SeriesVariantSubtitleProfile[])
             : undefined,
+      templateContext:
+        rawSnapshot && 'templateContext' in rawSnapshot
+          ? normalizePublishProfileTemplateContext(rawSnapshot.templateContext)
+          : undefined,
       targetSites: [...new Set([...fallbackTargetSites, ...getEnabledSiteIdsFromSiteDrafts(normalizedSiteDrafts)])],
       titleTemplate:
         rawSnapshot && 'titleTemplate' in rawSnapshot ? normalizeTitleTemplate(rawSnapshot.titleTemplate) : undefined,
@@ -891,6 +942,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     videoProfiles: SeriesVariantTemplateVideoProfile[],
     subtitleProfiles: SeriesVariantTemplateSubtitleProfile[],
     targetSites: SiteId[] = [],
+    templateContext?: string,
     titleTemplate?: string,
     summaryTemplate?: string,
     siteDrafts?: string,
@@ -900,6 +952,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       normalizeTemplateVideoProfiles(videoProfiles).join(','),
       normalizeTemplateSubtitleProfiles(subtitleProfiles).join(','),
       [...targetSites].sort().join(','),
+      templateContext ?? '',
       titleTemplate?.trim() ?? '',
       summaryTemplate?.trim() ?? '',
       siteDrafts ?? '',
@@ -917,8 +970,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     return seasonLabel ? [...dedupedTitles, seasonLabel].join(' / ') : dedupedTitles.join(' / ')
   }
 
-  function buildTechLabelFromContent(content: Partial<Config.Content_episode>) {
-    return [content.sourceType, content.resolution, content.videoCodec, content.audioCodec]
+  function buildTechLabelFromContent(content: Partial<Config.Content_episode>, resolutionOverride?: string) {
+    return [content.sourceType, resolutionOverride ?? content.resolution, content.videoCodec, content.audioCodec]
       .map(value => value?.trim() ?? '')
       .filter(Boolean)
       .join(' ')
@@ -942,6 +995,9 @@ export function createProjectService(options: CreateProjectServiceOptions) {
 
   function buildSeriesVariantTemplateVariables(config: Config.PublishConfig, variant: SeriesProjectVariant) {
     const content = config.content as Partial<Config.Content_episode>
+    const resolution =
+      content.resolution?.trim() ??
+      (variant.videoProfile && variant.videoProfile !== 'custom' ? variant.videoProfile : '')
     return {
       title: config.title?.trim() ?? '',
       summary: content.summary?.trim() ?? '',
@@ -953,11 +1009,11 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       episodeLabel: content.episodeLabel?.trim() ?? '',
       episodeTitle: content.episodeTitle?.trim() ?? '',
       sourceType: content.sourceType?.trim() ?? '',
-      resolution: content.resolution?.trim() ?? '',
+      resolution,
       videoCodec: content.videoCodec?.trim() ?? '',
       audioCodec: content.audioCodec?.trim() ?? '',
       seriesLabel: buildSeriesLabelFromContent(content),
-      techLabel: buildTechLabelFromContent(content),
+      techLabel: buildTechLabelFromContent(content, resolution),
       variantName: variant.name,
       videoProfile: variant.videoProfile ?? '',
       subtitleProfile: variant.subtitleProfile ?? '',
@@ -989,6 +1045,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     variant: SeriesProjectVariant,
     options?: {
       targetSites?: SiteId[]
+      templateContext?: SeriesPublishProfileTemplateContext
       titleTemplate?: string
       summaryTemplate?: string
       siteDrafts?: SeriesPublishProfileSiteDrafts
@@ -997,6 +1054,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
   ) {
     const config = JSON.parse(fs.readFileSync(getDraftConfigPath(projectPath), { encoding: 'utf-8' })) as Config.PublishConfig
     const targetSites = normalizeSiteIds(options?.targetSites)
+    const templateContext = clonePublishProfileTemplateContext(options?.templateContext)
     const titleTemplate = normalizeTitleTemplate(options?.titleTemplate)
     const siteDrafts = normalizeSiteDrafts(options?.siteDrafts, {
       targetSites,
@@ -1004,6 +1062,16 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     })
     const summaryTemplate = resolvePrimarySiteDraftSummaryTemplate(siteDrafts, targetSites, options?.summaryTemplate)
     const siteFieldDefaults = mergeSiteFieldDefaults(buildProjectSiteFieldDefaults(config), options?.siteFieldDefaults)
+
+    if (templateContext && typeof config.content === 'object' && config.content && !Array.isArray(config.content)) {
+      const content = config.content as unknown as Record<string, string | SiteId[] | undefined>
+      PUBLISH_PROFILE_TEMPLATE_CONTEXT_KEYS.forEach(key => {
+        const value = templateContext[key]
+        if (value) {
+          content[key] = value
+        }
+      })
+    }
 
     if (targetSites.length > 0) {
       config.targetSites = [...targetSites]
@@ -1058,6 +1126,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     variant: SeriesProjectVariant,
     options?: {
       targetSites?: SiteId[]
+      templateContext?: SeriesPublishProfileTemplateContext
       titleTemplate?: string
       summaryTemplate?: string
       siteDrafts?: SeriesPublishProfileSiteDrafts
@@ -1639,6 +1708,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
 
       const config = writeVariantConfigFromDraft(task.path, episode, variant, {
         targetSites,
+        templateContext: publishProfile?.templateContext,
         titleTemplate,
         summaryTemplate,
         siteDrafts: publishProfile?.siteDrafts,
@@ -1652,6 +1722,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
           variantName: name,
           videoProfiles: publishProfile ? undefined : videoProfile ? [videoProfile] : undefined,
           subtitleProfiles: publishProfile ? undefined : subtitleProfile ? [subtitleProfile] : undefined,
+          templateContext: publishProfile?.templateContext,
           targetSites: variantSummary.targetSites,
           titleTemplate,
           summaryTemplate,
@@ -1766,6 +1837,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const nextVariantsWithSummary = nextVariants.map(variant => {
         const config = writeVariantConfigFromDraft(task.path, episode, variant, {
           targetSites,
+          templateContext: publishProfile?.templateContext,
           titleTemplate,
           summaryTemplate,
           siteDrafts: publishProfile?.siteDrafts,
@@ -1779,6 +1851,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
             variantName: variant.name,
             videoProfiles: publishProfile ? undefined : videoProfiles,
             subtitleProfiles: publishProfile ? undefined : subtitleProfiles,
+            templateContext: publishProfile?.templateContext,
             targetSites: variantSummary.targetSites,
             titleTemplate,
             summaryTemplate,
@@ -1833,6 +1906,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         ? normalizeTemplateSubtitleProfiles(input.subtitleProfiles.filter(isSeriesVariantTemplateSubtitleProfile))
         : []
       const requestedTargetSites = normalizeSiteIds(input.targetSites)
+      const templateContext = normalizePublishProfileTemplateContext(input.templateContext)
       const titleTemplate = normalizeTitleTemplate(input.titleTemplate)
       const siteDrafts = normalizeSiteDrafts(input.siteDrafts, {
         targetSites: requestedTargetSites,
@@ -1872,6 +1946,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         videoProfiles,
         subtitleProfiles,
         targetSites,
+        serializePublishProfileTemplateContext(templateContext),
         titleTemplate,
         summaryTemplate,
         JSON.stringify(normalizeSiteDrafts(siteDrafts) ?? {}),
@@ -1889,6 +1964,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
               profile.videoProfiles,
               profile.subtitleProfiles,
               profile.targetSites,
+              serializePublishProfileTemplateContext(profile.templateContext),
               profile.titleTemplate,
               profile.summaryTemplate,
               JSON.stringify(normalizeSiteDrafts(profile.siteDrafts, {
@@ -1912,6 +1988,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         isDefault: requestedDefault,
         videoProfiles,
         subtitleProfiles,
+        templateContext,
         targetSites: targetSites.length ? targetSites : undefined,
         titleTemplate,
         summaryTemplate,
