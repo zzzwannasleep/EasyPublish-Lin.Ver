@@ -177,6 +177,15 @@ const workflow = {
   'seriesWorkspace.episodes.form.labelPlaceholder': 'Episode label, for example 01 / SP1',
   'seriesWorkspace.episodes.form.titlePlaceholder': 'Episode title, optional',
   'seriesWorkspace.episodes.form.submit': 'Add Episode',
+  'seriesWorkspace.episodes.form.submitWithDefault': 'Add and Apply Default',
+  'seriesWorkspace.episodes.form.submitWithRecent': 'Add and Reuse Last Action',
+  'seriesWorkspace.episodes.dialog.recentTitle': 'Last recommended action: {action}',
+  'seriesWorkspace.episodes.dialog.recentAvailable': 'This will immediately run "{action}" after the episode is created.',
+  'seriesWorkspace.episodes.dialog.recentUnavailable':
+    'The last action is not available right now, so use the standard create flow first.',
+  'seriesWorkspace.episodes.recent.default': 'Apply default profile',
+  'seriesWorkspace.episodes.recent.inherit': 'Inherit from previous episode',
+  'seriesWorkspace.episodes.recent.blank': 'Keep blank',
   'seriesWorkspace.episodes.card.active': 'Active Draft',
   'seriesWorkspace.episodes.card.titleFallback': 'No episode title yet',
   'seriesWorkspace.episodes.card.directory': 'Directory',
@@ -305,6 +314,9 @@ const workflow = {
   'seriesWorkspace.profileEditor.fields.titleTemplatePlaceholder':
     'For example [{{releaseTeam}}] {{seriesTitleEN}} - {{episodeLabel}} [{{resolution}}][{{subtitleProfileLabel}}]',
   'seriesWorkspace.profileEditor.preview.title': 'Title Preview',
+  'seriesWorkspace.profileEditor.preview.placeholderTitle': 'The preview still contains placeholder tokens',
+  'seriesWorkspace.profileEditor.preview.placeholderText':
+    'These variables do not have a concrete context value yet, so the preview keeps them as placeholders: {tokens}. Saving the profile will not fail because of this; they will resolve again when the profile is applied to an episode.',
   'seriesWorkspace.profileEditor.titlePreviewFallback': 'Keep the current draft title',
   'seriesWorkspace.profileEditor.siteDrafts.title': 'Site Draft Template',
   'seriesWorkspace.profileEditor.siteDrafts.text':
@@ -476,6 +488,8 @@ const workflow = {
   'seriesWorkspace.profileSwitch.title': 'Switch Publish Profile',
   'seriesWorkspace.profileSwitch.text':
     'The current publish profile still has unsaved changes. Save it first if you want to keep the latest edits before switching.',
+  'seriesWorkspace.profileSwitch.textDetailed':
+    'The current publish profile "{current}" still has unsaved changes. Save it before switching to "{next}" if you want to keep these edits.',
   'seriesWorkspace.profileSwitch.discard': 'Discard and Switch',
   'seriesWorkspace.profileSwitch.save': 'Save and Switch',
   'seriesWorkspace.episodes.dialog.title': 'Add Episode',
@@ -539,6 +553,7 @@ const workflow = {
   'seriesWorkspace.execution.differences.torrentPath': 'Resource path / torrent',
   'seriesWorkspace.execution.differences.targetSites': 'Current draft target sites',
   'seriesWorkspace.execution.differences.inactiveValue': 'Load a variant from this episode first',
+  'seriesWorkspace.execution.differences.unsetValue': 'Not set yet',
   'seriesWorkspace.execution.differences.inactiveNotice':
     'This is still the episode summary view. Resource paths and temporary site fields require a loaded draft from this episode.',
   'seriesWorkspace.execution.differences.inactiveHelp':
@@ -548,6 +563,24 @@ const workflow = {
   'seriesWorkspace.execution.differences.overrideFromProfile': 'Overrides publish profile default',
   'seriesWorkspace.execution.differences.overrideFromProject': 'Overrides project default',
   'seriesWorkspace.execution.differences.overrideStandalone': 'Current draft only',
+  'seriesWorkspace.execution.sources.title': 'Source and Override Map',
+  'seriesWorkspace.execution.sources.text':
+    'Split the current draft into publish-profile baseline, per-episode values, and current-variant overrides so each change has an obvious source.',
+  'seriesWorkspace.execution.sources.inactive':
+    'Load a variant from this episode first, then inspect its source and override breakdown here.',
+  'seriesWorkspace.execution.sources.profile.title': 'From Publish Profile',
+  'seriesWorkspace.execution.sources.profile.empty':
+    'The key draft values from the publish profile have already been replaced by episode-level or variant-level values.',
+  'seriesWorkspace.execution.sources.profile.unlinked': 'This variant is not linked to a publish profile.',
+  'seriesWorkspace.execution.sources.profile.profileName': 'Linked profile',
+  'seriesWorkspace.execution.sources.profile.siteDefaults': 'Inherited site default fields',
+  'seriesWorkspace.execution.sources.episode.title': 'Episode-Level Values',
+  'seriesWorkspace.execution.sources.episode.empty': 'There are no episode-level values to show yet.',
+  'seriesWorkspace.execution.sources.variant.title': 'Current Variant Overrides',
+  'seriesWorkspace.execution.sources.variant.empty':
+    'The current variant has not added any extra overrides on top of the publish-profile baseline yet.',
+  'seriesWorkspace.execution.sources.variant.titleValue': 'Current variant title',
+  'seriesWorkspace.execution.sources.variant.siteOverrides': 'Temporary site field overrides',
   'seriesWorkspace.variants.title': 'Variant List',
   'seriesWorkspace.variants.text':
     'Review the variants already generated for this episode and which publish profile each one comes from.',

@@ -5,6 +5,12 @@ import { getCurrentLocale, translate } from '../../i18n'
 
 export type ProjectRouteName = 'edit' | 'check' | 'bt_publish' | 'forum_publish' | 'finish'
 
+export type TargetSiteProgressSummary = {
+  publishedSiteIds: SiteId[]
+  pendingSiteIds: SiteId[]
+  failedSiteIds: SiteId[]
+}
+
 export const projectStageLabelKeys: Record<ProjectStage, string> = {
   edit: 'project.stage.edit',
   review: 'project.stage.review',
@@ -123,6 +129,46 @@ export function getMissingTargetSiteIds(project: PublishProject): SiteId[] {
 
   const publishedSites = new Set(getPublishedSiteIds(project))
   return project.targetSites.filter(siteId => !publishedSites.has(siteId))
+}
+
+export function getLatestPublishResultMap(results: PublishResult[] = []) {
+  const orderedResults = [...results].sort((left, right) => getPublishResultTimeValue(right) - getPublishResultTimeValue(left))
+  const resultMap = new Map<SiteId, PublishResult>()
+  orderedResults.forEach(result => {
+    if (!resultMap.has(result.siteId)) {
+      resultMap.set(result.siteId, result)
+    }
+  })
+
+  return resultMap
+}
+
+export function summarizeTargetSiteProgress(
+  targetSiteIds: SiteId[] = [],
+  results: PublishResult[] = [],
+): TargetSiteProgressSummary {
+  const latestResultMap = getLatestPublishResultMap(results)
+  const normalizedTargetSiteIds = [...new Set(targetSiteIds.filter(Boolean))]
+
+  return normalizedTargetSiteIds.reduce<TargetSiteProgressSummary>(
+    (summary, siteId) => {
+      const latestStatus = latestResultMap.get(siteId)?.status
+      if (latestStatus === 'published') {
+        summary.publishedSiteIds.push(siteId)
+      } else if (latestStatus === 'failed') {
+        summary.failedSiteIds.push(siteId)
+      } else {
+        summary.pendingSiteIds.push(siteId)
+      }
+
+      return summary
+    },
+    {
+      publishedSiteIds: [],
+      pendingSiteIds: [],
+      failedSiteIds: [],
+    },
+  )
 }
 
 export function getProjectResumeRouteName(project: PublishProject): ProjectRouteName {

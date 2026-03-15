@@ -8,9 +8,11 @@ import { siteBridge } from '../../services/bridge/site'
 import { taskBridge } from '../../services/bridge/task'
 import {
   formatProjectTimestamp,
+  summarizeTargetSiteProgress,
   getMissingTargetSiteIds,
   getPublishedSiteIds,
   getSiteLabel,
+  type TargetSiteProgressSummary,
 } from '../../services/project/presentation'
 import type {
   CreateSeriesEpisodeInput,
@@ -27,7 +29,6 @@ import type {
   SeriesVariantSubtitleProfile,
   SeriesVariantVideoProfile,
 } from '../../types/project'
-import type { PublishResult, PublishState } from '../../types/publish'
 import type { SiteCatalogEntry, SiteFieldSchemaEntry, SiteFieldSchemaMode, SiteId } from '../../types/site'
 
 const PROFILE_VIDEO_ORDER: SeriesPublishProfileVideoProfile[] = ['1080p', '2160p']
@@ -88,12 +89,6 @@ type PublishProfileSiteDraftFormEntry = {
 
 type PublishProfileSiteDraftForm = Partial<Record<SiteId, PublishProfileSiteDraftFormEntry>>
 
-type VariantProgressSummary = {
-  publishedSiteIds: SiteId[]
-  pendingSiteIds: SiteId[]
-  failedSiteIds: SiteId[]
-}
-
 type EpisodeDifferenceField = {
   key: string
   label: string
@@ -105,6 +100,28 @@ type EpisodeSiteOverrideSummary = {
   label: string
   value: string
   sourceLabel: string
+}
+
+type TemplatePreviewResult = {
+  text: string
+  missingTokens: string[]
+}
+
+type EpisodeExecutionSourceGroupTone = 'success' | 'warning' | 'danger'
+type RecentEpisodeGuideAction = 'default' | 'inherit' | 'blank'
+
+type EpisodeExecutionSourceEntry = {
+  key: string
+  label: string
+  value: string
+}
+
+type EpisodeExecutionSourceGroup = {
+  key: string
+  title: string
+  tone: EpisodeExecutionSourceGroupTone
+  emptyText: string
+  entries: EpisodeExecutionSourceEntry[]
 }
 
 const props = defineProps<{
@@ -147,6 +164,7 @@ const draftConfig = ref<Config.PublishConfig | null>(null)
 const siteCatalog = ref<SiteCatalogEntry[]>([])
 const hasLoadedSiteCatalog = ref(false)
 const refillVariantId = ref<number | null>(null)
+const recentEpisodeGuideAction = ref<RecentEpisodeGuideAction | null>(null)
 
 const episodeForm = reactive({
   episodeLabel: '',
@@ -592,7 +610,9 @@ const selectedEpisodeDifferenceFields = computed<EpisodeDifferenceField[]>(() =>
   const torrentPath =
     selectedEpisodeUsesActiveDraft.value && draftConfig.value?.torrentPath?.trim()
       ? draftConfig.value.torrentPath.trim()
-      : t('seriesWorkspace.execution.differences.inactiveValue')
+      : selectedEpisodeUsesActiveDraft.value
+        ? t('seriesWorkspace.execution.differences.unsetValue')
+        : t('seriesWorkspace.execution.differences.inactiveValue')
   const targetSites = selectedEpisodeUsesActiveDraft.value
     ? formatSiteLabels(getEpisodeDraftTargetSites(draftConfig.value))
     : t('seriesWorkspace.execution.differences.inactiveValue')
@@ -666,6 +686,169 @@ const selectedEpisodeSiteOverrides = computed<EpisodeSiteOverrideSummary[]>(() =
   })
 })
 
+const selectedEpisodeExecutionSourceGroups = computed<EpisodeExecutionSourceGroup[]>(() => {
+  const profileEntries: EpisodeExecutionSourceEntry[] = []
+  const episodeEntries: EpisodeExecutionSourceEntry[] = []
+  const variantEntries: EpisodeExecutionSourceEntry[] = []
+
+  if (!selectedEpisode.value) {
+    return []
+  }
+
+  if (!selectedEpisodeUsesActiveDraft.value || !draftConfig.value || !activeVariant.value) {
+    return [
+      {
+        key: 'profile',
+        title: t('seriesWorkspace.execution.sources.profile.title'),
+        tone: 'success',
+        emptyText: t('seriesWorkspace.execution.sources.inactive'),
+        entries: [],
+      },
+      {
+        key: 'episode',
+        title: t('seriesWorkspace.execution.sources.episode.title'),
+        tone: 'warning',
+        emptyText: t('seriesWorkspace.execution.sources.inactive'),
+        entries: [],
+      },
+      {
+        key: 'variant',
+        title: t('seriesWorkspace.execution.sources.variant.title'),
+        tone: 'danger',
+        emptyText: t('seriesWorkspace.execution.sources.inactive'),
+        entries: [],
+      },
+    ]
+  }
+
+  const draftTitle = draftConfig.value.title?.trim() || ''
+  const draftTargetSites = getEpisodeDraftTargetSites(draftConfig.value)
+  const snapshot = activeVariant.value.publishProfileSnapshot
+  const snapshotTargetSites = normalizeTargetSites(snapshot?.targetSites ?? [])
+  const snapshotTitle = snapshot?.titleTemplate?.trim()
+    ? renderDraftTemplate(snapshot.titleTemplate, draftConfig.value, activeVariant.value)
+    : ''
+
+  const linkedProfileName = getVariantPublishProfileLabel(activeVariant.value)
+  if (linkedProfileName) {
+    profileEntries.push({
+      key: 'profileName',
+      label: t('seriesWorkspace.execution.sources.profile.profileName'),
+      value: linkedProfileName,
+    })
+  }
+
+  if (snapshotTargetSites.length && JSON.stringify([...draftTargetSites].sort()) === JSON.stringify([...snapshotTargetSites].sort())) {
+    profileEntries.push({
+      key: 'profileTargetSites',
+      label: t('seriesWorkspace.execution.differences.targetSites'),
+      value: formatSiteLabels(draftTargetSites),
+    })
+  } else if (draftTargetSites.length) {
+    variantEntries.push({
+      key: 'variantTargetSites',
+      label: t('seriesWorkspace.execution.differences.targetSites'),
+      value: formatSiteLabels(draftTargetSites),
+    })
+  }
+
+  if (draftTitle) {
+    if (snapshotTitle && draftTitle === snapshotTitle) {
+      profileEntries.push({
+        key: 'profileTitle',
+        label: t('seriesWorkspace.execution.sources.variant.titleValue'),
+        value: draftTitle,
+      })
+    } else {
+      variantEntries.push({
+        key: 'variantTitle',
+        label: t('seriesWorkspace.execution.sources.variant.titleValue'),
+        value: draftTitle,
+      })
+    }
+  }
+
+  const snapshotFieldDefaults = snapshot?.siteFieldDefaults
+  const inheritedProfileFieldLabels = orderSiteIds(Object.keys(snapshotFieldDefaults ?? {}) as SiteId[]).flatMap(siteId =>
+    getSiteFieldSchemas(siteId).flatMap(field => {
+      const currentValue = readEpisodeDraftSiteFieldValue(draftConfig.value, siteId, field.key)
+      const profileValue = getSiteFieldValue(snapshotFieldDefaults, siteId, field)
+      if (!hasSiteFieldValue(field, currentValue) || !hasSiteFieldValue(field, profileValue)) {
+        return []
+      }
+
+      const currentLabel = getSiteFieldValueLabel(field, currentValue)
+      const profileLabel = getSiteFieldValueLabel(field, profileValue)
+      if (!currentLabel || currentLabel !== profileLabel) {
+        return []
+      }
+
+      return [`${getDisplaySiteLabel(siteId)} · ${t(field.labelKey)}`]
+    }),
+  )
+
+  if (inheritedProfileFieldLabels.length) {
+    profileEntries.push({
+      key: 'profileSiteDefaults',
+      label: t('seriesWorkspace.execution.sources.profile.siteDefaults'),
+      value: summarizeExecutionSourceValues(inheritedProfileFieldLabels),
+    })
+  }
+
+  episodeEntries.push({
+    key: 'episodeLabel',
+    label: t('seriesWorkspace.execution.differences.episodeLabel'),
+    value: draftEpisodeContent.value?.episodeLabel?.trim() || selectedEpisode.value.episodeLabel,
+  })
+  episodeEntries.push({
+    key: 'episodeTitle',
+    label: t('seriesWorkspace.execution.differences.episodeTitle'),
+    value:
+      draftEpisodeContent.value?.episodeTitle?.trim() ||
+      selectedEpisode.value.episodeTitle ||
+      t('seriesWorkspace.execution.differences.titleFallback'),
+  })
+  episodeEntries.push({
+    key: 'torrentPath',
+    label: t('seriesWorkspace.execution.differences.torrentPath'),
+    value: draftConfig.value.torrentPath?.trim() || t('seriesWorkspace.execution.differences.unsetValue'),
+  })
+
+  if (selectedEpisodeSiteOverrides.value.length) {
+    variantEntries.push({
+      key: 'variantSiteOverrides',
+      label: t('seriesWorkspace.execution.sources.variant.siteOverrides'),
+      value: summarizeExecutionSourceValues(selectedEpisodeSiteOverrides.value.map(entry => entry.label)),
+    })
+  }
+
+  return [
+    {
+      key: 'profile',
+      title: t('seriesWorkspace.execution.sources.profile.title'),
+      tone: 'success',
+      emptyText: linkedProfileName
+        ? t('seriesWorkspace.execution.sources.profile.empty')
+        : t('seriesWorkspace.execution.sources.profile.unlinked'),
+      entries: profileEntries,
+    },
+    {
+      key: 'episode',
+      title: t('seriesWorkspace.execution.sources.episode.title'),
+      tone: 'warning',
+      emptyText: t('seriesWorkspace.execution.sources.episode.empty'),
+      entries: episodeEntries,
+    },
+    {
+      key: 'variant',
+      title: t('seriesWorkspace.execution.sources.variant.title'),
+      tone: 'danger',
+      emptyText: t('seriesWorkspace.execution.sources.variant.empty'),
+      entries: variantEntries,
+    },
+  ]
+})
+
 const currentProfileCombinationNames = computed(() =>
   getProfileCombinationNames(profileForm.videoProfiles, profileForm.subtitleProfiles),
 )
@@ -684,7 +867,11 @@ const defaultTitlePreview = computed(() => {
   return `${props.project.name} - ${episodeLabel}${tags ? ` ${tags}` : ''}`
 })
 
-const titlePreview = computed(() => renderTemplate(profileForm.titleTemplate.trim()) || defaultTitlePreview.value)
+const titlePreviewState = computed(() => renderTemplatePreview(profileForm.titleTemplate.trim()))
+
+const titlePreview = computed(() => titlePreviewState.value.text || defaultTitlePreview.value)
+
+const titlePreviewMissingTokens = computed(() => titlePreviewState.value.missingTokens)
 
 const currentProfileMissingSiteFields = computed(() =>
   getMissingSiteFieldLabels(publishableTargetSiteIds.value, currentSiteFieldDefaults.value, projectSiteFieldDefaults.value),
@@ -778,6 +965,69 @@ const applyProfileHint = computed(() => {
   return t('seriesWorkspace.execution.applyHintReady', {
     episode: selectedEpisode.value.episodeLabel,
     profile: selectedSavedProfile.value.name,
+  })
+})
+
+const currentProfileSelectionLabel = computed(() => {
+  if (selectedSavedProfile.value?.name?.trim()) {
+    return selectedSavedProfile.value.name.trim()
+  }
+
+  return profileForm.name.trim() || t('seriesWorkspace.profileEditor.newProfileName')
+})
+
+const pendingProfileSelectionLabel = computed(() => {
+  if (pendingProfileSelectionId.value === null) {
+    return t('seriesWorkspace.profileEditor.newProfileName')
+  }
+
+  return (
+    publishProfiles.value.find(profile => profile.id === pendingProfileSelectionId.value)?.name ??
+    t('seriesWorkspace.profileEditor.newProfileName')
+  )
+})
+
+const dirtySwitchDialogText = computed(() =>
+  t('seriesWorkspace.profileSwitch.textDetailed', {
+    current: currentProfileSelectionLabel.value,
+    next: pendingProfileSelectionLabel.value,
+  }),
+)
+
+const recentEpisodeGuideActionLabel = computed(() => {
+  if (!recentEpisodeGuideAction.value) {
+    return ''
+  }
+
+  return t(`seriesWorkspace.episodes.recent.${recentEpisodeGuideAction.value}`)
+})
+
+const canRunRecentEpisodeGuideAction = computed(() => {
+  if (!recentEpisodeGuideAction.value) {
+    return false
+  }
+
+  switch (recentEpisodeGuideAction.value) {
+    case 'default':
+      return Boolean(defaultPublishProfile.value)
+    case 'inherit':
+      return episodes.value.length > 0
+    case 'blank':
+      return true
+  }
+})
+
+const recentEpisodeGuideActionHelp = computed(() => {
+  if (!recentEpisodeGuideAction.value) {
+    return ''
+  }
+
+  if (!canRunRecentEpisodeGuideAction.value) {
+    return t('seriesWorkspace.episodes.dialog.recentUnavailable')
+  }
+
+  return t('seriesWorkspace.episodes.dialog.recentAvailable', {
+    action: recentEpisodeGuideActionLabel.value,
   })
 })
 
@@ -1206,52 +1456,85 @@ function getEpisodeDraftTargetSites(config?: Config.PublishConfig | null) {
   return normalizeTargetSites(config.targetSites ?? content?.targetSites ?? [])
 }
 
-function getPublishResultTimeValue(result: PublishResult) {
-  if (!result.timestamp) {
-    return 0
+function getEpisodeDraftContent(config?: Config.PublishConfig | null) {
+  if (!config || typeof config.content !== 'object' || !config.content || Array.isArray(config.content)) {
+    return undefined
   }
 
-  const value = new Date(result.timestamp).getTime()
-  return Number.isFinite(value) ? value : 0
+  return config.content as Partial<Config.Content_episode>
 }
 
-function getLatestPublishResultMap(results?: PublishResult[]) {
-  const orderedResults = [...(results ?? [])].sort(
-    (left, right) => getPublishResultTimeValue(right) - getPublishResultTimeValue(left),
-  )
-  const resultMap = new Map<SiteId, PublishResult>()
-  orderedResults.forEach(result => {
-    if (!resultMap.has(result.siteId)) {
-      resultMap.set(result.siteId, result)
+function renderTemplateWithVariables(
+  value: string,
+  variables: Record<string, string | undefined>,
+  missingTokens?: Set<string>,
+) {
+  return value.replace(/\{\{(.*?)\}\}/g, (_, token: string) => {
+    const normalizedToken = token.trim()
+    const resolvedValue = variables[normalizedToken]
+    if (typeof resolvedValue === 'string' && resolvedValue.trim()) {
+      return resolvedValue
     }
-  })
 
-  return resultMap
+    const placeholder = `{{${normalizedToken}}}`
+    missingTokens?.add(placeholder)
+    return placeholder
+  })
 }
 
-function getVariantProgressSummary(variant: SeriesProjectVariant): VariantProgressSummary {
-  const latestResultMap = getLatestPublishResultMap(variant.publishResults)
-  const targetSiteIds = normalizeTargetSites(variant.targetSites ?? [])
+function buildDraftTemplateVariables(
+  config: Config.PublishConfig | null | undefined,
+  variant?: SeriesProjectVariant | null,
+): Record<string, string | undefined> {
+  const content = getEpisodeDraftContent(config)
+  const titles = [content?.seriesTitleCN, content?.seriesTitleEN, content?.seriesTitleJP]
+    .map(value => value?.trim())
+    .filter(Boolean)
+  const techParts = [content?.sourceType, content?.resolution, content?.videoCodec, content?.audioCodec]
+    .map(value => value?.trim())
+    .filter(Boolean)
 
-  return targetSiteIds.reduce<VariantProgressSummary>(
-    (summary, siteId) => {
-      const latestStatus = latestResultMap.get(siteId)?.status as PublishState | undefined
-      if (latestStatus === 'published') {
-        summary.publishedSiteIds.push(siteId)
-      } else if (latestStatus === 'failed') {
-        summary.failedSiteIds.push(siteId)
-      } else {
-        summary.pendingSiteIds.push(siteId)
-      }
+  return {
+    title: props.project.name,
+    summary: content?.summary?.trim() || t('seriesWorkspace.profileEditor.preview.summarySample'),
+    releaseTeam: content?.releaseTeam?.trim() || 'VCB-Studio',
+    seriesLabel: titles.join(' / ') || props.project.name,
+    seriesTitleCN: content?.seriesTitleCN?.trim() || props.project.name,
+    seriesTitleEN: content?.seriesTitleEN?.trim() || props.project.name,
+    seriesTitleJP: content?.seriesTitleJP?.trim() || props.project.name,
+    seasonLabel: content?.seasonLabel?.trim() || undefined,
+    episodeLabel: content?.episodeLabel?.trim() || undefined,
+    episodeTitle: content?.episodeTitle?.trim() || undefined,
+    techLabel: techParts.join(' ') || undefined,
+    resolution: content?.resolution?.trim() || undefined,
+    videoCodec: content?.videoCodec?.trim() || undefined,
+    audioCodec: content?.audioCodec?.trim() || undefined,
+    variantName: variant?.name?.trim() || undefined,
+    videoProfile: getVideoProfileLabel(variant?.videoProfile),
+    subtitleProfile: variant?.subtitleProfile ?? undefined,
+    subtitleProfileLabel: getSubtitleProfileLabel(variant?.subtitleProfile),
+  }
+}
 
-      return summary
-    },
-    {
-      publishedSiteIds: [],
-      pendingSiteIds: [],
-      failedSiteIds: [],
-    },
-  )
+function renderDraftTemplate(value: string, config: Config.PublishConfig | null | undefined, variant?: SeriesProjectVariant | null) {
+  if (!value.trim()) {
+    return ''
+  }
+
+  return renderTemplateWithVariables(value, buildDraftTemplateVariables(config, variant))
+}
+
+function summarizeExecutionSourceValues(values: string[]) {
+  const normalizedValues = values.map(value => value.trim()).filter(Boolean)
+  if (normalizedValues.length <= 2) {
+    return normalizedValues.join(' / ')
+  }
+
+  return `${normalizedValues.slice(0, 2).join(' / ')} +${normalizedValues.length - 2}`
+}
+
+function getVariantProgressSummary(variant: SeriesProjectVariant): TargetSiteProgressSummary {
+  return summarizeTargetSiteProgress(normalizeTargetSites(variant.targetSites ?? []), variant.publishResults)
 }
 
 function readEpisodeDraftSiteFieldValue(
@@ -1333,9 +1616,9 @@ function buildPreviewVariables() {
     seriesTitleCN: props.project.name,
     seriesTitleEN: props.project.name,
     seriesTitleJP: props.project.name,
-    seasonLabel: 'Season 2',
-    episodeLabel: previewEpisode?.episodeLabel ?? '05',
-    episodeTitle: previewEpisode?.episodeTitle ?? 'Episode Title',
+    seasonLabel: undefined,
+    episodeLabel: previewEpisode?.episodeLabel?.trim() || undefined,
+    episodeTitle: previewEpisode?.episodeTitle?.trim() || undefined,
     techLabel: [getVideoProfileLabel(primaryVideo), getSubtitleProfileLabel(primarySubtitle)].filter(Boolean).join(' / '),
     resolution: getVideoProfileLabel(primaryVideo),
     videoCodec: 'AVC',
@@ -1347,16 +1630,25 @@ function buildPreviewVariables() {
   }
 }
 
-function renderTemplate(value: string) {
+function renderTemplatePreview(value: string): TemplatePreviewResult {
   if (!value.trim()) {
-    return ''
+    return {
+      text: '',
+      missingTokens: [],
+    }
   }
 
-  const previewVariables = buildPreviewVariables()
-  return value.replace(/\{\{(.*?)\}\}/g, (_, token: string) => {
-    const key = token.trim() as keyof typeof previewVariables
-    return previewVariables[key] ?? `{{${token.trim()}}}`
-  })
+  const missingTokens = new Set<string>()
+  const text = renderTemplateWithVariables(value, buildPreviewVariables(), missingTokens)
+
+  return {
+    text,
+    missingTokens: [...missingTokens],
+  }
+}
+
+function renderTemplate(value: string) {
+  return renderTemplatePreview(value).text
 }
 
 function applyProfileSelectionInternal(profileId: number | null) {
@@ -1649,7 +1941,7 @@ async function removeCurrentProfile() {
   }
 }
 
-async function createEpisode() {
+async function createEpisode(options?: { followupAction?: RecentEpisodeGuideAction }) {
   const episodeLabel = episodeForm.episodeLabel.trim()
   const episodeTitle = episodeForm.episodeTitle.trim()
 
@@ -1671,15 +1963,37 @@ async function createEpisode() {
       return
     }
 
+    const createdEpisode = result.data.episode
+    const followupAction = options?.followupAction
+
     workspace.value = result.data.workspace
-    syncSelectedEpisode(result.data.episode.id)
+    syncSelectedEpisode(createdEpisode.id)
     initializeProfileEditor()
-    guideEpisodeId.value = result.data.episode.id
-    episodeGuideVisible.value = true
     episodeDialogVisible.value = false
     episodeForm.episodeLabel = ''
     episodeForm.episodeTitle = ''
-    ElMessage.success(t('seriesWorkspace.episodes.createSuccess', { episode: result.data.episode.episodeLabel }))
+    guideEpisodeId.value = createdEpisode.id
+    ElMessage.success(t('seriesWorkspace.episodes.createSuccess', { episode: createdEpisode.episodeLabel }))
+
+    if (followupAction === 'default' && defaultPublishProfile.value) {
+      const applied = await applyPublishProfileToEpisode(createdEpisode, defaultPublishProfile.value, { closeGuide: true })
+      if (applied) {
+        persistRecentEpisodeGuideAction('default')
+        return
+      }
+    } else if (followupAction === 'inherit') {
+      const inherited = await inheritVariantsForEpisode(createdEpisode, true)
+      if (inherited) {
+        persistRecentEpisodeGuideAction('inherit')
+        return
+      }
+    } else if (followupAction === 'blank') {
+      persistRecentEpisodeGuideAction('blank')
+      ElMessage.success(t('seriesWorkspace.episodeGuide.blankSuccess', { episode: createdEpisode.episodeLabel }))
+      return
+    }
+
+    episodeGuideVisible.value = true
   } finally {
     isCreatingEpisode.value = false
   }
@@ -1720,7 +2034,7 @@ async function applyPublishProfileToEpisode(
 ) {
   const confirmed = await confirmProfileSiteFieldDefaults(profile)
   if (!confirmed) {
-    return
+    return false
   }
 
   isApplyingProfile.value = true
@@ -1737,7 +2051,7 @@ async function applyPublishProfileToEpisode(
     })
     if (!result.ok) {
       ElMessage.error(result.error.message)
-      return
+      return false
     }
 
     workspace.value = result.data.workspace
@@ -1754,6 +2068,7 @@ async function applyPublishProfileToEpisode(
         skipped: result.data.skippedCount,
       }),
     )
+    return true
   } finally {
     isApplyingProfile.value = false
   }
@@ -1788,14 +2103,17 @@ async function applyDefaultProfileToGuideEpisode() {
     return
   }
 
-  await applyPublishProfileToEpisode(guideEpisode.value, defaultPublishProfile.value, { closeGuide: true })
+  const applied = await applyPublishProfileToEpisode(guideEpisode.value, defaultPublishProfile.value, { closeGuide: true })
+  if (applied) {
+    persistRecentEpisodeGuideAction('default')
+  }
 }
 
 async function inheritVariantsForEpisode(episode: SeriesProjectEpisode, closeGuide = false) {
   const sourceEpisode = getPreviousEpisode(episode.id)
   if (!sourceEpisode) {
     ElMessage.error(t('seriesWorkspace.variants.inheritDisabled'))
-    return
+    return false
   }
 
   isInheritingVariants.value = true
@@ -1806,7 +2124,7 @@ async function inheritVariantsForEpisode(episode: SeriesProjectEpisode, closeGui
     })
     if (!result.ok) {
       ElMessage.error(result.error.message)
-      return
+      return false
     }
 
     workspace.value = result.data.workspace
@@ -1821,6 +2139,7 @@ async function inheritVariantsForEpisode(episode: SeriesProjectEpisode, closeGui
         count: result.data.copiedCount,
       }),
     )
+    return true
   } finally {
     isInheritingVariants.value = false
   }
@@ -1841,7 +2160,10 @@ async function inheritVariantsFromGuideEpisode() {
     return
   }
 
-  await inheritVariantsForEpisode(guideEpisode.value, true)
+  const inherited = await inheritVariantsForEpisode(guideEpisode.value, true)
+  if (inherited) {
+    persistRecentEpisodeGuideAction('inherit')
+  }
 }
 
 function keepGuideEpisodeBlank() {
@@ -1851,6 +2173,7 @@ function keepGuideEpisodeBlank() {
   }
 
   episodeGuideVisible.value = false
+  persistRecentEpisodeGuideAction('blank')
   ElMessage.success(t('seriesWorkspace.episodeGuide.blankSuccess', { episode: guideEpisode.value.episodeLabel }))
 }
 
@@ -2040,7 +2363,31 @@ function openProjectFolder() {
   window.globalAPI.openFolder(JSON.stringify(message))
 }
 
+function getRecentEpisodeGuideActionStorageKey(projectId: number) {
+  return `series-workspace-recent-episode-action:${projectId}`
+}
+
+function loadRecentEpisodeGuideAction() {
+  try {
+    const raw = window.localStorage.getItem(getRecentEpisodeGuideActionStorageKey(props.project.id))
+    recentEpisodeGuideAction.value =
+      raw === 'default' || raw === 'inherit' || raw === 'blank' ? raw : null
+  } catch {
+    recentEpisodeGuideAction.value = null
+  }
+}
+
+function persistRecentEpisodeGuideAction(action: RecentEpisodeGuideAction) {
+  recentEpisodeGuideAction.value = action
+  try {
+    window.localStorage.setItem(getRecentEpisodeGuideActionStorageKey(props.project.id), action)
+  } catch {
+    // Ignore storage write failures and keep the in-memory hint.
+  }
+}
+
 onMounted(() => {
+  loadRecentEpisodeGuideAction()
   void loadWorkspace()
   window.projectAPI.refreshProjectData(() => {
     void loadWorkspace()
@@ -2073,6 +2420,7 @@ watch(
     dirtySwitchDialogVisible.value = false
     saveAsDialogVisible.value = false
     refillVariantId.value = null
+    loadRecentEpisodeGuideAction()
     void loadWorkspace()
   },
 )
@@ -2406,6 +2754,19 @@ watch(
               <div class="series-workspace__preview-label">{{ t('seriesWorkspace.profileEditor.preview.title') }}</div>
               <div class="series-workspace__preview-value">{{ titlePreview }}</div>
             </div>
+
+            <el-alert
+              v-if="titlePreviewMissingTokens.length"
+              type="info"
+              :title="t('seriesWorkspace.profileEditor.preview.placeholderTitle')"
+              :description="
+                t('seriesWorkspace.profileEditor.preview.placeholderText', {
+                  tokens: titlePreviewMissingTokens.join(' / '),
+                })
+              "
+              :closable="false"
+              show-icon
+            />
           </section>
 
           <section class="series-workspace__stack-card">
@@ -2943,6 +3304,43 @@ watch(
 
               <div class="series-workspace__preview-card series-workspace__preview-card--multiline">
                 <div class="series-workspace__preview-label">
+                  {{ t('seriesWorkspace.execution.sources.title') }}
+                </div>
+                <div class="series-workspace__card-text">
+                  {{ t('seriesWorkspace.execution.sources.text') }}
+                </div>
+
+                <div class="series-workspace__source-groups">
+                  <article
+                    v-for="group in selectedEpisodeExecutionSourceGroups"
+                    :key="group.key"
+                    class="series-workspace__source-group"
+                  >
+                    <div class="series-workspace__site-card-head">
+                      <div class="series-workspace__difference-value">{{ group.title }}</div>
+                      <el-tag :type="group.tone" effect="plain" size="small">{{ group.entries.length }}</el-tag>
+                    </div>
+
+                    <div v-if="group.entries.length" class="series-workspace__difference-list">
+                      <article
+                        v-for="entry in group.entries"
+                        :key="entry.key"
+                        class="series-workspace__difference-item"
+                      >
+                        <div class="series-workspace__field-label">{{ entry.label }}</div>
+                        <div class="series-workspace__difference-value">{{ entry.value }}</div>
+                      </article>
+                    </div>
+
+                    <div v-else class="series-workspace__empty">
+                      {{ group.emptyText }}
+                    </div>
+                  </article>
+                </div>
+              </div>
+
+              <div class="series-workspace__preview-card series-workspace__preview-card--multiline">
+                <div class="series-workspace__preview-label">
                   {{ t('seriesWorkspace.execution.differences.siteOverrides') }}
                 </div>
 
@@ -3038,7 +3436,14 @@ watch(
       </section>
 
       <section v-if="editorVisible" class="series-workspace__editor">
-        <EpisodeEdit :id="props.id" :key="editorKey" />
+        <EpisodeEdit
+          :id="props.id"
+          :key="editorKey"
+          :project="props.project"
+          :project-site-field-defaults="workspace?.projectSiteFieldDefaults"
+          :active-episode="activeEpisode"
+          :active-variant="activeVariant"
+        />
       </section>
     </template>
 
@@ -3049,6 +3454,15 @@ watch(
       destroy-on-close
     >
       <div class="series-workspace__dialog-copy">{{ t('seriesWorkspace.episodes.dialog.text') }}</div>
+
+      <el-alert
+        v-if="recentEpisodeGuideActionLabel"
+        :type="canRunRecentEpisodeGuideAction ? 'info' : 'warning'"
+        :title="t('seriesWorkspace.episodes.dialog.recentTitle', { action: recentEpisodeGuideActionLabel })"
+        :description="recentEpisodeGuideActionHelp"
+        :closable="false"
+        show-icon
+      />
 
       <div class="series-workspace__dialog-grid">
         <label class="series-workspace__field">
@@ -3064,7 +3478,24 @@ watch(
 
       <template #footer>
         <el-button @click="episodeDialogVisible = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" :loading="isCreatingEpisode" @click="createEpisode">
+        <el-button
+          plain
+          :disabled="!defaultPublishProfile"
+          :loading="isCreatingEpisode || isApplyingProfile"
+          @click="createEpisode({ followupAction: 'default' })"
+        >
+          {{ t('seriesWorkspace.episodes.form.submitWithDefault') }}
+        </el-button>
+        <el-button
+          v-if="recentEpisodeGuideActionLabel"
+          plain
+          :disabled="!canRunRecentEpisodeGuideAction"
+          :loading="isCreatingEpisode || isApplyingProfile || isInheritingVariants"
+          @click="createEpisode({ followupAction: recentEpisodeGuideAction ?? undefined })"
+        >
+          {{ t('seriesWorkspace.episodes.form.submitWithRecent') }}
+        </el-button>
+        <el-button type="primary" :loading="isCreatingEpisode" @click="createEpisode()">
           {{ t('seriesWorkspace.episodes.form.submit') }}
         </el-button>
       </template>
@@ -3138,7 +3569,7 @@ watch(
       :close-on-press-escape="false"
       destroy-on-close
     >
-      <div class="series-workspace__dialog-copy">{{ t('seriesWorkspace.profileSwitch.text') }}</div>
+      <div class="series-workspace__dialog-copy">{{ dirtySwitchDialogText }}</div>
 
       <template #footer>
         <el-button @click="closeDirtySwitchDialog">{{ t('common.cancel') }}</el-button>
@@ -3638,6 +4069,20 @@ watch(
 .series-workspace__difference-overrides {
   display: grid;
   gap: 8px;
+}
+
+.series-workspace__source-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.series-workspace__source-group {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-panel) 88%, #0a121d);
 }
 
 .series-workspace__side-stack {

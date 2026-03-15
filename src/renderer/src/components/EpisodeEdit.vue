@@ -4,19 +4,23 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { Edit, FolderOpened } from '@element-plus/icons-vue'
 import StatusChip from './feedback/StatusChip.vue'
-import { projectBridge } from '../services/bridge/project'
 import { taskBridge } from '../services/bridge/task'
-import { getPublishedSiteIds, getSiteLabel } from '../services/project/presentation'
+import { getSiteLabel, summarizeTargetSiteProgress } from '../services/project/presentation'
 import type {
   PublishProject,
   SeriesProjectEpisode,
   SeriesProjectVariant,
-  SeriesProjectWorkspace,
   SeriesPublishProfileSiteFieldDefaults,
 } from '../types/project'
 import type { SiteId } from '../types/site'
 
-const props = defineProps<{ id: number }>()
+const props = defineProps<{
+  id: number
+  project: PublishProject
+  projectSiteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
+  activeEpisode: SeriesProjectEpisode | null
+  activeVariant: SeriesProjectVariant | null
+}>()
 
 type TagOption = {
   label: string
@@ -81,10 +85,7 @@ const loadCompleted = ref(false)
 const isLoading = ref(false)
 const isCreating = ref(false)
 const isSaving = ref(false)
-const isProjectLoading = ref(false)
 const createForm = ref<FormInstance>()
-const project = ref<PublishProject | null>(null)
-const workspace = ref<SeriesProjectWorkspace | null>(null)
 const suggestedBangumiTags = ref<TagOption[]>([])
 const inputBangumiTags = ref<TagOption[]>([])
 const releaseProfiles = ref<EpisodeReleaseProfile[]>([])
@@ -346,19 +347,30 @@ const rules = reactive<FormRules<EpisodeForm>>({
 })
 
 const targetSiteLabels = computed(() => form.targetSites.map(siteId => getSiteLabel(siteId)).join(', '))
-const publishedSiteSet = computed(() => new Set(project.value ? getPublishedSiteIds(project.value) : []))
-const publishedTargetSites = computed(() => form.targetSites.filter(siteId => publishedSiteSet.value.has(siteId)))
-const missingTargetSites = computed(() => form.targetSites.filter(siteId => !publishedSiteSet.value.has(siteId)))
+const targetSiteProgress = computed(() => summarizeTargetSiteProgress(form.targetSites, activeVariant.value?.publishResults))
+const publishedTargetSites = computed(() => targetSiteProgress.value.publishedSiteIds)
+const pendingTargetSites = computed(() => targetSiteProgress.value.pendingSiteIds)
+const failedTargetSites = computed(() => targetSiteProgress.value.failedSiteIds)
+const unresolvedTargetSites = computed(() => {
+  const unresolvedSiteIds = new Set([...pendingTargetSites.value, ...failedTargetSites.value])
+  return form.targetSites.filter(siteId => unresolvedSiteIds.has(siteId))
+})
 const publishedTargetLabels = computed(() => publishedTargetSites.value.map(siteId => getSiteLabel(siteId)).join(', '))
-const missingTargetLabels = computed(() => missingTargetSites.value.map(siteId => getSiteLabel(siteId)).join(', '))
+const pendingTargetLabels = computed(() => pendingTargetSites.value.map(siteId => getSiteLabel(siteId)).join(', '))
+const failedTargetLabels = computed(() => failedTargetSites.value.map(siteId => getSiteLabel(siteId)).join(', '))
+const unresolvedTargetLabels = computed(() => unresolvedTargetSites.value.map(siteId => getSiteLabel(siteId)).join(', '))
 const resolvedTitle = computed(() => form.title.trim() || buildTitle())
 const summaryPlaceholder = computed(() => (form.summary.trim() ? form.summary.trim() : '这里会作为生成的 HTML / Markdown / BBCode 简介主体。'))
 const selectedReleaseProfileName = computed(
   () => releaseProfiles.value.find(profile => profile.id === selectedReleaseProfileId.value)?.name ?? '',
 )
 const publishProgressTone = computed(() => {
-  if (missingTargetSites.value.length === 0 && form.targetSites.length > 0) {
+  if (unresolvedTargetSites.value.length === 0 && form.targetSites.length > 0) {
     return 'success'
+  }
+
+  if (failedTargetSites.value.length > 0) {
+    return 'danger'
   }
 
   if (publishedTargetSites.value.length > 0) {
@@ -367,36 +379,47 @@ const publishProgressTone = computed(() => {
 
   return 'info'
 })
-
-const activeEpisode = computed<SeriesProjectEpisode | null>(() => {
-  const activeEpisodeId = workspace.value?.activeEpisodeId
-  if (!activeEpisodeId) {
-    return null
+const targetSiteProgressStatus = computed(() => {
+  if (unresolvedTargetSites.value.length === 0) {
+    return '目标站点已全部覆盖'
   }
 
-  return workspace.value?.episodes.find(episode => episode.id === activeEpisodeId) ?? null
-})
-
-const activeVariant = computed<SeriesProjectVariant | null>(() => {
-  const episode = activeEpisode.value
-  const activeVariantId = workspace.value?.activeVariantId
-  if (!episode || !activeVariantId) {
-    return null
+  if (failedTargetSites.value.length > 0) {
+    return `有 ${failedTargetSites.value.length} 个站点发布失败，仍需补发 ${unresolvedTargetSites.value.length} 个站点`
   }
 
-  return episode.variants.find(variant => variant.id === activeVariantId) ?? null
+  return `仍需补发 ${unresolvedTargetSites.value.length} 个站点`
 })
+const unresolvedTargetSummary = computed(() => {
+  if (!unresolvedTargetSites.value.length) {
+    return '暂无待补发站点'
+  }
+
+  if (failedTargetSites.value.length > 0 && pendingTargetSites.value.length > 0) {
+    return `失败：${failedTargetLabels.value}；待补发：${pendingTargetLabels.value}`
+  }
+
+  if (failedTargetSites.value.length > 0) {
+    return `失败后待补发：${failedTargetLabels.value}`
+  }
+
+  return pendingTargetLabels.value || unresolvedTargetLabels.value || '暂无待补发站点'
+})
+
+const activeEpisode = computed<SeriesProjectEpisode | null>(() => props.activeEpisode)
+
+const activeVariant = computed<SeriesProjectVariant | null>(() => props.activeVariant)
 
 const editorReady = computed(() => Boolean(activeEpisode.value && activeVariant.value))
 
 const publishProfileSnapshot = computed(() => activeVariant.value?.publishProfileSnapshot)
 
 const projectBangumiDefault = computed(() =>
-  normalizeOptionalString(workspace.value?.projectSiteFieldDefaults?.bangumi?.category_bangumi),
+  normalizeOptionalString(props.projectSiteFieldDefaults?.bangumi?.category_bangumi),
 )
 
 const projectNyaaDefault = computed(() =>
-  normalizeOptionalString(workspace.value?.projectSiteFieldDefaults?.nyaa?.category_nyaa),
+  normalizeOptionalString(props.projectSiteFieldDefaults?.nyaa?.category_nyaa),
 )
 
 const profileBangumiDefault = computed(() =>
@@ -508,7 +531,7 @@ const variantContextCards = computed<VariantContextCard[]>(() => {
       key: 'project',
       title: '项目默认值',
       source: 'project',
-      summary: project.value?.name ?? '当前项目',
+      summary: props.project.name,
       description: '当发布配置和当前版本都没有覆盖时，这一层提供站点级默认值。',
       lines: projectLines.length ? projectLines : ['当前项目还没有记录 Bangumi / Nyaa 的默认分类。'],
     },
@@ -783,26 +806,6 @@ const searchBangumiTags = async (query: string) => {
   }
 }
 
-async function loadProject() {
-  isProjectLoading.value = true
-  try {
-    const result = await projectBridge.getProject(props.id)
-    if (!result.ok) {
-      project.value = null
-      return
-    }
-
-    project.value = result.data.project
-  } finally {
-    isProjectLoading.value = false
-  }
-}
-
-async function loadSeriesWorkspace() {
-  const result = await projectBridge.getSeriesWorkspace(props.id)
-  workspace.value = result.ok ? result.data.workspace : null
-}
-
 async function getTaskInfo() {
   const result = await taskBridge.getPublishConfig(props.id)
   const content = result.content as Partial<Config.Content_episode>
@@ -850,7 +853,6 @@ async function saveDraft() {
   try {
     const result = await persistConfig()
     if (result.result.includes('success')) {
-      await Promise.all([loadProject(), loadSeriesWorkspace()])
       ElMessage.success('已保存当前版本草稿')
     }
   } finally {
@@ -882,7 +884,6 @@ async function createConfig() {
       return
     }
 
-    await Promise.all([loadProject(), loadSeriesWorkspace()])
     ElMessage.success('当前版本草稿已整理完毕，正在进入发布页')
     setTimeout(() => {
       router.push({
@@ -899,10 +900,7 @@ onMounted(async () => {
   loadReleaseProfiles()
   const statusMessage: Message.Task.TaskStatus = { id: props.id, step: 'edit' }
   window.taskAPI.setTaskProcess(JSON.stringify(statusMessage))
-  await Promise.all([getTaskInfo(), loadProject(), loadSeriesWorkspace()])
-  window.projectAPI.refreshProjectData(() => {
-    void Promise.all([loadProject(), loadSeriesWorkspace()])
-  })
+  await getTaskInfo()
   loadCompleted.value = true
 })
 
@@ -988,8 +986,8 @@ watch(
         </article>
         <article class="episode-edit__summary-card">
           <div class="episode-edit__summary-label">待补发</div>
-          <div class="episode-edit__summary-value">{{ missingTargetSites.length }}</div>
-          <div class="episode-edit__summary-text">{{ missingTargetLabels || '所有已选目标站点都已覆盖' }}</div>
+          <div class="episode-edit__summary-value">{{ unresolvedTargetSites.length }}</div>
+          <div class="episode-edit__summary-text">{{ unresolvedTargetSummary || '所有已选目标站点都已覆盖' }}</div>
         </article>
       </section>
 
@@ -1230,10 +1228,7 @@ watch(
           <article class="episode-edit__card">
             <div class="episode-edit__card-title">目标站点检查</div>
             <div class="episode-edit__progress">
-              <StatusChip :tone="publishProgressTone">
-                {{ missingTargetSites.length === 0 ? '目标站点已全部覆盖' : `仍需补发 ${missingTargetSites.length} 个站点` }}
-              </StatusChip>
-              <StatusChip v-if="isProjectLoading" tone="info">正在同步项目结果</StatusChip>
+              <StatusChip :tone="publishProgressTone">{{ targetSiteProgressStatus }}</StatusChip>
             </div>
             <div class="episode-edit__preview-copy">
               <div class="episode-edit__preview-row">
@@ -1246,7 +1241,7 @@ watch(
               </div>
               <div class="episode-edit__preview-row">
                 <span>待补发</span>
-                <strong>{{ missingTargetLabels || '暂无待补发站点' }}</strong>
+                <strong>{{ unresolvedTargetSummary }}</strong>
               </div>
             </div>
           </article>
