@@ -70,15 +70,23 @@ export type SeriesPublishProfileSubtitleProfile = SeriesVariantTemplateSubtitleP
 export type SeriesPublishProfileSiteFieldDefaults = Partial<Record<SiteId, Record<string, unknown>>>
 
 export interface SeriesPublishProfileTemplateContext {
+  title?: string
+  summary?: string
   releaseTeam?: string
+  seriesLabel?: string
   seriesTitleCN?: string
   seriesTitleEN?: string
   seriesTitleJP?: string
   seasonLabel?: string
+  techLabel?: string
   sourceType?: string
   resolution?: string
   videoCodec?: string
   audioCodec?: string
+  variantName?: string
+  videoProfile?: string
+  subtitleProfile?: string
+  subtitleProfileLabel?: string
 }
 
 export interface SeriesPublishProfileSiteDraft {

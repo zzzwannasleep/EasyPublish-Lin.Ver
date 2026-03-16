@@ -74,15 +74,23 @@ const TEMPLATE_TOKENS = [
 ]
 
 const PROFILE_TEMPLATE_CONTEXT_KEYS = [
+  'title',
+  'summary',
   'releaseTeam',
+  'seriesLabel',
   'seriesTitleCN',
   'seriesTitleEN',
   'seriesTitleJP',
   'seasonLabel',
+  'techLabel',
   'sourceType',
   'resolution',
   'videoCodec',
   'audioCodec',
+  'variantName',
+  'videoProfile',
+  'subtitleProfile',
+  'subtitleProfileLabel',
 ] as const
 
 type ProfileTemplateContextKey = (typeof PROFILE_TEMPLATE_CONTEXT_KEYS)[number]
@@ -105,6 +113,17 @@ type PublishProfileSiteDraftFormEntry = {
 }
 
 type PublishProfileSiteDraftForm = Partial<Record<SiteId, PublishProfileSiteDraftFormEntry>>
+
+type PublishProfileForm = {
+  name: string
+  isDefault: boolean
+  videoProfiles: SeriesPublishProfileVideoProfile[]
+  subtitleProfiles: SeriesPublishProfileSubtitleProfile[]
+  targetSites: SiteId[]
+  titleTemplate: string
+  siteDrafts: PublishProfileSiteDraftForm
+  siteFieldDefaults: PublishProfileSiteFieldForm
+} & ProfileTemplateContextForm
 
 type EpisodeDifferenceField = {
   key: string
@@ -305,37 +324,27 @@ function createEmptySiteDraftForm(siteIds: SiteId[] = TARGET_SITE_ORDER): Publis
 
 function createEmptyProfileTemplateContextForm(): ProfileTemplateContextForm {
   return {
+    title: '',
+    summary: '',
     releaseTeam: 'VCB-Studio',
+    seriesLabel: '',
     seriesTitleCN: '',
     seriesTitleEN: '',
     seriesTitleJP: '',
     seasonLabel: '',
+    techLabel: '',
     sourceType: 'WebRip',
     resolution: '',
     videoCodec: 'HEVC',
     audioCodec: 'AAC',
+    variantName: '',
+    videoProfile: '',
+    subtitleProfile: '',
+    subtitleProfileLabel: '',
   }
 }
 
-const profileForm = reactive<{
-  name: string
-  isDefault: boolean
-  videoProfiles: SeriesPublishProfileVideoProfile[]
-  subtitleProfiles: SeriesPublishProfileSubtitleProfile[]
-  releaseTeam: string
-  seriesTitleCN: string
-  seriesTitleEN: string
-  seriesTitleJP: string
-  seasonLabel: string
-  sourceType: string
-  resolution: string
-  videoCodec: string
-  audioCodec: string
-  targetSites: SiteId[]
-  titleTemplate: string
-  siteDrafts: PublishProfileSiteDraftForm
-  siteFieldDefaults: PublishProfileSiteFieldForm
-}>({
+const profileForm = reactive<PublishProfileForm>({
   name: '',
   isDefault: false,
   videoProfiles: ['1080p'],
@@ -769,7 +778,7 @@ const selectedEpisodeExecutionSourceGroups = computed<EpisodeExecutionSourceGrou
   const snapshot = activeVariant.value.publishProfileSnapshot
   const snapshotTargetSites = normalizeTargetSites(snapshot?.targetSites ?? [])
   const snapshotTitle = snapshot?.titleTemplate?.trim()
-    ? renderDraftTemplate(snapshot.titleTemplate, draftConfig.value, activeVariant.value)
+    ? renderDraftTemplate(snapshot.titleTemplate, draftConfig.value, activeVariant.value, snapshot.templateContext)
     : ''
 
   const linkedProfileName = getVariantPublishProfileLabel(activeVariant.value)
@@ -1434,7 +1443,7 @@ function getSiteFieldModeTagType(mode: PublishProfileSiteFieldMode): 'warning' |
   return mode === 'required' ? 'warning' : 'info'
 }
 
-function serializeProfileForm(source: typeof profileForm) {
+function serializeProfileForm(source: PublishProfileForm) {
   const targetSites = normalizeTargetSites(source.targetSites)
   const siteDrafts = buildSiteDraftsPayload(targetSites, source.siteDrafts)
   return JSON.stringify({
@@ -1513,7 +1522,76 @@ function trimProfileTemplateContextValue(value?: string | null) {
   return normalizedValue ? normalizedValue : undefined
 }
 
-function buildProfileTemplateContextPayload(source: typeof profileForm): SeriesPublishProfileTemplateContext | undefined {
+function buildSeriesLabelFromValues(values: {
+  seriesTitleCN?: string
+  seriesTitleEN?: string
+  seriesTitleJP?: string
+  seasonLabel?: string
+}) {
+  const titles = [values.seriesTitleCN, values.seriesTitleEN, values.seriesTitleJP]
+    .map(value => value?.trim() ?? '')
+    .filter(Boolean)
+  const dedupedTitles = [...new Set(titles)]
+  const seasonLabel = values.seasonLabel?.trim()
+
+  return seasonLabel ? [...dedupedTitles, seasonLabel].join(' / ') : dedupedTitles.join(' / ')
+}
+
+function buildTechLabelFromValues(values: {
+  sourceType?: string
+  resolution?: string
+  videoCodec?: string
+  audioCodec?: string
+}) {
+  return [values.sourceType, values.resolution, values.videoCodec, values.audioCodec]
+    .map(value => value?.trim() ?? '')
+    .filter(Boolean)
+    .join(' ')
+}
+
+function applyTemplateContextOverrides(
+  variables: Record<string, string | undefined>,
+  templateContext?: SeriesPublishProfileTemplateContext | null,
+) {
+  if (!templateContext) {
+    return variables
+  }
+
+  const nextVariables = { ...variables }
+  PROFILE_TEMPLATE_CONTEXT_KEYS.forEach(key => {
+    if (key === 'seriesLabel' || key === 'techLabel') {
+      return
+    }
+
+    const overrideValue = trimProfileTemplateContextValue(templateContext[key])
+    if (overrideValue) {
+      nextVariables[key] = overrideValue
+    }
+  })
+
+  const derivedSeriesLabel = buildSeriesLabelFromValues({
+    seriesTitleCN: nextVariables.seriesTitleCN,
+    seriesTitleEN: nextVariables.seriesTitleEN,
+    seriesTitleJP: nextVariables.seriesTitleJP,
+    seasonLabel: nextVariables.seasonLabel,
+  })
+  const derivedTechLabel = buildTechLabelFromValues({
+    sourceType: nextVariables.sourceType,
+    resolution: nextVariables.resolution,
+    videoCodec: nextVariables.videoCodec,
+    audioCodec: nextVariables.audioCodec,
+  })
+
+  nextVariables.seriesLabel =
+    trimProfileTemplateContextValue(templateContext.seriesLabel) ?? (derivedSeriesLabel || nextVariables.seriesLabel)
+
+  nextVariables.techLabel =
+    trimProfileTemplateContextValue(templateContext.techLabel) ?? (derivedTechLabel || nextVariables.techLabel)
+
+  return nextVariables
+}
+
+function buildProfileTemplateContextPayload(source: PublishProfileForm): SeriesPublishProfileTemplateContext | undefined {
   const nextContext: SeriesPublishProfileTemplateContext = {}
   PROFILE_TEMPLATE_CONTEXT_KEYS.forEach(key => {
     const normalizedValue = trimProfileTemplateContextValue(source[key])
@@ -1531,10 +1609,13 @@ function resolveProfileTemplateContextForm(profile?: SeriesPublishProfile | null
   const savedContext = profile?.templateContext ?? {}
 
   return {
+    title: trimProfileTemplateContextValue(savedContext.title) ?? fallbackContext.title,
+    summary: trimProfileTemplateContextValue(savedContext.summary) ?? fallbackContext.summary,
     releaseTeam:
       trimProfileTemplateContextValue(savedContext.releaseTeam) ??
       trimProfileTemplateContextValue(draftContent?.releaseTeam) ??
       fallbackContext.releaseTeam,
+    seriesLabel: trimProfileTemplateContextValue(savedContext.seriesLabel) ?? fallbackContext.seriesLabel,
     seriesTitleCN:
       trimProfileTemplateContextValue(savedContext.seriesTitleCN) ??
       trimProfileTemplateContextValue(draftContent?.seriesTitleCN) ??
@@ -1551,6 +1632,7 @@ function resolveProfileTemplateContextForm(profile?: SeriesPublishProfile | null
       trimProfileTemplateContextValue(savedContext.seasonLabel) ??
       trimProfileTemplateContextValue(draftContent?.seasonLabel) ??
       fallbackContext.seasonLabel,
+    techLabel: trimProfileTemplateContextValue(savedContext.techLabel) ?? fallbackContext.techLabel,
     sourceType:
       trimProfileTemplateContextValue(savedContext.sourceType) ??
       trimProfileTemplateContextValue(draftContent?.sourceType) ??
@@ -1567,6 +1649,11 @@ function resolveProfileTemplateContextForm(profile?: SeriesPublishProfile | null
       trimProfileTemplateContextValue(savedContext.audioCodec) ??
       trimProfileTemplateContextValue(draftContent?.audioCodec) ??
       fallbackContext.audioCodec,
+    variantName: trimProfileTemplateContextValue(savedContext.variantName) ?? fallbackContext.variantName,
+    videoProfile: trimProfileTemplateContextValue(savedContext.videoProfile) ?? fallbackContext.videoProfile,
+    subtitleProfile: trimProfileTemplateContextValue(savedContext.subtitleProfile) ?? fallbackContext.subtitleProfile,
+    subtitleProfileLabel:
+      trimProfileTemplateContextValue(savedContext.subtitleProfileLabel) ?? fallbackContext.subtitleProfileLabel,
   }
 }
 
@@ -1598,45 +1685,60 @@ function renderTemplateWithVariables(
 function buildDraftTemplateVariables(
   config: Config.PublishConfig | null | undefined,
   variant?: SeriesProjectVariant | null,
+  templateContext?: SeriesPublishProfileTemplateContext | null,
 ): Record<string, string | undefined> {
   const content = getEpisodeDraftContent(config)
   const resolution = content?.resolution?.trim() || getVideoProfileLabel(variant?.videoProfile) || undefined
-  const titles = [content?.seriesTitleCN, content?.seriesTitleEN, content?.seriesTitleJP]
-    .map(value => value?.trim())
-    .filter(Boolean)
-  const techParts = [content?.sourceType, resolution, content?.videoCodec, content?.audioCodec]
-    .map(value => value?.trim())
-    .filter(Boolean)
 
-  return {
-    title: config?.title?.trim() || props.project.name,
-    summary: content?.summary?.trim() || t('seriesWorkspace.profileEditor.preview.summarySample'),
-    releaseTeam: content?.releaseTeam?.trim() || 'VCB-Studio',
-    seriesLabel: titles.join(' / ') || props.project.name,
-    seriesTitleCN: content?.seriesTitleCN?.trim() || props.project.name,
-    seriesTitleEN: content?.seriesTitleEN?.trim() || props.project.name,
-    seriesTitleJP: content?.seriesTitleJP?.trim() || props.project.name,
-    seasonLabel: content?.seasonLabel?.trim() || undefined,
-    episodeLabel: content?.episodeLabel?.trim() || undefined,
-    episodeTitle: content?.episodeTitle?.trim() || undefined,
-    techLabel: techParts.join(' ') || undefined,
-    sourceType: content?.sourceType?.trim() || undefined,
-    resolution,
-    videoCodec: content?.videoCodec?.trim() || undefined,
-    audioCodec: content?.audioCodec?.trim() || undefined,
-    variantName: variant?.name?.trim() || undefined,
-    videoProfile: getVideoProfileLabel(variant?.videoProfile),
-    subtitleProfile: variant?.subtitleProfile ?? undefined,
-    subtitleProfileLabel: getSubtitleProfileLabel(variant?.subtitleProfile),
-  }
+  return applyTemplateContextOverrides(
+    {
+      title: config?.title?.trim() || props.project.name,
+      summary: content?.summary?.trim() || t('seriesWorkspace.profileEditor.preview.summarySample'),
+      releaseTeam: content?.releaseTeam?.trim() || 'VCB-Studio',
+      seriesLabel:
+        buildSeriesLabelFromValues({
+          seriesTitleCN: content?.seriesTitleCN,
+          seriesTitleEN: content?.seriesTitleEN,
+          seriesTitleJP: content?.seriesTitleJP,
+          seasonLabel: content?.seasonLabel,
+        }) || props.project.name,
+      seriesTitleCN: content?.seriesTitleCN?.trim() || props.project.name,
+      seriesTitleEN: content?.seriesTitleEN?.trim() || props.project.name,
+      seriesTitleJP: content?.seriesTitleJP?.trim() || props.project.name,
+      seasonLabel: content?.seasonLabel?.trim() || undefined,
+      episodeLabel: content?.episodeLabel?.trim() || undefined,
+      episodeTitle: content?.episodeTitle?.trim() || undefined,
+      techLabel:
+        buildTechLabelFromValues({
+          sourceType: content?.sourceType,
+          resolution,
+          videoCodec: content?.videoCodec,
+          audioCodec: content?.audioCodec,
+        }) || undefined,
+      sourceType: content?.sourceType?.trim() || undefined,
+      resolution,
+      videoCodec: content?.videoCodec?.trim() || undefined,
+      audioCodec: content?.audioCodec?.trim() || undefined,
+      variantName: variant?.name?.trim() || undefined,
+      videoProfile: getVideoProfileLabel(variant?.videoProfile),
+      subtitleProfile: variant?.subtitleProfile ?? undefined,
+      subtitleProfileLabel: getSubtitleProfileLabel(variant?.subtitleProfile),
+    },
+    templateContext,
+  )
 }
 
-function renderDraftTemplate(value: string, config: Config.PublishConfig | null | undefined, variant?: SeriesProjectVariant | null) {
+function renderDraftTemplate(
+  value: string,
+  config: Config.PublishConfig | null | undefined,
+  variant?: SeriesProjectVariant | null,
+  templateContext?: SeriesPublishProfileTemplateContext | null,
+) {
   if (!value.trim()) {
     return ''
   }
 
-  return renderTemplateWithVariables(value, buildDraftTemplateVariables(config, variant))
+  return renderTemplateWithVariables(value, buildDraftTemplateVariables(config, variant, templateContext))
 }
 
 function summarizeExecutionSourceValues(values: string[]) {
@@ -1729,35 +1831,36 @@ function buildPreviewVariables() {
   const sourceType = profileForm.sourceType.trim() || undefined
   const videoCodec = profileForm.videoCodec.trim() || 'HEVC'
   const audioCodec = profileForm.audioCodec.trim() || 'AAC'
-  const dedupedTitles = [...new Set([seriesTitleCN, seriesTitleEN, seriesTitleJP].filter(Boolean))]
-  const seriesLabel = seasonLabel ? [...dedupedTitles, seasonLabel].join(' / ') : dedupedTitles.join(' / ')
   const variantPreviewName =
     getProfileCombinationNames(
       primaryVideo ? [primaryVideo] : [],
       primarySubtitle ? [primarySubtitle] : [],
     )[0] ?? '1080p-CHS'
 
-  return {
-    title: previewTitle,
-    summary: previewSummary,
-    releaseTeam,
-    seriesLabel,
-    seriesTitleCN,
-    seriesTitleEN,
-    seriesTitleJP,
-    seasonLabel,
-    episodeLabel: previewEpisode?.episodeLabel?.trim() || undefined,
-    episodeTitle: previewEpisode?.episodeTitle?.trim() || undefined,
-    techLabel: [sourceType, resolution, videoCodec, audioCodec].filter(Boolean).join(' '),
-    sourceType,
-    resolution,
-    videoCodec,
-    audioCodec,
-    variantName: variantPreviewName,
-    videoProfile: getVideoProfileLabel(primaryVideo),
-    subtitleProfile: primarySubtitle ?? '',
-    subtitleProfileLabel: getSubtitleProfileLabel(primarySubtitle),
-  }
+  return applyTemplateContextOverrides(
+    {
+      title: previewTitle,
+      summary: previewSummary,
+      releaseTeam,
+      seriesLabel: buildSeriesLabelFromValues({ seriesTitleCN, seriesTitleEN, seriesTitleJP, seasonLabel }),
+      seriesTitleCN,
+      seriesTitleEN,
+      seriesTitleJP,
+      seasonLabel,
+      episodeLabel: previewEpisode?.episodeLabel?.trim() || undefined,
+      episodeTitle: previewEpisode?.episodeTitle?.trim() || undefined,
+      techLabel: buildTechLabelFromValues({ sourceType, resolution, videoCodec, audioCodec }) || undefined,
+      sourceType,
+      resolution,
+      videoCodec,
+      audioCodec,
+      variantName: variantPreviewName,
+      videoProfile: getVideoProfileLabel(primaryVideo),
+      subtitleProfile: primarySubtitle ?? '',
+      subtitleProfileLabel: getSubtitleProfileLabel(primarySubtitle),
+    },
+    buildProfileTemplateContextPayload(profileForm),
+  )
 }
 
 function renderTemplatePreview(value: string): TemplatePreviewResult {
@@ -2949,6 +3052,26 @@ watch(
 
             <div class="series-workspace__form-grid">
               <label class="series-workspace__field">
+                <span class="series-workspace__field-label">{{ t('seriesWorkspace.profileEditor.fields.title') }}</span>
+                <el-input
+                  v-model="profileForm.title"
+                  :placeholder="t('seriesWorkspace.profileEditor.fields.titlePlaceholder')"
+                />
+              </label>
+
+              <label class="series-workspace__field">
+                <span class="series-workspace__field-label">{{ t('seriesWorkspace.profileEditor.fields.summary') }}</span>
+                <el-input
+                  v-model="profileForm.summary"
+                  type="textarea"
+                  :rows="3"
+                  :placeholder="t('seriesWorkspace.profileEditor.fields.summaryPlaceholder')"
+                />
+              </label>
+            </div>
+
+            <div class="series-workspace__form-grid">
+              <label class="series-workspace__field">
                 <span class="series-workspace__field-label">{{ t('seriesWorkspace.profileEditor.fields.releaseTeam') }}</span>
                 <el-input
                   v-model="profileForm.releaseTeam"
@@ -2993,6 +3116,16 @@ watch(
               </label>
 
               <label class="series-workspace__field">
+                <span class="series-workspace__field-label">{{ t('seriesWorkspace.profileEditor.fields.seriesLabel') }}</span>
+                <el-input
+                  v-model="profileForm.seriesLabel"
+                  :placeholder="t('seriesWorkspace.profileEditor.fields.seriesLabelPlaceholder')"
+                />
+              </label>
+            </div>
+
+            <div class="series-workspace__form-grid">
+              <label class="series-workspace__field">
                 <span class="series-workspace__field-label">{{ t('seriesWorkspace.profileEditor.fields.sourceType') }}</span>
                 <el-input
                   v-model="profileForm.sourceType"
@@ -3025,6 +3158,52 @@ watch(
                 <el-input
                   v-model="profileForm.audioCodec"
                   :placeholder="t('seriesWorkspace.profileEditor.fields.audioCodecPlaceholder')"
+                />
+              </label>
+
+              <label class="series-workspace__field">
+                <span class="series-workspace__field-label">{{ t('seriesWorkspace.profileEditor.fields.techLabel') }}</span>
+                <el-input
+                  v-model="profileForm.techLabel"
+                  :placeholder="t('seriesWorkspace.profileEditor.fields.techLabelPlaceholder')"
+                />
+              </label>
+            </div>
+
+            <div class="series-workspace__form-grid">
+              <label class="series-workspace__field">
+                <span class="series-workspace__field-label">{{ t('seriesWorkspace.profileEditor.fields.variantName') }}</span>
+                <el-input
+                  v-model="profileForm.variantName"
+                  :placeholder="t('seriesWorkspace.profileEditor.fields.variantNamePlaceholder')"
+                />
+              </label>
+
+              <label class="series-workspace__field">
+                <span class="series-workspace__field-label">{{ t('seriesWorkspace.profileEditor.fields.videoProfile') }}</span>
+                <el-input
+                  v-model="profileForm.videoProfile"
+                  :placeholder="t('seriesWorkspace.profileEditor.fields.videoProfilePlaceholder')"
+                />
+              </label>
+            </div>
+
+            <div class="series-workspace__form-grid">
+              <label class="series-workspace__field">
+                <span class="series-workspace__field-label">{{ t('seriesWorkspace.profileEditor.fields.subtitleProfile') }}</span>
+                <el-input
+                  v-model="profileForm.subtitleProfile"
+                  :placeholder="t('seriesWorkspace.profileEditor.fields.subtitleProfilePlaceholder')"
+                />
+              </label>
+
+              <label class="series-workspace__field">
+                <span class="series-workspace__field-label">
+                  {{ t('seriesWorkspace.profileEditor.fields.subtitleProfileLabel') }}
+                </span>
+                <el-input
+                  v-model="profileForm.subtitleProfileLabel"
+                  :placeholder="t('seriesWorkspace.profileEditor.fields.subtitleProfileLabelPlaceholder')"
                 />
               </label>
             </div>

@@ -36,6 +36,26 @@ import { createProjectStore } from '../storage/project-store'
 type ProjectChangeHandler = () => void
 
 const PUBLISH_PROFILE_TEMPLATE_CONTEXT_KEYS = [
+  'title',
+  'summary',
+  'releaseTeam',
+  'seriesLabel',
+  'seriesTitleCN',
+  'seriesTitleEN',
+  'seriesTitleJP',
+  'seasonLabel',
+  'techLabel',
+  'sourceType',
+  'resolution',
+  'videoCodec',
+  'audioCodec',
+  'variantName',
+  'videoProfile',
+  'subtitleProfile',
+  'subtitleProfileLabel',
+] as const
+
+const PUBLISH_PROFILE_TEMPLATE_CONTENT_KEYS = [
   'releaseTeam',
   'seriesTitleCN',
   'seriesTitleEN',
@@ -960,21 +980,44 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     ].join('|')
   }
 
-  function buildSeriesLabelFromContent(content: Partial<Config.Content_episode>) {
-    const titles = [content.seriesTitleCN, content.seriesTitleEN, content.seriesTitleJP]
+  function buildSeriesLabelFromValues(values: {
+    seriesTitleCN?: string
+    seriesTitleEN?: string
+    seriesTitleJP?: string
+    seasonLabel?: string
+  }) {
+    const titles = [values.seriesTitleCN, values.seriesTitleEN, values.seriesTitleJP]
       .map(value => value?.trim() ?? '')
       .filter(Boolean)
     const dedupedTitles = [...new Set(titles)]
-    const seasonLabel = content.seasonLabel?.trim()
+    const seasonLabel = values.seasonLabel?.trim()
 
     return seasonLabel ? [...dedupedTitles, seasonLabel].join(' / ') : dedupedTitles.join(' / ')
   }
 
-  function buildTechLabelFromContent(content: Partial<Config.Content_episode>, resolutionOverride?: string) {
-    return [content.sourceType, resolutionOverride ?? content.resolution, content.videoCodec, content.audioCodec]
+  function buildSeriesLabelFromContent(content: Partial<Config.Content_episode>) {
+    return buildSeriesLabelFromValues(content)
+  }
+
+  function buildTechLabelFromValues(values: {
+    sourceType?: string
+    resolution?: string
+    videoCodec?: string
+    audioCodec?: string
+  }) {
+    return [values.sourceType, values.resolution, values.videoCodec, values.audioCodec]
       .map(value => value?.trim() ?? '')
       .filter(Boolean)
       .join(' ')
+  }
+
+  function buildTechLabelFromContent(content: Partial<Config.Content_episode>, resolutionOverride?: string) {
+    return buildTechLabelFromValues({
+      sourceType: content.sourceType,
+      resolution: resolutionOverride ?? content.resolution,
+      videoCodec: content.videoCodec,
+      audioCodec: content.audioCodec,
+    })
   }
 
   function getSubtitleTemplateLabel(profile?: SeriesVariantSubtitleProfile) {
@@ -993,12 +1036,58 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     return subtitleLabelMap[profile]
   }
 
-  function buildSeriesVariantTemplateVariables(config: Config.PublishConfig, variant: SeriesProjectVariant) {
+  function applyTemplateContextToVariables(
+    variables: Record<string, string>,
+    templateContext?: SeriesPublishProfileTemplateContext,
+  ) {
+    if (!templateContext) {
+      return variables
+    }
+
+    const nextVariables = { ...variables }
+    PUBLISH_PROFILE_TEMPLATE_CONTEXT_KEYS.forEach(key => {
+      if (key === 'seriesLabel' || key === 'techLabel') {
+        return
+      }
+
+      const overrideValue = normalizeOptionalString(templateContext[key])
+      if (overrideValue) {
+        nextVariables[key] = overrideValue
+      }
+    })
+
+    const seriesLabelOverride = normalizeOptionalString(templateContext.seriesLabel)
+    const techLabelOverride = normalizeOptionalString(templateContext.techLabel)
+    const derivedSeriesLabel = buildSeriesLabelFromValues({
+      seriesTitleCN: nextVariables.seriesTitleCN,
+      seriesTitleEN: nextVariables.seriesTitleEN,
+      seriesTitleJP: nextVariables.seriesTitleJP,
+      seasonLabel: nextVariables.seasonLabel,
+    })
+    const derivedTechLabel = buildTechLabelFromValues({
+      sourceType: nextVariables.sourceType,
+      resolution: nextVariables.resolution,
+      videoCodec: nextVariables.videoCodec,
+      audioCodec: nextVariables.audioCodec,
+    })
+
+    nextVariables.seriesLabel = seriesLabelOverride ?? derivedSeriesLabel ?? nextVariables.seriesLabel
+    nextVariables.techLabel = techLabelOverride ?? derivedTechLabel ?? nextVariables.techLabel
+
+    return nextVariables
+  }
+
+  function buildSeriesVariantTemplateVariables(
+    config: Config.PublishConfig,
+    variant: SeriesProjectVariant,
+    templateContext?: SeriesPublishProfileTemplateContext,
+  ) {
     const content = config.content as Partial<Config.Content_episode>
     const resolution =
       content.resolution?.trim() ??
       (variant.videoProfile && variant.videoProfile !== 'custom' ? variant.videoProfile : '')
-    return {
+    return applyTemplateContextToVariables(
+      {
       title: config.title?.trim() ?? '',
       summary: content.summary?.trim() ?? '',
       releaseTeam: content.releaseTeam?.trim() ?? '',
@@ -1018,7 +1107,9 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       videoProfile: variant.videoProfile ?? '',
       subtitleProfile: variant.subtitleProfile ?? '',
       subtitleProfileLabel: getSubtitleTemplateLabel(variant.subtitleProfile),
-    }
+      },
+      templateContext,
+    )
   }
 
   function renderSeriesVariantTemplate(
@@ -1065,7 +1156,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
 
     if (templateContext && typeof config.content === 'object' && config.content && !Array.isArray(config.content)) {
       const content = config.content as unknown as Record<string, string | SiteId[] | undefined>
-      PUBLISH_PROFILE_TEMPLATE_CONTEXT_KEYS.forEach(key => {
+      PUBLISH_PROFILE_TEMPLATE_CONTENT_KEYS.forEach(key => {
         const value = templateContext[key]
         if (value) {
           content[key] = value
@@ -1083,7 +1174,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     if (titleTemplate) {
       const renderedTitle = renderSeriesVariantTemplate(
         titleTemplate,
-        buildSeriesVariantTemplateVariables(config, variant),
+        buildSeriesVariantTemplateVariables(config, variant, templateContext),
         { collapseWhitespace: true },
       )
       if (renderedTitle) {
@@ -1094,7 +1185,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     if (summaryTemplate && 'summary' in config.content) {
       const renderedSummary = renderSeriesVariantTemplate(
         summaryTemplate,
-        buildSeriesVariantTemplateVariables(config, variant),
+        buildSeriesVariantTemplateVariables(config, variant, templateContext),
       )
       if (renderedSummary) {
         config.content.summary = renderedSummary
