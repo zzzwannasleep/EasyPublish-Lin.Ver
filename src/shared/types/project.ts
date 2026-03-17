@@ -6,12 +6,14 @@ export type ProjectSourceKind = 'quick' | 'file' | 'template'
 export type LegacyProjectType = ProjectSourceKind | 'episode'
 export type ProjectStatus = 'draft' | 'publishing' | 'published'
 export type ProjectStage = 'edit' | 'review' | 'torrent_publish' | 'forum_publish' | 'completed'
+export type MarkupFormat = 'html' | 'md' | 'bbcode'
 
 export interface CreateProjectInput {
   name: string
   workingDirectory: string
   projectMode: ProjectMode
   sourceKind?: ProjectSourceKind
+  plannedEpisodeCount?: number
 }
 
 export interface PublishProject {
@@ -109,6 +111,8 @@ export interface SeriesPublishProfile {
   targetSites?: SiteId[]
   titleTemplate?: string
   summaryTemplate?: string
+  bodyTemplate?: string
+  bodyTemplateFormat?: MarkupFormat
   siteDrafts?: SeriesPublishProfileSiteDrafts
   siteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
   createdAt: string
@@ -123,6 +127,8 @@ export interface SeriesPublishProfileSnapshot {
   targetSites?: SiteId[]
   titleTemplate?: string
   summaryTemplate?: string
+  bodyTemplate?: string
+  bodyTemplateFormat?: MarkupFormat
   siteDrafts?: SeriesPublishProfileSiteDrafts
   siteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
 }
@@ -131,6 +137,7 @@ export type SeriesVariantTemplate = SeriesPublishProfile
 
 export interface SeriesProjectWorkspace {
   projectId: number
+  plannedEpisodeCount?: number
   episodes: SeriesProjectEpisode[]
   publishProfiles: SeriesPublishProfile[]
   variantTemplates?: SeriesVariantTemplate[]
@@ -192,11 +199,27 @@ export interface SaveSeriesPublishProfileInput {
   targetSites?: SiteId[]
   titleTemplate?: string
   summaryTemplate?: string
+  bodyTemplate?: string
+  bodyTemplateFormat?: MarkupFormat
   siteDrafts?: SeriesPublishProfileSiteDrafts
   siteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
 }
 
 export interface RemoveSeriesPublishProfileInput {
+  projectId: number
+  profileId: number
+}
+
+export interface SaveSeriesWorkspaceSettingsInput {
+  projectId: number
+  plannedEpisodeCount?: number
+}
+
+export interface ImportSeriesPublishProfileInput {
+  projectId: number
+}
+
+export interface ExportSeriesPublishProfileInput {
   projectId: number
   profileId: number
 }
@@ -266,6 +289,15 @@ export interface SeriesPublishProfilePayload {
 export interface SeriesPublishProfileRemovalPayload {
   profileId: number
   workspace: SeriesProjectWorkspace
+}
+
+export interface SeriesWorkspaceSettingsPayload {
+  workspace: SeriesProjectWorkspace
+}
+
+export interface SeriesPublishProfileExportPayload {
+  profile: SeriesPublishProfile
+  path?: string
 }
 
 export type SeriesVariantTemplatePayload = SeriesPublishProfilePayload

@@ -7,12 +7,17 @@ export const projectAPI = {
   listProjects: async () => await ipcRenderer.invoke('project_listProjects'),
   getProject: async (msg: string) => await ipcRenderer.invoke('project_getProject', msg),
   getSeriesWorkspace: async (msg: string) => await ipcRenderer.invoke('project_getSeriesWorkspace', msg),
+  saveSeriesWorkspaceSettings: async (msg: string) => await ipcRenderer.invoke('project_saveSeriesWorkspaceSettings', msg),
   createSeriesEpisode: async (msg: string) => await ipcRenderer.invoke('project_createSeriesEpisode', msg),
   createSeriesVariant: async (msg: string) => await ipcRenderer.invoke('project_createSeriesVariant', msg),
   batchCreateSeriesVariants: async (msg: string) =>
     await ipcRenderer.invoke('project_batchCreateSeriesVariants', msg),
   saveSeriesPublishProfile: async (msg: string) =>
     await ipcRenderer.invoke('project_saveSeriesPublishProfile', msg),
+  importSeriesPublishProfile: async (msg: string) =>
+    await ipcRenderer.invoke('project_importSeriesPublishProfile', msg),
+  exportSeriesPublishProfile: async (msg: string) =>
+    await ipcRenderer.invoke('project_exportSeriesPublishProfile', msg),
   removeSeriesPublishProfile: async (msg: string) =>
     await ipcRenderer.invoke('project_removeSeriesPublishProfile', msg),
   saveSeriesVariantTemplate: async (msg: string) =>

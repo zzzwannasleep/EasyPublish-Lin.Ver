@@ -8,15 +8,20 @@ import type {
   CreateProjectInput,
   CreateSeriesEpisodeInput,
   CreateSeriesVariantInput,
+  ExportSeriesPublishProfileInput,
+  ImportSeriesPublishProfileInput,
   InheritSeriesEpisodeVariantsInput,
   LegacyProjectType,
+  MarkupFormat,
   ProjectMode,
   ProjectSourceKind,
   RemoveSeriesPublishProfileInput,
   SaveSeriesPublishProfileInput,
+  SaveSeriesWorkspaceSettingsInput,
   SeriesProjectEpisode,
   SeriesProjectVariant,
   SeriesPublishProfile,
+  SeriesPublishProfileExportPayload,
   SeriesPublishProfileSnapshot,
   SeriesPublishProfileSiteDraft,
   SeriesPublishProfileSiteDrafts,
@@ -87,10 +92,11 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     return join(projectPath, seriesWorkspaceFileName)
   }
 
-  function createDefaultSeriesWorkspace(projectId: number): SeriesProjectWorkspace {
+  function createDefaultSeriesWorkspace(projectId: number, plannedEpisodeCount?: number): SeriesProjectWorkspace {
     const timestamp = new Date(projectId).toISOString()
     return {
       projectId,
+      plannedEpisodeCount: normalizePlannedEpisodeCount(plannedEpisodeCount),
       episodes: [],
       publishProfiles: [],
       activeEpisodeId: undefined,
@@ -142,6 +148,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
             targetSites,
             titleTemplate,
             summaryTemplate: resolvePrimarySiteDraftSummaryTemplate(siteDrafts, targetSites, legacySummaryTemplate),
+            bodyTemplate: normalizeBodyTemplate(profile.bodyTemplate),
+            bodyTemplateFormat: normalizeMarkupFormat(profile.bodyTemplateFormat),
             siteDrafts,
             siteFieldDefaults: normalizeSiteFieldDefaults(profile.siteFieldDefaults),
             createdAt: profile.createdAt ?? new Date(profile.id).toISOString(),
@@ -256,6 +264,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
 
       return hydrateSeriesWorkspace(projectPath, {
         projectId,
+        plannedEpisodeCount: normalizePlannedEpisodeCount(parsed.plannedEpisodeCount),
         episodes,
         publishProfiles,
         activeEpisodeId:
@@ -369,6 +378,28 @@ export function createProjectService(options: CreateProjectServiceOptions) {
 
     const trimmedValue = value.trim()
     return trimmedValue || undefined
+  }
+
+  function normalizeBodyTemplate(value: unknown) {
+    if (typeof value !== 'string') {
+      return undefined
+    }
+
+    const trimmedValue = value.trim()
+    return trimmedValue || undefined
+  }
+
+  function normalizeMarkupFormat(value: unknown): MarkupFormat | undefined {
+    if (value === 'html' || value === 'md' || value === 'bbcode') {
+      return value
+    }
+
+    return undefined
+  }
+
+  function normalizePlannedEpisodeCount(value: unknown) {
+    const count = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
+    return Number.isFinite(count) && count > 0 ? Math.floor(count) : undefined
   }
 
   function normalizeOptionalString(value: unknown) {
@@ -744,6 +775,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     targetSites?: SiteId[]
     titleTemplate?: string
     summaryTemplate?: string
+    bodyTemplate?: string
+    bodyTemplateFormat?: MarkupFormat
     siteDrafts?: SeriesPublishProfileSiteDrafts
     siteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
   }): SeriesPublishProfileSnapshot {
@@ -777,6 +810,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       targetSites,
       input.summaryTemplate ?? input.profile?.summaryTemplate,
     )
+    const bodyTemplate = normalizeBodyTemplate(input.bodyTemplate ?? input.profile?.bodyTemplate)
+    const bodyTemplateFormat = normalizeMarkupFormat(input.bodyTemplateFormat ?? input.profile?.bodyTemplateFormat)
     const siteFieldDefaults = cloneSiteFieldDefaults(input.siteFieldDefaults ?? input.profile?.siteFieldDefaults)
 
     return {
@@ -793,6 +828,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       targetSites: targetSites.length ? targetSites : undefined,
       titleTemplate,
       summaryTemplate,
+      bodyTemplate,
+      bodyTemplateFormat,
       siteDrafts,
       siteFieldDefaults,
     }
@@ -869,6 +906,12 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         rawSnapshot && 'summaryTemplate' in rawSnapshot
           ? normalizeSummaryTemplate(rawSnapshot.summaryTemplate)
           : undefined,
+      bodyTemplate:
+        rawSnapshot && 'bodyTemplate' in rawSnapshot ? normalizeBodyTemplate(rawSnapshot.bodyTemplate) : undefined,
+      bodyTemplateFormat:
+        rawSnapshot && 'bodyTemplateFormat' in rawSnapshot
+          ? normalizeMarkupFormat(rawSnapshot.bodyTemplateFormat)
+          : undefined,
       siteDrafts: normalizedSiteDrafts,
       siteFieldDefaults: normalizeSiteFieldDefaults(rawSnapshot?.siteFieldDefaults),
     })
@@ -878,6 +921,10 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     }
     if (rawSnapshot && 'summaryTemplate' in rawSnapshot && !normalizeSummaryTemplate(rawSnapshot.summaryTemplate)) {
       snapshot.summaryTemplate = undefined
+    }
+    if (rawSnapshot && 'bodyTemplate' in rawSnapshot && !normalizeBodyTemplate(rawSnapshot.bodyTemplate)) {
+      snapshot.bodyTemplate = undefined
+      snapshot.bodyTemplateFormat = undefined
     }
 
     return snapshot
@@ -965,6 +1012,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     templateContext?: string,
     titleTemplate?: string,
     summaryTemplate?: string,
+    bodyTemplate?: string,
+    bodyTemplateFormat?: MarkupFormat,
     siteDrafts?: string,
     siteFieldDefaults?: string,
   ) {
@@ -975,6 +1024,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       templateContext ?? '',
       titleTemplate?.trim() ?? '',
       summaryTemplate?.trim() ?? '',
+      bodyTemplate?.trim() ?? '',
+      bodyTemplateFormat ?? '',
       siteDrafts ?? '',
       siteFieldDefaults ?? '',
     ].join('|')
@@ -1139,6 +1190,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       templateContext?: SeriesPublishProfileTemplateContext
       titleTemplate?: string
       summaryTemplate?: string
+      bodyTemplate?: string
+      bodyTemplateFormat?: MarkupFormat
       siteDrafts?: SeriesPublishProfileSiteDrafts
       siteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
     },
@@ -1147,6 +1200,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     const targetSites = normalizeSiteIds(options?.targetSites)
     const templateContext = clonePublishProfileTemplateContext(options?.templateContext)
     const titleTemplate = normalizeTitleTemplate(options?.titleTemplate)
+    const bodyTemplate = normalizeBodyTemplate(options?.bodyTemplate)
+    const bodyTemplateFormat = normalizeMarkupFormat(options?.bodyTemplateFormat)
     const siteDrafts = normalizeSiteDrafts(options?.siteDrafts, {
       targetSites,
       summaryTemplate: options?.summaryTemplate,
@@ -1192,6 +1247,20 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       }
     }
 
+    if (bodyTemplate) {
+      const renderedBodyTemplate = renderSeriesVariantTemplate(
+        bodyTemplate,
+        buildSeriesVariantTemplateVariables(config, variant, templateContext),
+      )
+      if (renderedBodyTemplate) {
+        config.bodyTemplate = renderedBodyTemplate
+        config.bodyTemplateFormat = bodyTemplateFormat ?? 'html'
+      }
+    } else {
+      delete config.bodyTemplate
+      delete config.bodyTemplateFormat
+    }
+
     if (siteFieldDefaults) {
       config.siteFieldDefaults = cloneSiteFieldDefaults(siteFieldDefaults)
     } else {
@@ -1220,6 +1289,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       templateContext?: SeriesPublishProfileTemplateContext
       titleTemplate?: string
       summaryTemplate?: string
+      bodyTemplate?: string
+      bodyTemplateFormat?: MarkupFormat
       siteDrafts?: SeriesPublishProfileSiteDrafts
       siteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
     },
@@ -1597,7 +1668,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
 
     const id = Date.now()
     if (projectMode === 'episode') {
-      writeSeriesWorkspace(projectPath, createDefaultSeriesWorkspace(id))
+      writeSeriesWorkspace(projectPath, createDefaultSeriesWorkspace(id, input.plannedEpisodeCount))
     }
     const legacyType: LegacyProjectType = projectMode === 'episode' ? 'episode' : sourceKind!
     projectStore.insertLegacyTask({
@@ -1802,6 +1873,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         templateContext: publishProfile?.templateContext,
         titleTemplate,
         summaryTemplate,
+        bodyTemplate: publishProfile?.bodyTemplate,
+        bodyTemplateFormat: publishProfile?.bodyTemplateFormat,
         siteDrafts: publishProfile?.siteDrafts,
         siteFieldDefaults: publishProfile?.siteFieldDefaults,
       })
@@ -1817,6 +1890,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
           targetSites: variantSummary.targetSites,
           titleTemplate,
           summaryTemplate,
+          bodyTemplate: publishProfile?.bodyTemplate,
+          bodyTemplateFormat: publishProfile?.bodyTemplateFormat,
           siteDrafts: publishProfile?.siteDrafts,
           siteFieldDefaults: normalizeSiteFieldDefaults(config.siteFieldDefaults),
         }),
@@ -1931,6 +2006,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
           templateContext: publishProfile?.templateContext,
           titleTemplate,
           summaryTemplate,
+          bodyTemplate: publishProfile?.bodyTemplate,
+          bodyTemplateFormat: publishProfile?.bodyTemplateFormat,
           siteDrafts: publishProfile?.siteDrafts,
           siteFieldDefaults: publishProfile?.siteFieldDefaults,
         })
@@ -1946,6 +2023,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
             targetSites: variantSummary.targetSites,
             titleTemplate,
             summaryTemplate,
+            bodyTemplate: publishProfile?.bodyTemplate,
+            bodyTemplateFormat: publishProfile?.bodyTemplateFormat,
             siteDrafts: publishProfile?.siteDrafts,
             siteFieldDefaults: normalizeSiteFieldDefaults(config.siteFieldDefaults),
           }),
@@ -1999,6 +2078,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const requestedTargetSites = normalizeSiteIds(input.targetSites)
       const templateContext = normalizePublishProfileTemplateContext(input.templateContext)
       const titleTemplate = normalizeTitleTemplate(input.titleTemplate)
+      const bodyTemplate = normalizeBodyTemplate(input.bodyTemplate)
+      const bodyTemplateFormat = normalizeMarkupFormat(input.bodyTemplateFormat) ?? (bodyTemplate ? 'html' : undefined)
       const siteDrafts = normalizeSiteDrafts(input.siteDrafts, {
         targetSites: requestedTargetSites,
         summaryTemplate: normalizeSummaryTemplate(input.summaryTemplate),
@@ -2040,6 +2121,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         serializePublishProfileTemplateContext(templateContext),
         titleTemplate,
         summaryTemplate,
+        bodyTemplate,
+        bodyTemplateFormat,
         JSON.stringify(normalizeSiteDrafts(siteDrafts) ?? {}),
         JSON.stringify(siteFieldDefaults ?? {}),
       )
@@ -2058,6 +2141,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
               serializePublishProfileTemplateContext(profile.templateContext),
               profile.titleTemplate,
               profile.summaryTemplate,
+              profile.bodyTemplate,
+              profile.bodyTemplateFormat,
               JSON.stringify(normalizeSiteDrafts(profile.siteDrafts, {
                 targetSites: profile.targetSites,
                 summaryTemplate: profile.summaryTemplate,
@@ -2083,6 +2168,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         targetSites: targetSites.length ? targetSites : undefined,
         titleTemplate,
         summaryTemplate,
+        bodyTemplate,
+        bodyTemplateFormat,
         siteDrafts,
         siteFieldDefaults,
         createdAt: workspace.publishProfiles.find(item => item.id === profileId)?.createdAt ?? timestamp,
@@ -2120,6 +2207,135 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       dialog.showErrorBox('闂傚倷鐒︾€笛囨偡閵娾晩鏁?', (err as Error).message)
       return JSON.stringify(
         fail('SERIES_PUBLISH_PROFILE_SAVE_FAILED', 'Unable to save series publish profile', (err as Error).message),
+      )
+    }
+  }
+
+  async function saveSeriesWorkspaceSettings(msg: string) {
+    try {
+      const input: SaveSeriesWorkspaceSettingsInput = JSON.parse(msg)
+      const { projectId } = input
+      const task = projectStore.findLegacyTaskById(projectId)
+      if (!task) {
+        return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${projectId} does not exist`))
+      }
+
+      const project = projectStore.getProjectById(projectId)
+      if (!project || project.projectMode !== 'episode') {
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `Project ${projectId} is not in series mode`))
+      }
+
+      const workspace = readSeriesWorkspace(project.id, task.path)
+      const nextWorkspace: SeriesProjectWorkspace = {
+        ...workspace,
+        plannedEpisodeCount: normalizePlannedEpisodeCount(input.plannedEpisodeCount),
+        updatedAt: new Date().toISOString(),
+      }
+      writeSeriesWorkspace(task.path, nextWorkspace)
+
+      notifyProjectDataChanged()
+      return JSON.stringify(ok({ workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
+    } catch (err) {
+      dialog.showErrorBox('保存剧集概览失败', (err as Error).message)
+      return JSON.stringify(
+        fail('SERIES_WORKSPACE_SETTINGS_SAVE_FAILED', 'Unable to save series workspace settings', (err as Error).message),
+      )
+    }
+  }
+
+  async function importSeriesPublishProfile(msg: string) {
+    try {
+      const input: ImportSeriesPublishProfileInput = JSON.parse(msg)
+      const { canceled, filePaths } = await dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      })
+
+      if (canceled || !filePaths[0]) {
+        return JSON.stringify(fail('SERIES_PUBLISH_PROFILE_IMPORT_CANCELLED', 'Import cancelled'))
+      }
+
+      const raw = JSON.parse(fs.readFileSync(filePaths[0], { encoding: 'utf-8' })) as
+        | { profile?: Partial<SeriesPublishProfile> }
+        | Partial<SeriesPublishProfile>
+      const importedProfile =
+        raw && typeof raw === 'object' && 'profile' in raw && raw.profile ? raw.profile : (raw as Partial<SeriesPublishProfile>)
+
+      return await saveSeriesPublishProfile(
+        JSON.stringify({
+          projectId: input.projectId,
+          name: normalizeOptionalString(importedProfile.name) ?? '导入配置',
+          isDefault: Boolean(importedProfile.isDefault),
+          videoProfiles: importedProfile.videoProfiles?.length ? importedProfile.videoProfiles : ['1080p'],
+          subtitleProfiles: importedProfile.subtitleProfiles?.length ? importedProfile.subtitleProfiles : ['chs'],
+          templateContext: importedProfile.templateContext,
+          targetSites: importedProfile.targetSites,
+          titleTemplate: importedProfile.titleTemplate,
+          summaryTemplate: importedProfile.summaryTemplate,
+          bodyTemplate: importedProfile.bodyTemplate,
+          bodyTemplateFormat: importedProfile.bodyTemplateFormat,
+          siteDrafts: importedProfile.siteDrafts,
+          siteFieldDefaults: importedProfile.siteFieldDefaults,
+        } satisfies SaveSeriesPublishProfileInput),
+      )
+    } catch (err) {
+      dialog.showErrorBox('导入发布配置失败', (err as Error).message)
+      return JSON.stringify(
+        fail('SERIES_PUBLISH_PROFILE_IMPORT_FAILED', 'Unable to import series publish profile', (err as Error).message),
+      )
+    }
+  }
+
+  async function exportSeriesPublishProfile(msg: string) {
+    try {
+      const input: ExportSeriesPublishProfileInput = JSON.parse(msg)
+      const { projectId, profileId } = input
+      const task = projectStore.findLegacyTaskById(projectId)
+      if (!task) {
+        return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${projectId} does not exist`))
+      }
+
+      const project = projectStore.getProjectById(projectId)
+      if (!project || project.projectMode !== 'episode') {
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `Project ${projectId} is not in series mode`))
+      }
+
+      const workspace = readSeriesWorkspace(project.id, task.path)
+      const profile = workspace.publishProfiles.find(item => item.id === profileId)
+      if (!profile) {
+        return JSON.stringify(fail('SERIES_PUBLISH_PROFILE_NOT_FOUND', `Publish profile ${profileId} does not exist`))
+      }
+
+      const safeName = profile.name.replace(/[<>:"/\\|?*\u0000-\u001F]+/g, '-').trim() || `publish-profile-${profile.id}`
+      const { canceled, filePath } = await dialog.showSaveDialog({
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+        defaultPath: `${safeName}.json`,
+      })
+
+      if (canceled || !filePath) {
+        return JSON.stringify(fail('SERIES_PUBLISH_PROFILE_EXPORT_CANCELLED', 'Export cancelled'))
+      }
+
+      const payload = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        profile,
+      } satisfies {
+        version: number
+        exportedAt: string
+        profile: SeriesPublishProfile
+      }
+      fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), { encoding: 'utf-8' })
+
+      const response: SeriesPublishProfileExportPayload = {
+        profile,
+        path: filePath,
+      }
+      return JSON.stringify(ok(response))
+    } catch (err) {
+      dialog.showErrorBox('导出发布配置失败', (err as Error).message)
+      return JSON.stringify(
+        fail('SERIES_PUBLISH_PROFILE_EXPORT_FAILED', 'Unable to export series publish profile', (err as Error).message),
       )
     }
   }
@@ -2680,10 +2896,13 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     listProjects,
     getProject,
     getSeriesWorkspace,
+    saveSeriesWorkspaceSettings,
     createSeriesEpisode,
     createSeriesVariant,
     batchCreateSeriesVariants,
     saveSeriesPublishProfile,
+    importSeriesPublishProfile,
+    exportSeriesPublishProfile,
     removeSeriesPublishProfile,
     saveSeriesVariantTemplate,
     removeSeriesVariantTemplate,

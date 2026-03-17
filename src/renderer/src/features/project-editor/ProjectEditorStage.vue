@@ -5,7 +5,7 @@ import StageWorkspace from '../../components/base/StageWorkspace.vue'
 import { useI18n } from '../../i18n'
 import ProjectStageAside from '../project-detail/ProjectStageAside.vue'
 import { useProjectContext } from '../project-detail/project-context'
-import SeriesProjectWorkspace from './SeriesProjectWorkspace.vue'
+import SeriesProjectWorkspaceSimple from './SeriesProjectWorkspaceSimple.vue'
 
 const props = defineProps<{
   id: number
@@ -34,31 +34,25 @@ const notes = computed(() => {
 </script>
 
 <template>
+  <SeriesProjectWorkspaceSimple v-if="project?.projectMode === 'episode'" :id="id" :project="project" />
+
   <StageWorkspace
+    v-else
     :show-intro="false"
     :eyebrow="t('stage.editor.eyebrow')"
-    :title="isSeriesProject ? t('stage.editor.series.title') : t('stage.editor.title')"
-    :description="
-      isSeriesProject
-        ? t('stage.editor.series.description', { project: projectName })
-        : t('stage.editor.description', { project: projectName })
-    "
-    :status-label="isSeriesProject ? t('stage.editor.series.status') : t('stage.editor.status')"
+    :title="t('stage.editor.title')"
+    :description="t('stage.editor.description', { project: projectName })"
+    :status-label="t('stage.editor.status')"
     status-tone="info"
-    :panel-eyebrow="isSeriesProject ? t('stage.editor.series.panelEyebrow') : t('stage.editor.panelEyebrow')"
-    :panel-title="
-      isSeriesProject
-        ? t('stage.editor.series.panelTitle', { project: projectName })
-        : t('stage.editor.panelTitle', { project: projectName })
-    "
-    :panel-description="isSeriesProject ? t('stage.editor.series.panelDescription') : t('stage.editor.panelDescription')"
+    :panel-eyebrow="t('stage.editor.panelEyebrow')"
+    :panel-title="t('stage.editor.panelTitle', { project: projectName })"
+    :panel-description="t('stage.editor.panelDescription')"
     :aside-eyebrow="t('stage.shared.asideEyebrow')"
     :aside-title="t('stage.shared.asideTitle')"
-    :aside-description="isSeriesProject ? t('stage.editor.series.asideDescription') : t('stage.editor.asideDescription')"
-    :aside-placement="isSeriesProject ? 'top' : 'side'"
+    :aside-description="t('stage.editor.asideDescription')"
+    aside-placement="side"
   >
-    <SeriesProjectWorkspace v-if="project?.projectMode === 'episode'" :id="id" :project="project" />
-    <Edit v-else-if="project" :id="id" :project="project" />
+    <Edit v-if="project" :id="id" :project="project" />
     <div v-else class="project-editor-stage__loading">Loading project editor...</div>
 
     <template #aside>

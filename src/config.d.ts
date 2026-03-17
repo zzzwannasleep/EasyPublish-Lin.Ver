@@ -4,6 +4,7 @@ declare namespace Config {
   import type { PublishResult } from './shared/types/publish'
   import type {
     LegacyProjectType,
+    MarkupFormat,
     ProjectMode,
     ProjectSourceKind,
     SeriesPublishProfileSiteFieldDefaults,
@@ -172,5 +173,7 @@ declare namespace Config {
     title: string
     sourceKind?: ProjectSourceKind
     targetSites?: SiteId[]
+    bodyTemplate?: string
+    bodyTemplateFormat?: MarkupFormat
   }
 }

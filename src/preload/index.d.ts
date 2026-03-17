@@ -57,10 +57,13 @@ export interface ProjectAPI {
   listProjects: () => Promise<string>
   getProject: (msg: string) => Promise<string>
   getSeriesWorkspace: (msg: string) => Promise<string>
+  saveSeriesWorkspaceSettings: (msg: string) => Promise<string>
   createSeriesEpisode: (msg: string) => Promise<string>
   createSeriesVariant: (msg: string) => Promise<string>
   batchCreateSeriesVariants: (msg: string) => Promise<string>
   saveSeriesPublishProfile: (msg: string) => Promise<string>
+  importSeriesPublishProfile: (msg: string) => Promise<string>
+  exportSeriesPublishProfile: (msg: string) => Promise<string>
   removeSeriesPublishProfile: (msg: string) => Promise<string>
   saveSeriesVariantTemplate: (msg: string) => Promise<string>
   removeSeriesVariantTemplate: (msg: string) => Promise<string>

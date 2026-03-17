@@ -5,6 +5,9 @@ import log from 'electron-log'
 import commonmark from 'commonmark'
 import md2bbc from 'markdown-to-bbcode'
 import { basename, join } from 'path'
+import bbobHTML from '@bbob/html'
+import presetHTML5 from '@bbob/preset-html5'
+import { marked } from 'marked'
 import html2md from 'turndown'
 
 type TaskDbProvider = () => Low<Config.TaskData>
@@ -153,6 +156,25 @@ export function createContentService(options: CreateContentServiceOptions) {
       summaryBlock || '<p>暂无补充说明。</p>',
       '</section>',
     ].join('\n')
+  }
+
+  function resolveEpisodePublishHtml(config: Config.PublishConfig, info: Config.Content_episode) {
+    const bodyTemplate = config.bodyTemplate?.trim()
+    const bodyTemplateFormat = config.bodyTemplateFormat
+
+    if (!bodyTemplate) {
+      return buildEpisodeHtml(config, info)
+    }
+
+    if (bodyTemplateFormat === 'md') {
+      return marked.parse(bodyTemplate, { async: false }) as string
+    }
+
+    if (bodyTemplateFormat === 'bbcode') {
+      return bbobHTML(bodyTemplate.replace(/\n/g, '<br/>'), presetHTML5())
+    }
+
+    return bodyTemplate
   }
 
   function writeDerivedContent(taskPath: string, html: string) {
@@ -353,7 +375,7 @@ export function createContentService(options: CreateContentServiceOptions) {
       fs.writeFileSync(join(task.path, 'config.json'), JSON.stringify(config))
       if (!fs.existsSync(config.torrentPath)) return 'noSuchFile_torrent'
 
-      const html = buildEpisodeHtml(config, info)
+      const html = resolveEpisodePublishHtml(config, info)
       writeDerivedContent(task.path, html)
       fs.copyFileSync(config.torrentPath, join(task.path, basename(config.torrentPath)))
       return 'success'

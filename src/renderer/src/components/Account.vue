@@ -15,6 +15,7 @@ import StatusChip from './feedback/StatusChip.vue'
 import { useI18n } from '../i18n'
 import { getSiteLabel } from '../services/project/presentation'
 import type { SiteId } from '../types/site'
+import { normalizeLegacyAccountStatus } from '../../../shared/utils/legacy-account-status'
 
 type LegacyAccountType = Exclude<SiteId, 'forum'>
 
@@ -44,18 +45,6 @@ type SiteAccount = {
   apiToken?: string
   enable: boolean
 }
-
-type NormalizedAccountStatus =
-  | 'disabled'
-  | 'loggedIn'
-  | 'loggedOut'
-  | 'blocked'
-  | 'failed'
-  | 'loggingIn'
-  | 'passwordError'
-  | 'captchaError'
-  | 'validationFailed'
-  | 'unknown'
 
 const { t } = useI18n()
 const isLoading = ref(false)
@@ -167,60 +156,6 @@ const username = ref('')
 const password = ref('')
 const configName = ref('')
 
-const statusVariants: Record<Exclude<NormalizedAccountStatus, 'unknown'>, string[]> = {
-  disabled: ['账号已禁用', '璐︽埛宸茬鐢?'],
-  loggedIn: ['账号已登录', '璐﹀彿宸茬櫥褰?'],
-  loggedOut: ['账号未登录', '璐﹀彿鏈櫥褰?'],
-  blocked: ['防火墙阻止', '闃茬伀澧欓樆姝?'],
-  failed: ['访问失败', '璁块棶澶辫触'],
-  loggingIn: ['正在登录', '姝ｅ湪鐧诲綍'],
-  passwordError: ['账号密码错误', '璐﹀彿瀵嗙爜閿欒'],
-  captchaError: ['验证码错误', '楠岃瘉鐮侀敊璇?', '妤犲矁鐦夐惍渚€鏁婄拠?'],
-  validationFailed: ['验证未通过', '楠岃瘉鏈€氳繃', '妤犲矁鐦夐張顏堚偓姘崇箖'],
-}
-
-function normalizeAccountStatus(status: string, enabled: boolean): NormalizedAccountStatus {
-  if (!enabled) {
-    return 'disabled'
-  }
-
-  const currentStatus = status.trim()
-
-  if (currentStatus === 'API credentials configured' || currentStatus === '已配置 API 凭据') {
-    return 'loggedIn'
-  }
-
-  if (currentStatus === 'API credentials missing' || currentStatus === '缺少 API 凭据') {
-    return 'loggedOut'
-  }
-
-  if (currentStatus === 'API credentials rejected' || currentStatus === 'API 凭据无效') {
-    return 'failed'
-  }
-
-  if (currentStatus === '账号已登录' || currentStatus === 'API token configured' || currentStatus === '已配置 API Token') {
-    return 'loggedIn'
-  }
-
-  if (currentStatus === '账号未登录' || currentStatus === 'API token missing' || currentStatus === '缺少 API Token') {
-    return 'loggedOut'
-  }
-
-  if (currentStatus === '访问失败' || currentStatus === 'API token rejected' || currentStatus === 'API Token 无效') {
-    return 'failed'
-  }
-
-  for (const [normalized, variants] of Object.entries(statusVariants) as Array<
-    [Exclude<NormalizedAccountStatus, 'unknown'>, string[]]
-  >) {
-    if (variants.some(variant => currentStatus === variant)) {
-      return normalized
-    }
-  }
-
-  return 'unknown'
-}
-
 function usesApiToken(siteId: LegacyAccountType) {
   return siteId === 'mikan' || siteId === 'miobt'
 }
@@ -254,14 +189,15 @@ const overviewItems = computed(() => [
   },
   {
     label: t('accounts.summary.authenticated'),
-    value: visibleSiteAccounts.value.filter(item => normalizeAccountStatus(item.status, item.enable) === 'loggedIn').length,
+    value: visibleSiteAccounts.value.filter(item => normalizeLegacyAccountStatus(item.status, item.enable) === 'loggedIn')
+      .length,
     tone: 'success' as const,
   },
   {
     label: t('accounts.summary.attention'),
     value: visibleSiteAccounts.value.filter(item =>
       ['blocked', 'failed', 'passwordError', 'captchaError', 'validationFailed'].includes(
-        normalizeAccountStatus(item.status, item.enable),
+        normalizeLegacyAccountStatus(item.status, item.enable),
       ),
     ).length,
     tone: 'warning' as const,
@@ -272,7 +208,7 @@ function getAccountStatusTone(
   status: string,
   enabled: boolean,
 ): 'neutral' | 'info' | 'success' | 'warning' | 'danger' {
-  switch (normalizeAccountStatus(status, enabled)) {
+  switch (normalizeLegacyAccountStatus(status, enabled)) {
     case 'loggedIn':
       return 'success'
     case 'loggedOut':
@@ -293,7 +229,7 @@ function getAccountStatusTone(
 }
 
 function getAccountStatusLabel(status: string, enabled: boolean) {
-  switch (normalizeAccountStatus(status, enabled)) {
+  switch (normalizeLegacyAccountStatus(status, enabled)) {
     case 'disabled':
       return t('accounts.status.disabled')
     case 'loggedIn':

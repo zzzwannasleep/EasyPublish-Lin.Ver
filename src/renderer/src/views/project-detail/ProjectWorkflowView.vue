@@ -70,6 +70,8 @@ const activeStep = computed(() => {
   return 0
 })
 
+const hideWorkflowRail = computed(() => project.value?.projectMode === 'episode' && route.name === 'edit')
+
 const workflowId = computed(() => Number(route.params.id ?? 0))
 const project = ref<PublishProject | null>(null)
 const isLoading = ref(false)
@@ -137,7 +139,7 @@ watch(
 
 <template>
   <div class="workflow-shell">
-    <section class="workflow-rail">
+    <section v-if="!hideWorkflowRail" class="workflow-rail">
       <article
         v-for="(item, index) in steps"
         :key="item.routeName"

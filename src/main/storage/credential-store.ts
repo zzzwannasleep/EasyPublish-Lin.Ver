@@ -3,6 +3,7 @@ import { Low } from 'lowdb'
 import type { SiteAccount, SiteCredentialRecord } from '../../shared/types/account'
 import type { PtSiteAdapterKind, PtSiteDraft } from '../../shared/types/pt-site'
 import type { SiteCapability, SiteId, SiteProfile } from '../../shared/types/site'
+import { resolveLegacyAccountHealthStatus } from '../../shared/utils/legacy-account-status'
 
 type UserDbProvider = () => Low<Config.UserData>
 
@@ -48,25 +49,7 @@ function isLegacyPtSite(siteId: string): siteId is (typeof legacyPtSiteIds)[numb
 }
 
 function mapHealthStatus(info: Config.LoginInfo): SiteAccount['healthStatus'] {
-  if (!info.enable) return 'disabled'
-
-  const status = info.status.trim()
-  if (status.includes('API credentials configured') || status.includes('已配置 API 凭据')) return 'authenticated'
-  if (status.includes('API credentials missing') || status.includes('缺少 API 凭据')) return 'unauthenticated'
-  if (status.includes('API credentials rejected') || status.includes('API 凭据无效')) return 'error'
-  if (status.includes('API token configured') || status.includes('已配置 API Token')) return 'authenticated'
-  if (status.includes('API token missing') || status.includes('缺少 API Token')) return 'unauthenticated'
-  if (status.includes('API token rejected') || status.includes('API Token 无效')) return 'error'
-  if (status.includes('账号已登录')) return 'authenticated'
-  if (status.includes('账号未登录')) return 'unauthenticated'
-  if (status.includes('访问失败') || status.includes('错误')) return 'error'
-  if (status.includes('正在登录')) return 'checking'
-  if (status.includes('已登录')) return 'authenticated'
-  if (status.includes('未登录')) return 'unauthenticated'
-  if (status.includes('防火墙')) return 'blocked'
-  if (status.includes('访问失败') || status.includes('错误')) return 'error'
-  if (status.includes('正在登录')) return 'checking'
-  return 'unknown'
+  return resolveLegacyAccountHealthStatus(info.status, info.enable)
 }
 
 function createCustomPtSiteProfile(config: Config.PTSiteConfig): SiteProfile {

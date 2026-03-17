@@ -399,6 +399,9 @@ namespace Project {
   export function getSeriesWorkspace(msg: string) {
     return projectService.getSeriesWorkspace(msg)
   }
+  export function saveSeriesWorkspaceSettings(msg: string) {
+    return projectService.saveSeriesWorkspaceSettings(msg)
+  }
   export function createSeriesEpisode(msg: string) {
     return projectService.createSeriesEpisode(msg)
   }
@@ -410,6 +413,12 @@ namespace Project {
   }
   export function saveSeriesPublishProfile(msg: string) {
     return projectService.saveSeriesPublishProfile(msg)
+  }
+  export function importSeriesPublishProfile(msg: string) {
+    return projectService.importSeriesPublishProfile(msg)
+  }
+  export function exportSeriesPublishProfile(msg: string) {
+    return projectService.exportSeriesPublishProfile(msg)
   }
   export function removeSeriesPublishProfile(msg: string) {
     return projectService.removeSeriesPublishProfile(msg)

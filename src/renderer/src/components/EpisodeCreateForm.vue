@@ -25,6 +25,7 @@ const form = reactive<EpisodeCreateFormModel>({
   name: '',
   projectMode: 'episode',
   workingDirectory: '',
+  plannedEpisodeCount: undefined,
 })
 
 const summaryItems = computed(() => [
@@ -41,6 +42,11 @@ const summaryItems = computed(() => [
   {
     label: t('create.mode.current'),
     value: t('create.mode.episode.label'),
+    icon: Collection,
+  },
+  {
+    label: '总集数',
+    value: form.plannedEpisodeCount ? `${form.plannedEpisodeCount} 集` : '稍后再填',
     icon: Collection,
   },
 ])
@@ -139,6 +145,14 @@ async function submitCreate() {
                 <el-button :icon="FolderOpened" :loading="isPickingFolder" @click="pickFolder" />
               </template>
             </el-input>
+          </el-form-item>
+        </article>
+
+        <article class="episode-create__card">
+          <div class="episode-create__card-title">总集数</div>
+          <div class="episode-create__card-text">剧集项目创建后会直接显示“已建集数 / 总集数”，这里可以先填一个计划值。</div>
+          <el-form-item class="episode-create__item">
+            <el-input-number v-model="form.plannedEpisodeCount" :min="1" :step="1" controls-position="right" />
           </el-form-item>
         </article>
       </section>

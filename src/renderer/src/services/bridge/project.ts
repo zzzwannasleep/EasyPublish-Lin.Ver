@@ -5,20 +5,25 @@ import type {
   CreateSeriesEpisodeInput,
   CreateSeriesVariantInput,
   InheritSeriesEpisodeVariantsInput,
+  ImportSeriesPublishProfileInput,
   ProjectDetailPayload,
   ProjectListPayload,
   ProjectRemovalPayload,
   ProjectStatsPayload,
   RemoveSeriesPublishProfileInput,
   SaveSeriesPublishProfileInput,
+  SaveSeriesWorkspaceSettingsInput,
   SeriesEpisodeInheritancePayload,
   SeriesEpisodeVariantBatchPayload,
   SeriesEpisodePayload,
+  SeriesPublishProfileExportPayload,
   SeriesPublishProfilePayload,
   SeriesPublishProfileRemovalPayload,
   SeriesVariantDraftInput,
   SeriesVariantPayload,
+  SeriesWorkspaceSettingsPayload,
   SeriesWorkspacePayload,
+  ExportSeriesPublishProfileInput,
 } from '../../types/project'
 
 async function parseResult<T>(promise: Promise<string>): Promise<ApiResult<T>> {
@@ -42,6 +47,10 @@ export const projectBridge = {
     return parseResult<SeriesWorkspacePayload>(window.projectAPI.getSeriesWorkspace(JSON.stringify({ id: projectId })))
   },
 
+  saveSeriesWorkspaceSettings(input: SaveSeriesWorkspaceSettingsInput) {
+    return parseResult<SeriesWorkspaceSettingsPayload>(window.projectAPI.saveSeriesWorkspaceSettings(JSON.stringify(input)))
+  },
+
   createSeriesEpisode(input: CreateSeriesEpisodeInput) {
     return parseResult<SeriesEpisodePayload>(window.projectAPI.createSeriesEpisode(JSON.stringify(input)))
   },
@@ -59,6 +68,18 @@ export const projectBridge = {
   saveSeriesPublishProfile(input: SaveSeriesPublishProfileInput) {
     return parseResult<SeriesPublishProfilePayload>(
       window.projectAPI.saveSeriesPublishProfile(JSON.stringify(input)),
+    )
+  },
+
+  importSeriesPublishProfile(input: ImportSeriesPublishProfileInput) {
+    return parseResult<SeriesPublishProfilePayload>(
+      window.projectAPI.importSeriesPublishProfile(JSON.stringify(input)),
+    )
+  },
+
+  exportSeriesPublishProfile(input: ExportSeriesPublishProfileInput) {
+    return parseResult<SeriesPublishProfileExportPayload>(
+      window.projectAPI.exportSeriesPublishProfile(JSON.stringify(input)),
     )
   },
 
