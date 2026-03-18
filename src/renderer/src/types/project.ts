@@ -7,6 +7,7 @@ export type {
   InheritSeriesEpisodeVariantsInput,
   ImportSeriesPublishProfileInput,
   MarkupFormat,
+  PublishTorrentEntry,
   RemoveSeriesPublishProfileInput,
   RemoveSeriesVariantTemplateInput,
   ProjectMode,

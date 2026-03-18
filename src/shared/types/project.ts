@@ -34,6 +34,15 @@ export interface PublishProject {
   updatedAt: string
 }
 
+export interface PublishTorrentEntry {
+  id: string
+  name: string
+  path: string
+  enabled?: boolean
+  titleOverride?: string
+  bodyOverride?: string
+}
+
 export interface SeriesProjectEpisode {
   id: number
   episodeLabel: string

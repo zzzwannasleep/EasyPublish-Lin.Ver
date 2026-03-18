@@ -7,6 +7,7 @@ export interface GlobalAPI {
   getProxyConfig: () => Promise<string>
   setProxyConfig: (config: string) => void
   getFilePath: (msg: string) => Promise<string>
+  getFilePaths: (msg: string) => Promise<string>
   getFolderPath: () => Promise<string>
   openFolder: (msg: string) => void
   changeConfig: () => void

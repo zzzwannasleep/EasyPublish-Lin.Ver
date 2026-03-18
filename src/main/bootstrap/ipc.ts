@@ -6,6 +6,7 @@ type GlobalHandlers = {
   getProxyConfig: () => Asyncish<unknown>
   getConfigName: () => Asyncish<unknown>
   getFilePath: (msg: string) => Asyncish<unknown>
+  getFilePaths: (msg: string) => Asyncish<unknown>
   getFolderPath: () => Asyncish<unknown>
   readFileContent: () => Asyncish<unknown>
   html2markdown: (msg: string) => Asyncish<unknown>
@@ -121,6 +122,7 @@ export function registerIpcHandlers({ Global, BT, Forum, Project, Site, Log, Tas
   ipcMain.handle('global_getProxyConfig', () => Global.getProxyConfig())
   ipcMain.handle('global_getConfigName', () => Global.getConfigName())
   ipcMain.handle('global_getFilePath', (_event, msg) => Global.getFilePath(msg))
+  ipcMain.handle('global_getFilePaths', (_event, msg) => Global.getFilePaths(msg))
   ipcMain.handle('global_getFolderPath', () => Global.getFolderPath())
   ipcMain.handle('global_readFileContent', () => Global.readFileContent())
   ipcMain.handle('global_html2markdown', (_event, msg) => Global.html2markdown(msg))

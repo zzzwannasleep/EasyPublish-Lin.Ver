@@ -9,6 +9,8 @@ import bbobHTML from '@bbob/html'
 import presetHTML5 from '@bbob/preset-html5'
 import { marked } from 'marked'
 import html2md from 'turndown'
+import { materializeEpisodePublishDraft } from './episode-publish-support'
+import { buildDerivedMarkupFromHtml, htmlToMarkdown, markdownToBbcode } from './markup-conversion'
 
 type TaskDbProvider = () => Low<Config.TaskData>
 
@@ -190,6 +192,9 @@ export function createContentService(options: CreateContentServiceOptions) {
     fs.writeFileSync(join(taskPath, 'acgrip.bbcode'), bbcode)
   }
 
+  void resolveEpisodePublishHtml
+  void writeDerivedContent
+
   async function createWithFile(id: number, config: Config.PublishConfig) {
     try {
       const taskDB = getTaskDBOrThrow()
@@ -203,8 +208,7 @@ export function createContentService(options: CreateContentServiceOptions) {
       if (!fs.existsSync(info.path_md)) {
         if (info.path_md != '') return 'noSuchFile_md'
         const content = fs.readFileSync(join(task.path, 'bangumi.html'), { encoding: 'utf-8' })
-        const converter = new html2md()
-        const md = converter.turndown(content)
+        const md = htmlToMarkdown(content)
         fs.writeFileSync(join(task.path, 'nyaa.md'), md)
       } else {
         fs.copyFileSync(info.path_md, join(task.path, 'nyaa.md'))
@@ -212,10 +216,7 @@ export function createContentService(options: CreateContentServiceOptions) {
       if (!fs.existsSync(info.path_bbcode)) {
         if (info.path_bbcode != '') return 'noSuchFile_bbcode'
         const content = fs.readFileSync(join(task.path, 'nyaa.md'), { encoding: 'utf-8' })
-        const reader = new commonmark.Parser()
-        const writer = new md2bbc.BBCodeRenderer()
-        const parsed = reader.parse((content as string).replaceAll('\n* * *', ''))
-        const bbcode = writer.render(parsed).slice(1).replace(/\[img\salt="[\S]*?"\]/, '[img]')
+        const bbcode = markdownToBbcode(content)
         fs.writeFileSync(join(task.path, 'acgrip.bbcode'), bbcode)
       } else {
         fs.copyFileSync(info.path_bbcode, join(task.path, 'acgrip.bbcode'))
@@ -348,13 +349,7 @@ export function createContentService(options: CreateContentServiceOptions) {
         content += '<hr />\n'
         content += info.comparisons_html
       }
-      const converter = new html2md()
-      const md = converter.turndown(content)
-      const reader = new commonmark.Parser()
-      const bbcodeWriter = new md2bbc.BBCodeRenderer()
-      const parsed_bbcode = reader.parse((md as string).replaceAll('\n* * *', ''))
-      const bbcode = bbcodeWriter.render(parsed_bbcode).slice(1).replace(/\[img\salt="[\s\S]*?"\]/g, '[img]')
-      const html = content
+      const { html, md, bbcode } = buildDerivedMarkupFromHtml(content)
       fs.writeFileSync(join(task.path, 'bangumi.html'), html)
       fs.writeFileSync(join(task.path, 'nyaa.md'), md)
       fs.writeFileSync(join(task.path, 'acgrip.bbcode'), bbcode)
@@ -370,14 +365,8 @@ export function createContentService(options: CreateContentServiceOptions) {
     try {
       const taskDB = getTaskDBOrThrow()
       const task = taskDB.data.tasks.find(item => item.id == id)
-      const info = config.content as Config.Content_episode
       if (!task) return 'taskNotFound'
-      fs.writeFileSync(join(task.path, 'config.json'), JSON.stringify(config))
-      if (!fs.existsSync(config.torrentPath)) return 'noSuchFile_torrent'
-
-      const html = resolveEpisodePublishHtml(config, info)
-      writeDerivedContent(task.path, html)
-      fs.copyFileSync(config.torrentPath, join(task.path, basename(config.torrentPath)))
+      materializeEpisodePublishDraft(task.path, config)
       return 'success'
     } catch (err) {
       dialog.showErrorBox('错误', (err as Error).message)

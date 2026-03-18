@@ -7,6 +7,11 @@ import type { PublishResult } from '../../shared/types/publish'
 import type { SiteId } from '../../shared/types/site'
 import { escapeHtml, sleep, unescapeHtml } from '../core/utils'
 import { createProjectStore } from '../storage/project-store'
+import {
+  getActivePublishTorrentEntry,
+  getSelectedPublishTorrentEntries,
+  materializeEpisodePublishDraft,
+} from './episode-publish-support'
 
 type UserDbProvider = () => Low<Config.UserData>
 type TaskDbProvider = () => Low<Config.TaskData>
@@ -122,13 +127,14 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
     return task[siteId]
   }
 
-  async function persistLegacyPublishResult(task: Config.Task, type: string, result: string) {
+  async function persistLegacyPublishResult(task: Config.Task, type: string, result: string, torrentName?: string) {
     const siteId = resolveLegacySiteId(type)
     if (!siteId) {
       return
     }
 
     const siteLabel = getLegacySiteLabel(type)
+    const siteLabelWithTorrent = torrentName ? `${siteLabel} (${torrentName})` : siteLabel
     const remoteUrl = getLegacySiteLink(task, siteId)
     const persistedResult: PublishResult = {
       siteId,
@@ -136,14 +142,14 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
       remoteUrl,
       message:
         result === 'success'
-          ? `Published through legacy ${siteLabel} workflow`
+          ? `Published through legacy ${siteLabelWithTorrent} workflow`
           : result === 'exist'
             ? remoteUrl
-              ? `Existing torrent detected in legacy ${siteLabel} workflow`
-              : `Existing torrent detected in legacy ${siteLabel} workflow, but no remote link was captured`
+              ? `Existing torrent detected in legacy ${siteLabelWithTorrent} workflow`
+              : `Existing torrent detected in legacy ${siteLabelWithTorrent} workflow, but no remote link was captured`
             : result === 'unauthorized'
-              ? `Legacy ${siteLabel} publish failed because the account is unauthorized`
-              : `Legacy ${siteLabel} publish failed`,
+              ? `Legacy ${siteLabelWithTorrent} publish failed because the account is unauthorized`
+              : `Legacy ${siteLabelWithTorrent} publish failed`,
       timestamp: new Date().toISOString(),
     }
 
@@ -154,6 +160,29 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
 
   function readPublishConfig(taskPath: string) {
     return JSON.parse(fs.readFileSync(join(taskPath, 'config.json'), { encoding: 'utf-8' })) as Config.PublishConfig
+  }
+
+  function isEpisodeTask(task: Config.Task) {
+    return (task.mode ?? (task.type === 'episode' ? 'episode' : 'feature')) === 'episode'
+  }
+
+  function mergePublishResult(current: string, next: string) {
+    if (!current) {
+      return next
+    }
+    if (current === 'failed' || next === 'failed') {
+      return 'failed'
+    }
+    if (current === 'unauthorized' || next === 'unauthorized') {
+      return 'unauthorized'
+    }
+    if (current === 'success' || next === 'success') {
+      return 'success'
+    }
+    if (current === 'exist' || next === 'exist') {
+      return 'exist'
+    }
+    return next
   }
 
   function getMikanApiToken() {
@@ -179,6 +208,19 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
     return ''
   }
 
+  async function runLegacyPublish(task: Config.Task, config: Config.PublishConfig, type: string) {
+    if (type == 'bangumi_all') return await publishBangumi(task, config, true)
+    if (type == 'bangumi') return await publishBangumi(task, config, false)
+    if (type == 'mikan') return await publishMikan(task, config)
+    if (type == 'miobt') return await publishMioBt(task, config)
+    if (type == 'nyaa') return await publishNyaa(task, config)
+    if (type == 'dmhy') return await publishDmhy(task, config)
+    if (type == 'acgnx_a') return await publishAcgnxA(task, config)
+    if (type == 'acgnx_g') return await publishAcgnxG(task, config)
+    if (type == 'acgrip') return await publishAcgrip(task, config)
+    return 'failed'
+  }
+
   async function publish(msg: string) {
     let payload: Message.Task.ContentType | null = null
     try {
@@ -187,17 +229,39 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
       const { id, type } = payload as Message.Task.ContentType
       const task = getTaskOrThrow(id)
       const config = readPublishConfig(task.path)
-      if (type == 'bangumi_all') result = await publishBangumi(task, config, true)
-      else if (type == 'bangumi') result = await publishBangumi(task, config, false)
-      else if (type == 'mikan') result = await publishMikan(task, config)
-      else if (type == 'miobt') result = await publishMioBt(task, config)
-      else if (type == 'nyaa') result = await publishNyaa(task, config)
-      else if (type == 'dmhy') result = await publishDmhy(task, config)
-      else if (type == 'acgnx_a') result = await publishAcgnxA(task, config)
-      else if (type == 'acgnx_g') result = await publishAcgnxG(task, config)
-      else if (type == 'acgrip') result = await publishAcgrip(task, config)
-      else result = 'failed'
-      await persistLegacyPublishResult(task, type, result)
+      if (isEpisodeTask(task)) {
+        const selectedEntries = getSelectedPublishTorrentEntries(config)
+        const activeEntry = getActivePublishTorrentEntry(config)
+
+        if (selectedEntries.length > 0) {
+          for (const entry of selectedEntries) {
+            try {
+              const entryConfig = materializeEpisodePublishDraft(task.path, config, entry)
+              const entryResult = await runLegacyPublish(task, entryConfig, type)
+              await persistLegacyPublishResult(task, type, entryResult, entry.name)
+              result = mergePublishResult(result, entryResult)
+            } catch (error) {
+              log.error(error)
+              await persistLegacyPublishResult(task, type, 'failed', entry.name)
+              result = mergePublishResult(result, 'failed')
+            }
+          }
+
+          if (activeEntry) {
+            try {
+              materializeEpisodePublishDraft(task.path, config, activeEntry)
+            } catch (error) {
+              log.error(error)
+            }
+          }
+        } else {
+          result = 'failed'
+        }
+      } else {
+        result = await runLegacyPublish(task, config, type)
+        await persistLegacyPublishResult(task, type, result)
+      }
+
       const message: Message.Task.Result = { result }
       return JSON.stringify(message)
     } catch (err) {

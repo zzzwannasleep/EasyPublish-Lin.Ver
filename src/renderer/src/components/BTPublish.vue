@@ -137,6 +137,7 @@ const tabledata = reactive<LegacyPublishRow[]>(
 const resolvedCount = computed(() => tabledata.filter(row => row.resolved).length)
 const failedCount = computed(() => tabledata.filter(row => !row.lock && row.rowClass === 'danger-row').length)
 const activeCount = computed(() => tabledata.filter(row => row.lock).length)
+const hasActivePublish = computed(() => activeCount.value > 0)
 const targetSiteCount = computed(() => project.value?.targetSites.length ?? 0)
 const shouldSkipForumStage = computed(() => {
   if (!project.value) {
@@ -442,12 +443,12 @@ async function publish(index: number) {
 }
 
 async function multipublish() {
-  selectedRowTypes.value.forEach(type => {
+  for (const type of selectedRowTypes.value) {
     const row = getRowByType(type)
     if (row) {
-      void publish(row.index)
+      await publish(row.index)
     }
-  })
+  }
 }
 
 async function publishPendingTargets() {
@@ -455,9 +456,9 @@ async function publishPendingTargets() {
     row => missingTargetSites.value.includes(row.siteId) && !row.lock && !row.resolved,
   )
 
-  pendingRows.forEach(row => {
-    void publish(row.index)
-  })
+  for (const row of pendingRows) {
+    await publish(row.index)
+  }
 }
 
 onMounted(async () => {
@@ -524,7 +525,7 @@ onMounted(async () => {
             link
             type="primary"
             size="small"
-            :disabled="row.resolved"
+            :disabled="row.resolved || (hasActivePublish && !row.lock)"
             :loading="row.lock"
             @click="publish(row.index)"
           >

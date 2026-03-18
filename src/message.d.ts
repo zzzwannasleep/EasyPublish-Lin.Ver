@@ -17,6 +17,10 @@ declare namespace Message {
       path: string
     }
 
+    interface Paths {
+      paths: string[]
+    }
+
     interface Clipboard {
       str: string
     }

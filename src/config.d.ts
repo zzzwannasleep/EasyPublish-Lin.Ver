@@ -5,6 +5,7 @@ declare namespace Config {
   import type {
     LegacyProjectType,
     MarkupFormat,
+    PublishTorrentEntry,
     ProjectMode,
     ProjectSourceKind,
     SeriesPublishProfileSiteFieldDefaults,
@@ -162,6 +163,8 @@ declare namespace Config {
   declare interface PublishConfig {
     torrentPath: string
     torrentName: string
+    activeTorrentId?: string
+    torrentEntries?: PublishTorrentEntry[]
     category_bangumi: string
     category_nyaa: string
     siteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults

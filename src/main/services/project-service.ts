@@ -1248,14 +1248,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     }
 
     if (bodyTemplate) {
-      const renderedBodyTemplate = renderSeriesVariantTemplate(
-        bodyTemplate,
-        buildSeriesVariantTemplateVariables(config, variant, templateContext),
-      )
-      if (renderedBodyTemplate) {
-        config.bodyTemplate = renderedBodyTemplate
-        config.bodyTemplateFormat = bodyTemplateFormat ?? 'html'
-      }
+      config.bodyTemplate = bodyTemplate
+      config.bodyTemplateFormat = bodyTemplateFormat ?? 'md'
     } else {
       delete config.bodyTemplate
       delete config.bodyTemplateFormat
@@ -2079,7 +2073,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const templateContext = normalizePublishProfileTemplateContext(input.templateContext)
       const titleTemplate = normalizeTitleTemplate(input.titleTemplate)
       const bodyTemplate = normalizeBodyTemplate(input.bodyTemplate)
-      const bodyTemplateFormat = normalizeMarkupFormat(input.bodyTemplateFormat) ?? (bodyTemplate ? 'html' : undefined)
+      const bodyTemplateFormat = normalizeMarkupFormat(input.bodyTemplateFormat) ?? (bodyTemplate ? 'md' : undefined)
       const siteDrafts = normalizeSiteDrafts(input.siteDrafts, {
         targetSites: requestedTargetSites,
         summaryTemplate: normalizeSummaryTemplate(input.summaryTemplate),

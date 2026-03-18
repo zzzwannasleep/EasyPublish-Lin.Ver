@@ -1,12 +1,10 @@
 import { app, clipboard, dialog, shell } from 'electron'
 import fs from 'fs'
 import { Low } from 'lowdb'
-import commonmark from 'commonmark'
-import md2bbc from 'markdown-to-bbcode'
 import { join } from 'path'
-import html2md from 'turndown'
 import { USER_DB_FILE } from '../core/constants'
 import { createSettingsStore } from '../storage/settings-store'
+import { htmlToBbcode, htmlToMarkdown } from './markup-conversion'
 
 type UserDbProvider = () => Low<Config.UserData>
 
@@ -50,6 +48,16 @@ export function createGlobalService(options: CreateGlobalServiceOptions) {
       return JSON.stringify(result)
     },
 
+    async getFilePaths(msg: string) {
+      const { type }: Message.Global.FileType = JSON.parse(msg)
+      const { canceled, filePaths } = await dialog.showOpenDialog({
+        properties: ['openFile', 'multiSelections'],
+        filters: [{ name: type, extensions: [type] }],
+      })
+      const result: Message.Global.Paths = { paths: canceled ? [] : filePaths }
+      return JSON.stringify(result)
+    },
+
     async getFolderPath() {
       const { canceled, filePaths } = await dialog.showOpenDialog({
         properties: ['openDirectory'],
@@ -79,22 +87,14 @@ export function createGlobalService(options: CreateGlobalServiceOptions) {
     },
 
     html2markdown(msg: string) {
-      let { content }: Message.Global.FileContent = JSON.parse(msg)
-      const converter = new html2md()
-      content = converter.turndown(content)
-      const result: Message.Global.FileContent = { content }
+      const { content }: Message.Global.FileContent = JSON.parse(msg)
+      const result: Message.Global.FileContent = { content: htmlToMarkdown(content) }
       return JSON.stringify(result)
     },
 
     html2bbcode(msg: string) {
       const { content }: Message.Global.FileContent = JSON.parse(msg)
-      const converter = new html2md()
-      const md = converter.turndown(content)
-      const reader = new commonmark.Parser()
-      const writer = new md2bbc.BBCodeRenderer()
-      const parsed = reader.parse(md.replaceAll('\n* * *', ''))
-      const bbcode = writer.render(parsed).slice(1).replace(/\[img\salt="[\S]*?"\]/g, '[img]')
-      const result: Message.Global.FileContent = { content: bbcode }
+      const result: Message.Global.FileContent = { content: htmlToBbcode(content) }
       return JSON.stringify(result)
     },
 

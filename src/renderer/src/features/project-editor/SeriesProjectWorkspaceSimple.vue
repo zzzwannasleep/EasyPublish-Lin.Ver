@@ -1,6 +1,7 @@
-<script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+﻿<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from 'vue'
 import { Download, EditPen, FolderOpened, Plus, Upload } from '@element-plus/icons-vue'
+import { marked } from 'marked'
 import { useRouter } from 'vue-router'
 import { projectBridge } from '../../services/bridge/project'
 import { siteBridge } from '../../services/bridge/site'
@@ -8,13 +9,13 @@ import { taskBridge } from '../../services/bridge/task'
 import { formatProjectTimestamp, getSiteLabel } from '../../services/project/presentation'
 import type {
   MarkupFormat,
+  PublishTorrentEntry,
   PublishProject,
   SaveSeriesPublishProfileInput,
   SeriesProjectWorkspace,
   SeriesPublishProfile,
   SeriesPublishProfileSiteDrafts,
   SeriesPublishProfileSiteFieldDefaults,
-  SeriesPublishProfileTemplateContext,
 } from '../../types/project'
 import type { SiteCatalogEntry, SiteId } from '../../types/site'
 
@@ -29,44 +30,24 @@ const SITE_FORMAT_MAP: Partial<Record<SiteId, MarkupFormat | 'auto'>> = {
   acgnx_a: 'html',
   acgnx_g: 'html',
 }
-const TEMPLATE_TOKENS = [
-  '{{title}}',
-  '{{summary}}',
-  '{{releaseTeam}}',
-  '{{seriesLabel}}',
-  '{{seriesTitleCN}}',
-  '{{seriesTitleEN}}',
-  '{{seriesTitleJP}}',
-  '{{seasonLabel}}',
-  '{{episodeLabel}}',
-  '{{episodeTitle}}',
-  '{{techLabel}}',
-  '{{sourceType}}',
-  '{{resolution}}',
-  '{{videoCodec}}',
-  '{{audioCodec}}',
-  '{{variantName}}',
-  '{{videoProfile}}',
-  '{{subtitleProfile}}',
-  '{{subtitleProfileLabel}}',
-]
-const DEFAULT_BODY_TEMPLATE = `<section>
-  <p><strong>{{title}}</strong></p>
-  <p>{{seriesLabel}}</p>
-  <p>Episode: {{episodeLabel}} {{episodeTitle}}</p>
-  <p>{{techLabel}}</p>
-  <p>{{summary}}</p>
-</section>`
+const LEGACY_BODY_TEMPLATE_TOKEN_PATTERN = /\{\{\s*(title|seriesLabel|episodeLabel|episodeTitle|techLabel|summary|releaseTeam)\s*\}\}/i
+const DEFAULT_BODY_TEMPLATE = ''
 
 type HiddenProfileState = {
   isDefault: boolean
   videoProfiles: Array<'1080p' | '2160p'>
   subtitleProfiles: Array<'chs' | 'cht' | 'eng' | 'bilingual'>
-  templateContext?: SeriesPublishProfileTemplateContext
-  titleTemplate?: string
-  summaryTemplate?: string
   siteDrafts?: SeriesPublishProfileSiteDrafts
   siteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
+}
+
+type DraftTorrentEntry = {
+  id: string
+  name: string
+  path: string
+  enabled: boolean
+  titleOverride: string
+  bodyOverride: string
 }
 
 const props = defineProps<{
@@ -88,9 +69,18 @@ const isSavingProfile = ref(false)
 const isImportingProfile = ref(false)
 const isExportingProfile = ref(false)
 const isCreatingEpisode = ref(false)
-const isPreviewLoading = ref(false)
 const episodeDialogVisible = ref(false)
-const previewRequestId = ref(0)
+const bodyTemplateView = ref<'editor' | 'preview'>('editor')
+const draftTitle = ref('')
+const draftTorrentEntries = ref<DraftTorrentEntry[]>([])
+const activeTorrentId = ref('')
+const torrentOverrideDialogVisible = ref(false)
+const editingTorrentId = ref<string | null>(null)
+
+const torrentOverrideForm = reactive({
+  titleOverride: '',
+  bodyOverride: '',
+})
 
 const overviewForm = reactive<{
   plannedEpisodeCount?: number
@@ -110,11 +100,6 @@ const profileForm = reactive({
 })
 
 const hiddenProfileState = reactive<HiddenProfileState>(createHiddenProfileState())
-const convertedPreview = reactive<Record<'html' | 'md' | 'bbcode', string>>({
-  html: '',
-  md: '',
-  bbcode: '',
-})
 
 function deepClone<T>(value: T): T {
   if (value === undefined || value === null) {
@@ -124,14 +109,129 @@ function deepClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
+function readOptionalString(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function looksLikeHtml(value: string) {
+  return /<\/?[a-z][\s\S]*>/i.test(value)
+}
+
+async function convertHtmlToMarkdown(value: string) {
+  const response = await window.globalAPI.html2markdown(JSON.stringify({ content: value } satisfies Message.Global.FileContent))
+  return (JSON.parse(response) as Message.Global.FileContent).content.trim()
+}
+
+async function normalizeMarkdownSource(value: string | undefined, format?: MarkupFormat) {
+  const normalizedValue = readOptionalString(value)
+  if (!normalizedValue) {
+    return ''
+  }
+
+  if (format === 'md') {
+    return LEGACY_BODY_TEMPLATE_TOKEN_PATTERN.test(normalizedValue) ? '' : normalizedValue
+  }
+
+  if (format === 'html' || (!format && looksLikeHtml(normalizedValue))) {
+    const markdown = await convertHtmlToMarkdown(normalizedValue)
+    return LEGACY_BODY_TEMPLATE_TOKEN_PATTERN.test(markdown) ? '' : markdown
+  }
+
+  return LEGACY_BODY_TEMPLATE_TOKEN_PATTERN.test(normalizedValue) ? '' : normalizedValue
+}
+
+async function normalizeDraftConfigForEditor(config?: Config.PublishConfig | null) {
+  if (!config) {
+    return null
+  }
+
+  const nextConfig = deepClone(config)
+  const sourceFormat = nextConfig.bodyTemplateFormat
+  const bodyTemplate = await normalizeMarkdownSource(nextConfig.bodyTemplate, sourceFormat)
+  nextConfig.bodyTemplate = bodyTemplate || undefined
+  nextConfig.bodyTemplateFormat = bodyTemplate ? 'md' : undefined
+
+  if (Array.isArray(nextConfig.torrentEntries)) {
+    nextConfig.torrentEntries = await Promise.all(
+      nextConfig.torrentEntries.map(async entry => ({
+        ...entry,
+        bodyOverride: (await normalizeMarkdownSource(entry.bodyOverride, sourceFormat)) || undefined,
+      })),
+    )
+  }
+
+  return nextConfig
+}
+
+async function normalizeProfileForEditor(profile: SeriesPublishProfile) {
+  const bodyTemplate = await normalizeMarkdownSource(profile.bodyTemplate, profile.bodyTemplateFormat)
+  return {
+    ...profile,
+    bodyTemplate: bodyTemplate || undefined,
+    bodyTemplateFormat: bodyTemplate ? 'md' : undefined,
+  } satisfies SeriesPublishProfile
+}
+
+async function normalizeWorkspaceForEditor(value: SeriesProjectWorkspace) {
+  return {
+    ...value,
+    publishProfiles: await Promise.all(value.publishProfiles.map(profile => normalizeProfileForEditor(profile))),
+  } satisfies SeriesProjectWorkspace
+}
+
+function getFileName(path: string) {
+  return path.replace(/^.*[\\/]/, '')
+}
+
+function createDraftTorrentEntry(path: string, seed?: Partial<PublishTorrentEntry>): DraftTorrentEntry {
+  const normalizedPath = path.trim()
+  return {
+    id: seed?.id?.trim() || `torrent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: seed?.name?.trim() || getFileName(normalizedPath),
+    path: normalizedPath,
+    enabled: seed?.enabled !== false,
+    titleOverride: typeof seed?.titleOverride === 'string' ? seed.titleOverride : '',
+    bodyOverride: typeof seed?.bodyOverride === 'string' ? seed.bodyOverride : '',
+  }
+}
+
+function normalizeDraftTorrentEntries(config?: Config.PublishConfig | null) {
+  if (!config) {
+    return [] as DraftTorrentEntry[]
+  }
+
+  const entries = Array.isArray(config.torrentEntries)
+    ? config.torrentEntries
+        .map(entry => {
+          const path = readOptionalString(entry?.path)
+          return path ? createDraftTorrentEntry(path, entry) : null
+        })
+        .filter((entry): entry is DraftTorrentEntry => Boolean(entry))
+    : []
+
+  if (entries.length > 0) {
+    return entries
+  }
+
+  const legacyPath = readOptionalString(config.torrentPath)
+  if (!legacyPath) {
+    return []
+  }
+
+  return [
+    createDraftTorrentEntry(legacyPath, {
+      id: config.activeTorrentId?.trim() || 'torrent-default',
+      name: config.torrentName?.trim() || getFileName(legacyPath),
+      enabled: true,
+    }),
+  ]
+}
+
 function createHiddenProfileState(seed?: Partial<HiddenProfileState>): HiddenProfileState {
   return {
     isDefault: Boolean(seed?.isDefault),
     videoProfiles: seed?.videoProfiles?.length ? [...seed.videoProfiles] : ['1080p'],
     subtitleProfiles: seed?.subtitleProfiles?.length ? [...seed.subtitleProfiles] : ['chs'],
-    templateContext: deepClone(seed?.templateContext),
-    titleTemplate: seed?.titleTemplate?.trim() || undefined,
-    summaryTemplate: seed?.summaryTemplate?.trim() || undefined,
     siteDrafts: deepClone(seed?.siteDrafts),
     siteFieldDefaults: deepClone(seed?.siteFieldDefaults),
   }
@@ -201,106 +301,101 @@ function getSiteFormatLabel(siteId: SiteId) {
   return 'HTML'
 }
 
-function getSitePreviewContent(siteId: SiteId) {
-  const format = getSiteFormat(siteId)
-  if (format === 'md') {
-    return convertedPreview.md
-  }
-  if (format === 'bbcode') {
-    return convertedPreview.bbcode
-  }
-  return convertedPreview.html
+function loadDraftState(config?: Config.PublishConfig | null) {
+  draftTitle.value = config?.title ?? ''
+  draftTorrentEntries.value = normalizeDraftTorrentEntries(config)
+
+  const preferredActiveId = config?.activeTorrentId?.trim()
+  const activeEntry =
+    draftTorrentEntries.value.find(entry => entry.id === preferredActiveId) ??
+    draftTorrentEntries.value.find(entry => entry.enabled) ??
+    draftTorrentEntries.value[0]
+
+  activeTorrentId.value = activeEntry?.id ?? ''
 }
 
-function getSitePreviewNote(siteId: SiteId) {
-  return `${getSiteName(siteId)} 使用 ${getSiteFormatLabel(siteId)} 格式发布。`
+function serializeDraftTorrentEntries() {
+  return draftTorrentEntries.value.map(entry => ({
+    id: entry.id,
+    name: entry.name,
+    path: entry.path,
+    enabled: entry.enabled,
+    titleOverride: entry.titleOverride.trim() || undefined,
+    bodyOverride: entry.bodyOverride || undefined,
+  }))
 }
 
-function buildSeriesLabel(values: {
-  seriesTitleCN?: string
-  seriesTitleEN?: string
-  seriesTitleJP?: string
-  seasonLabel?: string
-}) {
-  const titles = [values.seriesTitleCN, values.seriesTitleEN, values.seriesTitleJP]
-    .map(value => value?.trim() ?? '')
-    .filter(Boolean)
-  const uniqueTitles = [...new Set(titles)]
-  const seasonLabel = values.seasonLabel?.trim()
-  return seasonLabel ? [...uniqueTitles, seasonLabel].join(' / ') : uniqueTitles.join(' / ')
-}
-
-function buildTechLabel(values: {
-  sourceType?: string
-  resolution?: string
-  videoCodec?: string
-  audioCodec?: string
-}) {
-  return [values.sourceType, values.resolution, values.videoCodec, values.audioCodec]
-    .map(value => value?.trim() ?? '')
-    .filter(Boolean)
-    .join(' / ')
-}
-
-function buildTemplateVariables() {
-  const content =
-    draftConfig.value?.content && typeof draftConfig.value.content === 'object' && !Array.isArray(draftConfig.value.content)
-      ? (draftConfig.value.content as Partial<Config.Content_episode>)
-      : {}
-  const overrides = hiddenProfileState.templateContext ?? {}
-
-  const baseVariables = {
-    title: draftConfig.value?.title?.trim() || props.project.name,
-    summary: content.summary?.trim() || '这里填写全站通用正文。',
-    releaseTeam: content.releaseTeam?.trim() || 'VCB-Studio',
-    seriesTitleCN: content.seriesTitleCN?.trim() || '',
-    seriesTitleEN: content.seriesTitleEN?.trim() || props.project.name,
-    seriesTitleJP: content.seriesTitleJP?.trim() || '',
-    seasonLabel: content.seasonLabel?.trim() || '',
-    episodeLabel: content.episodeLabel?.trim() || '',
-    episodeTitle: content.episodeTitle?.trim() || '',
-    sourceType: content.sourceType?.trim() || 'WebRip',
-    resolution: content.resolution?.trim() || '1080p',
-    videoCodec: content.videoCodec?.trim() || 'HEVC',
-    audioCodec: content.audioCodec?.trim() || 'AAC',
-    variantName: overrides.variantName?.trim() || '',
-    videoProfile: overrides.videoProfile?.trim() || '',
-    subtitleProfile: overrides.subtitleProfile?.trim() || '',
-    subtitleProfileLabel: overrides.subtitleProfileLabel?.trim() || '',
+function buildDraftConfigSnapshot(seed?: Config.PublishConfig | null) {
+  const baseConfig = deepClone(seed ?? draftConfig.value)
+  if (!baseConfig) {
+    return null
   }
 
-  const variables = {
-    ...baseVariables,
-    ...Object.fromEntries(
-      Object.entries(overrides).filter(([_key, value]) => typeof value === 'string' && value.trim() !== ''),
-    ),
-  }
+  const nextConfig = deepClone(baseConfig)
+  const serializedEntries = serializeDraftTorrentEntries()
+  const activeEntry =
+    draftTorrentEntries.value.find(entry => entry.id === activeTorrentId.value) ??
+    draftTorrentEntries.value.find(entry => entry.enabled) ??
+    draftTorrentEntries.value[0]
 
-  return {
-    ...variables,
-    seriesLabel:
-      overrides.seriesLabel?.trim() ||
-      buildSeriesLabel({
-        seriesTitleCN: variables.seriesTitleCN,
-        seriesTitleEN: variables.seriesTitleEN,
-        seriesTitleJP: variables.seriesTitleJP,
-        seasonLabel: variables.seasonLabel,
-      }),
-    techLabel:
-      overrides.techLabel?.trim() ||
-      buildTechLabel({
-        sourceType: variables.sourceType,
-        resolution: variables.resolution,
-        videoCodec: variables.videoCodec,
-        audioCodec: variables.audioCodec,
-      }),
+  nextConfig.title = draftTitle.value.trim()
+  nextConfig.torrentEntries = serializedEntries.length > 0 ? serializedEntries : undefined
+  nextConfig.activeTorrentId = activeEntry?.id
+  nextConfig.torrentPath = activeEntry?.path ?? ''
+  nextConfig.torrentName = activeEntry?.name ?? ''
+  return nextConfig
+}
+
+async function persistDraftSnapshot(nextConfig: Config.PublishConfig, options?: { materialize?: boolean }) {
+  await window.taskAPI.saveConfig(
+    JSON.stringify({
+      id: props.id,
+      config: nextConfig,
+    } satisfies Message.Task.ModifiedConfig),
+  )
+
+  draftConfig.value = nextConfig
+  loadDraftState(nextConfig)
+
+  if (options?.materialize !== false && nextConfig.torrentPath.trim()) {
+    const { result }: Message.Task.Result = JSON.parse(
+      await window.taskAPI.createConfig(
+        JSON.stringify({
+          id: props.id,
+          type: 'episode',
+          config: nextConfig,
+        } satisfies Message.Task.ModifiedConfig),
+      ),
+    )
+
+    if (result !== 'success') {
+      throw new Error(result)
+    }
   }
 }
 
-function renderBodyTemplate(template: string) {
-  const variables = buildTemplateVariables()
-  return template.replace(/\{\{\s*([\w]+)\s*\}\}/g, (_match, key: string) => variables[key as keyof typeof variables] ?? '')
+async function syncDraftState(options?: { materialize?: boolean; successMessage?: string }) {
+  const nextConfig = buildDraftConfigSnapshot()
+  if (!nextConfig) {
+    return
+  }
+
+  await persistDraftSnapshot(nextConfig, options)
+  if (options?.successMessage) {
+    ElMessage.success(options.successMessage)
+  }
 }
+
+const activeTorrentEntry = computed(() =>
+  draftTorrentEntries.value.find(entry => entry.id === activeTorrentId.value) ??
+  draftTorrentEntries.value.find(entry => entry.enabled) ??
+  draftTorrentEntries.value[0] ??
+  null,
+)
+
+const selectedTorrentEntries = computed(() => draftTorrentEntries.value.filter(entry => entry.enabled))
+const selectedTorrentCount = computed(() => selectedTorrentEntries.value.length)
+const effectiveBodyTemplate = computed(() => activeTorrentEntry.value?.bodyOverride.trim() || profileForm.bodyTemplate.trim() || '')
 
 const authenticatedSites = computed(() =>
   sortSiteIds(
@@ -313,11 +408,6 @@ const authenticatedSites = computed(() =>
 const publishProfiles = computed(() => workspace.value?.publishProfiles ?? [])
 const builtEpisodeCount = computed(() => workspace.value?.episodes.length ?? 0)
 const selectedSiteNames = computed(() => profileForm.targetSites.map(siteId => getSiteName(siteId)))
-const selectedSiteCards = computed(() =>
-  profileForm.targetSites
-    .map(siteId => authenticatedSites.value.find(site => site.id === siteId))
-    .filter((site): site is SiteCatalogEntry => Boolean(site)),
-)
 const overviewEpisodeText = computed(() => {
   if (!overviewForm.plannedEpisodeCount) {
     return `${builtEpisodeCount.value} 集已建立`
@@ -341,46 +431,15 @@ const selectedProfileSummary = computed(() => {
 
   return `${(profile.targetSites ?? []).length} \u4e2a\u7ad9\u70b9 \u00b7 \u6700\u8fd1\u66f4\u65b0 ${formatProjectTimestamp(profile.updatedAt)}`
 })
-const renderedHtmlPreview = computed(() => renderBodyTemplate(profileForm.bodyTemplate.trim() || ''))
-
-async function refreshPreviews() {
-  const html = renderedHtmlPreview.value.trim()
-  const requestId = ++previewRequestId.value
-
-  convertedPreview.html = html
-  if (!html) {
-    convertedPreview.md = ''
-    convertedPreview.bbcode = ''
-    return
+const renderedMarkdownPreview = computed(() => effectiveBodyTemplate.value.trim())
+const renderedHtmlPreview = computed(() => {
+  const markdownSource = renderedMarkdownPreview.value.trim()
+  if (!markdownSource) {
+    return ''
   }
 
-  isPreviewLoading.value = true
-  try {
-    const [markdownRaw, bbcodeRaw] = await Promise.all([
-      window.globalAPI.html2markdown(JSON.stringify({ content: html })),
-      window.globalAPI.html2bbcode(JSON.stringify({ content: html })),
-    ])
-
-    if (requestId !== previewRequestId.value) {
-      return
-    }
-
-    convertedPreview.md = (JSON.parse(markdownRaw) as Message.Global.FileContent).content
-    convertedPreview.bbcode = (JSON.parse(bbcodeRaw) as Message.Global.FileContent).content
-  } finally {
-    if (requestId === previewRequestId.value) {
-      isPreviewLoading.value = false
-    }
-  }
-}
-
-watch(
-  renderedHtmlPreview,
-  () => {
-    void refreshPreviews()
-  },
-  { immediate: true },
-)
+  return marked.parse(markdownSource, { async: false }) as string
+})
 
 function fillProfileForm(profile: SeriesPublishProfile | null) {
   const fallbackTargetSites = getDraftTargetSites().filter(siteId =>
@@ -395,9 +454,6 @@ function fillProfileForm(profile: SeriesPublishProfile | null) {
       isDefault: profile?.isDefault,
       videoProfiles: profile?.videoProfiles,
       subtitleProfiles: profile?.subtitleProfiles,
-      templateContext: profile?.templateContext,
-      titleTemplate: profile?.titleTemplate,
-      summaryTemplate: profile?.summaryTemplate,
       siteDrafts: profile?.siteDrafts,
       siteFieldDefaults: profile?.siteFieldDefaults,
     }),
@@ -413,7 +469,11 @@ async function syncDraftConfigFromProfile(profile: SeriesPublishProfile | null) 
     return
   }
 
-  const currentDraft = draftConfig.value ?? (await taskBridge.getPublishConfig(props.id))
+  const currentDraft = draftConfig.value ?? (await normalizeDraftConfigForEditor(await taskBridge.getPublishConfig(props.id)))
+  if (!currentDraft) {
+    return
+  }
+
   const nextDraft = deepClone(currentDraft)
 
   nextDraft.targetSites = [...(profile.targetSites ?? [])]
@@ -435,20 +495,18 @@ async function syncDraftConfigFromProfile(profile: SeriesPublishProfile | null) 
 
   if (profile.bodyTemplate?.trim()) {
     nextDraft.bodyTemplate = profile.bodyTemplate.trim()
-    nextDraft.bodyTemplateFormat = profile.bodyTemplateFormat ?? 'html'
+    nextDraft.bodyTemplateFormat = profile.bodyTemplateFormat ?? 'md'
   } else {
     delete nextDraft.bodyTemplate
     delete nextDraft.bodyTemplateFormat
   }
 
-  await window.taskAPI.saveConfig(
-    JSON.stringify({
-      id: props.id,
-      config: nextDraft,
-    } satisfies Message.Task.ModifiedConfig),
-  )
+  const mergedDraft = buildDraftConfigSnapshot(nextDraft)
+  if (!mergedDraft) {
+    return
+  }
 
-  draftConfig.value = nextDraft
+  await persistDraftSnapshot(mergedDraft)
 }
 
 async function applyProfile(profileId: number | null, syncDraft = true) {
@@ -471,7 +529,9 @@ async function loadWorkspace(preferredProfileId?: number | null) {
       taskBridge.getPublishConfig(props.id),
     ])
 
-    draftConfig.value = currentDraft
+    const normalizedDraft = await normalizeDraftConfigForEditor(currentDraft)
+    draftConfig.value = normalizedDraft
+    loadDraftState(normalizedDraft)
 
     if (!workspaceResult.ok) {
       workspace.value = null
@@ -479,7 +539,7 @@ async function loadWorkspace(preferredProfileId?: number | null) {
       return
     }
 
-    workspace.value = workspaceResult.data.workspace
+    workspace.value = await normalizeWorkspaceForEditor(workspaceResult.data.workspace)
     overviewForm.plannedEpisodeCount = workspace.value.plannedEpisodeCount
 
     if (!siteResult.ok) {
@@ -504,9 +564,159 @@ async function loadWorkspace(preferredProfileId?: number | null) {
 
 function beginCreateProfile() {
   selectedProfileId.value = null
+  Object.assign(hiddenProfileState, createHiddenProfileState())
   profileForm.name = ''
   profileForm.bodyTemplate = draftConfig.value?.bodyTemplate?.trim() || profileForm.bodyTemplate || DEFAULT_BODY_TEMPLATE
   profileForm.targetSites = getDraftTargetSites().filter(siteId => authenticatedSites.value.some(site => site.id === siteId))
+}
+
+async function saveDraftTitle() {
+  await syncDraftState({ successMessage: '已保存当前标题' })
+}
+
+async function appendTorrentEntries(paths: string[]) {
+  const normalizedPaths = [...new Set(paths.map(readOptionalString).filter(Boolean))]
+  if (normalizedPaths.length === 0) {
+    return
+  }
+
+  const existingEntriesByPath = new Map(draftTorrentEntries.value.map(entry => [entry.path, entry] as const))
+  const addedEntries: DraftTorrentEntry[] = []
+  let lastMatchedEntry: DraftTorrentEntry | null = null
+
+  for (const path of normalizedPaths) {
+    const existingEntry = existingEntriesByPath.get(path)
+    if (existingEntry) {
+      lastMatchedEntry = existingEntry
+      continue
+    }
+
+    const nextEntry = createDraftTorrentEntry(path)
+    existingEntriesByPath.set(path, nextEntry)
+    addedEntries.push(nextEntry)
+  }
+
+  if (addedEntries.length === 0) {
+    if (lastMatchedEntry) {
+      activeTorrentId.value = lastMatchedEntry.id
+      await syncDraftState({ successMessage: `所选种子已存在，已切换到：${lastMatchedEntry.name}` })
+    }
+    return
+  }
+
+  draftTorrentEntries.value = [...draftTorrentEntries.value, ...addedEntries]
+  activeTorrentId.value = addedEntries[addedEntries.length - 1].id
+
+  const skippedCount = normalizedPaths.length - addedEntries.length
+  const successMessage =
+    addedEntries.length === 1 && skippedCount === 0
+      ? `已添加种子：${addedEntries[0].name}`
+      : `已添加 ${addedEntries.length} 个种子${skippedCount > 0 ? `，跳过 ${skippedCount} 个重复项` : ''}`
+
+  await syncDraftState({ successMessage })
+}
+
+async function addTorrentEntry() {
+  const { paths }: Message.Global.Paths = JSON.parse(
+    await window.globalAPI.getFilePaths(JSON.stringify({ type: 'torrent' } satisfies Message.Global.FileType)),
+  )
+  await appendTorrentEntries(paths)
+}
+
+async function setActiveTorrent(entryId: string) {
+  if (activeTorrentId.value === entryId) {
+    return
+  }
+
+  activeTorrentId.value = entryId
+  await syncDraftState({ successMessage: '已切换当前发布种子' })
+}
+
+async function toggleTorrentSelection(entryId: string) {
+  const entry = draftTorrentEntries.value.find(item => item.id === entryId)
+  if (!entry) {
+    return
+  }
+
+  entry.enabled = !entry.enabled
+  if (!draftTorrentEntries.value.some(item => item.enabled)) {
+    entry.enabled = true
+    ElMessage.warning('至少保留一个已选中的种子')
+    return
+  }
+
+  if (!draftTorrentEntries.value.some(item => item.id === activeTorrentId.value && item.enabled)) {
+    activeTorrentId.value =
+      draftTorrentEntries.value.find(item => item.enabled)?.id ?? draftTorrentEntries.value[0]?.id ?? ''
+  }
+
+  await syncDraftState()
+}
+
+async function removeTorrentEntry(entryId: string) {
+  const entry = draftTorrentEntries.value.find(item => item.id === entryId)
+  if (!entry) {
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(`移除种子“${entry.name}”？`, '移除种子', {
+      confirmButtonText: '移除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+
+  draftTorrentEntries.value = draftTorrentEntries.value.filter(item => item.id !== entryId)
+  if (activeTorrentId.value === entryId) {
+    activeTorrentId.value =
+      draftTorrentEntries.value.find(item => item.enabled)?.id ?? draftTorrentEntries.value[0]?.id ?? ''
+  }
+
+  await syncDraftState({ successMessage: `已移除种子：${entry.name}` })
+}
+
+function openTorrentOverrideDialog(entryId: string) {
+  const entry = draftTorrentEntries.value.find(item => item.id === entryId)
+  if (!entry) {
+    return
+  }
+
+  editingTorrentId.value = entry.id
+  torrentOverrideForm.titleOverride = entry.titleOverride
+  torrentOverrideForm.bodyOverride = entry.bodyOverride
+  torrentOverrideDialogVisible.value = true
+}
+
+async function saveTorrentOverride() {
+  const entry = draftTorrentEntries.value.find(item => item.id === editingTorrentId.value)
+  if (!entry) {
+    torrentOverrideDialogVisible.value = false
+    return
+  }
+
+  entry.titleOverride = torrentOverrideForm.titleOverride
+  entry.bodyOverride = torrentOverrideForm.bodyOverride
+  torrentOverrideDialogVisible.value = false
+  await syncDraftState({ successMessage: `宸叉洿鏂扮瀛愬唴瀹癸細${entry.name}` })
+}
+
+async function clearTorrentOverride() {
+  torrentOverrideForm.titleOverride = ''
+  torrentOverrideForm.bodyOverride = ''
+  await saveTorrentOverride()
+}
+
+function isSiteSelected(siteId: SiteId) {
+  return profileForm.targetSites.includes(siteId)
+}
+
+function toggleSite(siteId: SiteId) {
+  profileForm.targetSites = isSiteSelected(siteId)
+    ? profileForm.targetSites.filter(current => current !== siteId)
+    : sortSiteIds([...profileForm.targetSites, siteId])
 }
 
 async function saveOverview() {
@@ -524,7 +734,7 @@ async function saveOverview() {
 
     workspace.value = result.data.workspace
     overviewForm.plannedEpisodeCount = result.data.workspace.plannedEpisodeCount
-    ElMessage.success('总集数已保存')
+    ElMessage.success('鎬婚泦鏁板凡淇濆瓨')
   } finally {
     isSavingOverview.value = false
   }
@@ -538,12 +748,9 @@ function buildProfilePayload(): SaveSeriesPublishProfileInput {
     isDefault: hiddenProfileState.isDefault,
     videoProfiles: [...hiddenProfileState.videoProfiles],
     subtitleProfiles: [...hiddenProfileState.subtitleProfiles],
-    templateContext: deepClone(hiddenProfileState.templateContext),
     targetSites: [...profileForm.targetSites],
-    titleTemplate: hiddenProfileState.titleTemplate,
-    summaryTemplate: hiddenProfileState.summaryTemplate,
     bodyTemplate: profileForm.bodyTemplate.trim() || undefined,
-    bodyTemplateFormat: 'html',
+    bodyTemplateFormat: 'md',
     siteDrafts: deepClone(hiddenProfileState.siteDrafts),
     siteFieldDefaults: deepClone(hiddenProfileState.siteFieldDefaults),
   }
@@ -557,12 +764,9 @@ function buildSavedProfilePayload(profile: SeriesPublishProfile, name: string): 
     isDefault: profile.isDefault,
     videoProfiles: [...(profile.videoProfiles ?? [])],
     subtitleProfiles: [...(profile.subtitleProfiles ?? [])],
-    templateContext: deepClone(profile.templateContext),
     targetSites: [...(profile.targetSites ?? [])],
-    titleTemplate: profile.titleTemplate,
-    summaryTemplate: profile.summaryTemplate,
     bodyTemplate: profile.bodyTemplate?.trim() || undefined,
-    bodyTemplateFormat: profile.bodyTemplateFormat ?? 'html',
+    bodyTemplateFormat: profile.bodyTemplateFormat ?? 'md',
     siteDrafts: deepClone(profile.siteDrafts),
     siteFieldDefaults: deepClone(profile.siteFieldDefaults),
   }
@@ -617,7 +821,7 @@ async function renameProfile(profile: SeriesPublishProfile) {
 /*
 async function saveProfile() {
   if (!profileForm.name.trim()) {
-    const nextName = await promptProfileName('', selectedProfileId.value ? '重命名发布配置' : '保存发布配置')
+    const nextName = await promptProfileName('', selectedProfileId.value ? '閲嶅懡鍚嶅彂甯冮厤缃? : '淇濆瓨鍙戝竷閰嶇疆')
     if (!nextName) {
       return
     }
@@ -626,7 +830,7 @@ async function saveProfile() {
   }
 
   if (!profileForm.name.trim()) {
-    ElMessage.error('请先填写配置名称')
+    ElMessage.error('璇峰厛濉啓閰嶇疆鍚嶇О')
     return
   }
 
@@ -642,7 +846,7 @@ async function saveProfile() {
     overviewForm.plannedEpisodeCount = result.data.workspace.plannedEpisodeCount
     await applyProfile(result.data.profile.id, false)
     await syncDraftConfigFromProfile(result.data.profile)
-    ElMessage.success(`配置已保存：${result.data.profile.name}`)
+    ElMessage.success(`閰嶇疆宸蹭繚瀛橈細${result.data.profile.name}`)
   } finally {
     isSavingProfile.value = false
   }
@@ -702,7 +906,7 @@ async function importProfile() {
     overviewForm.plannedEpisodeCount = result.data.workspace.plannedEpisodeCount
     await applyProfile(result.data.profile.id, false)
     await syncDraftConfigFromProfile(result.data.profile)
-    ElMessage.success(`已导入配置：${result.data.profile.name}`)
+    ElMessage.success(`宸插鍏ラ厤缃細${result.data.profile.name}`)
   } finally {
     isImportingProfile.value = false
   }
@@ -736,7 +940,7 @@ async function exportProfile() {
 
 async function createEpisode() {
   if (!episodeForm.episodeLabel.trim()) {
-    ElMessage.error('请先填写集数')
+    ElMessage.error('璇峰厛濉啓闆嗘暟')
     return
   }
 
@@ -758,7 +962,7 @@ async function createEpisode() {
     episodeDialogVisible.value = false
     episodeForm.episodeLabel = ''
     episodeForm.episodeTitle = ''
-    ElMessage.success(`已建立剧集：${result.data.episode.episodeLabel}`)
+    ElMessage.success(`宸插缓绔嬪墽闆嗭細${result.data.episode.episodeLabel}`)
   } finally {
     isCreatingEpisode.value = false
   }
@@ -833,14 +1037,12 @@ onMounted(() => {
         <div class="series-editor__section-head">
           <div>
             <h3 class="series-editor__title">发布配置</h3>
-            <p class="series-editor__text">
-              点击下面的配置项即可直接使用。当前页面只保留配置本身，不再展示多层工作台关系。
-            </p>
+            <p class="series-editor__text">选择或新建一套发布配置，然后继续调整正文模板和发布站点。</p>
           </div>
           <div class="series-editor__actions">
-            <el-button plain :icon="Upload" :loading="isImportingProfile" @click="importProfile">导入配置项</el-button>
-            <el-button plain :icon="Download" :loading="isExportingProfile" @click="exportProfile">导出配置项</el-button>
-            <el-button type="primary" :icon="Plus" @click="beginCreateProfile">新建配置项</el-button>
+            <el-button plain :icon="Upload" :loading="isImportingProfile" @click="importProfile">导入配置</el-button>
+            <el-button plain :icon="Download" :loading="isExportingProfile" @click="exportProfile">导出配置</el-button>
+            <el-button type="primary" :icon="Plus" @click="beginCreateProfile">新建配置</el-button>
           </div>
         </div>
 
@@ -851,15 +1053,13 @@ onMounted(() => {
             :class="{ 'is-active': true, 'is-draft': true }"
           >
             <button type="button" class="series-editor__profile-option-main" @click="selectedProfileId = null">
-              <span class="series-editor__profile-option-name">{{
-                profileForm.name.trim() || '\u672a\u547d\u540d\u65b0\u914d\u7f6e'
-              }}</span>
-              <span class="series-editor__profile-option-badge">{{ '\u65b0\u5efa' }}</span>
+              <span class="series-editor__profile-option-name">{{ profileForm.name.trim() || '未命名新配置' }}</span>
+              <span class="series-editor__profile-option-badge">新建</span>
             </button>
             <button
               type="button"
               class="series-editor__profile-option-icon"
-              :aria-label="'\u91cd\u547d\u540d\u5f53\u524d\u65b0\u914d\u7f6e'"
+              aria-label="重命名当前新配置"
               @click.stop="renameDraftProfile"
             >
               <el-icon><EditPen /></el-icon>
@@ -878,35 +1078,16 @@ onMounted(() => {
             <button
               type="button"
               class="series-editor__profile-option-icon"
-              :aria-label="`\u91cd\u547d\u540d\u914d\u7f6e ${profile.name}`"
+              :aria-label="`重命名配置 ${profile.name}`"
               @click.stop="renameProfile(profile)"
             >
               <el-icon><EditPen /></el-icon>
             </button>
           </div>
 
-          <button
-            v-for="profile in publishProfiles"
-            :key="profile.id"
-            type="button"
-            class="series-editor__profile-card"
-            :class="{ 'is-active': selectedProfileId === profile.id }"
-            @click="applyProfile(profile.id)"
-          >
-            <div class="series-editor__profile-name">{{ profile.name }}</div>
-            <div class="series-editor__profile-meta">
-              <span>{{ (profile.targetSites ?? []).length }} 个站点</span>
-              <span>{{ formatProjectTimestamp(profile.updatedAt) }}</span>
-            </div>
-          </button>
-
           <div v-if="publishProfiles.length === 0" class="series-editor__empty-card">
-            当前还没有配置项，先新建一个即可。
+            当前还没有发布配置，先新建一套即可。
           </div>
-        </div>
-
-        <div v-if="publishProfiles.length === 0 && selectedProfileId !== null" class="series-editor__empty-card">
-          {{ '\u5f53\u524d\u8fd8\u6ca1\u6709\u914d\u7f6e\u9879\uff0c\u5148\u65b0\u5efa\u4e00\u4e2a\u5373\u53ef\u3002' }}
         </div>
 
         <div class="series-editor__profile-footer">
@@ -915,18 +1096,6 @@ onMounted(() => {
             <span class="series-editor__profile-selection-meta">{{ selectedProfileSummary }}</span>
           </div>
           <div class="series-editor__profile-footer-actions">
-            <el-button type="primary" :loading="isSavingProfile" @click="saveProfile">{{
-              '\u4fdd\u5b58\u5f53\u524d\u914d\u7f6e'
-            }}</el-button>
-          </div>
-        </div>
-
-        <div class="series-editor__config-bar">
-          <label class="series-editor__field">
-            <span class="series-editor__label">配置名称</span>
-            <el-input v-model="profileForm.name" placeholder="例如：常规发布 / 海外同步 / 港澳台版" />
-          </label>
-          <div class="series-editor__config-bar-actions">
             <el-button type="primary" :loading="isSavingProfile" @click="saveProfile">保存当前配置</el-button>
           </div>
         </div>
@@ -936,56 +1105,100 @@ onMounted(() => {
         <div class="series-editor__section-head">
           <div>
             <h3 class="series-editor__title">正文模板</h3>
-            <p class="series-editor__text">
-              这里统一维护 HTML 正文源稿，页面会自动转换成 Markdown 和 BBCode 供不同站点使用。
-            </p>
+            <p class="series-editor__text">正文模板统一用 Markdown 编写，生成发布稿时会自动转换为 HTML 和 BBCode。</p>
+          </div>
+          <div class="series-editor__actions">
+            <el-button-group>
+              <el-button :type="bodyTemplateView === 'editor' ? 'primary' : 'default'" @click="bodyTemplateView = 'editor'">
+                源稿
+              </el-button>
+              <el-button
+                :type="bodyTemplateView === 'preview' ? 'primary' : 'default'"
+                @click="bodyTemplateView = 'preview'"
+              >
+                预览
+              </el-button>
+            </el-button-group>
+            <el-button plain @click="addTorrentEntry">批量添加种子</el-button>
           </div>
         </div>
 
-        <div class="series-editor__template-grid">
-          <div class="series-editor__editor-card">
-            <div class="series-editor__label">HTML 正文源稿</div>
-            <el-input
-              v-model="profileForm.bodyTemplate"
-              type="textarea"
-              :rows="18"
-              placeholder="在这里填写全站通用的 HTML 正文模板。"
-            />
-            <div class="series-editor__token-list">
-              <span v-for="token in TEMPLATE_TOKENS" :key="token" class="series-editor__token">{{ token }}</span>
+        <div class="series-editor__field-grid">
+          <label class="series-editor__field">
+            <span class="series-editor__label">发布标题</span>
+            <el-input v-model="draftTitle" placeholder="输入当前草稿的默认标题" @blur="saveDraftTitle" />
+          </label>
+
+          <div class="series-editor__field series-editor__field--summary">
+            <span class="series-editor__label">种子列表</span>
+            <div class="series-editor__muted">
+              已导入 {{ draftTorrentEntries.length }} 个，已选 {{ selectedTorrentCount }} 个。支持一次选择多个 `.torrent` 文件；左键切换当前种子，右键编辑单个种子的标题或正文。
+            </div>
+            <div class="series-editor__torrent-strip">
+              <div
+                v-for="torrent in draftTorrentEntries"
+                :key="torrent.id"
+                class="series-editor__torrent-chip"
+                :class="{
+                  'is-active': activeTorrentId === torrent.id,
+                  'is-disabled': !torrent.enabled,
+                  'has-override': Boolean(torrent.titleOverride.trim() || torrent.bodyOverride.trim()),
+                }"
+                @click="void setActiveTorrent(torrent.id)"
+                @contextmenu.prevent="openTorrentOverrideDialog(torrent.id)"
+              >
+                <span class="series-editor__torrent-check" @click.stop>
+                  <el-checkbox
+                    :model-value="torrent.enabled"
+                    @update:model-value="() => void toggleTorrentSelection(torrent.id)"
+                  />
+                </span>
+                <div class="series-editor__torrent-copy">
+                  <div class="series-editor__torrent-name">{{ torrent.name }}</div>
+                  <div class="series-editor__torrent-path">{{ torrent.path }}</div>
+                </div>
+                <div class="series-editor__torrent-tags">
+                  <el-tag v-if="activeTorrentId === torrent.id" effect="plain" type="success" size="small">当前</el-tag>
+                  <el-tag v-if="torrent.titleOverride.trim() || torrent.bodyOverride.trim()" effect="plain" size="small">
+                    单独覆盖
+                  </el-tag>
+                </div>
+                <el-button link type="danger" @click.stop="void removeTorrentEntry(torrent.id)">移除</el-button>
+              </div>
+
+              <div v-if="draftTorrentEntries.length === 0" class="series-editor__empty-inline">
+                还没有导入种子，先批量选择一个或多个 `.torrent` 文件。
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="series-editor__template-panel">
+          <div class="series-editor__template-head">
+            <div class="series-editor__label">{{ bodyTemplateView === 'editor' ? 'Markdown 正文模板' : '渲染预览' }}</div>
+            <div class="series-editor__editor-hint">
+              {{
+                bodyTemplateView === 'editor'
+                  ? '正文统一使用 Markdown 编写，保存后会在生成发布稿时自动转换为 HTML 和 BBCode。'
+                  : '这里展示 Markdown 渲染后的效果。实际发布时会按站点要求继续转换格式。'
+              }}
             </div>
           </div>
 
-          <div class="series-editor__preview-stack">
-            <article class="series-editor__preview-card">
-              <div class="series-editor__label">HTML 预览</div>
-              <div v-if="renderedHtmlPreview" class="series-editor__html-preview" v-html="renderedHtmlPreview"></div>
-              <div v-else class="series-editor__muted">模板为空时，这里不会生成预览。</div>
-            </article>
-
-            <article class="series-editor__preview-card">
-              <div class="series-editor__label">格式转换</div>
-              <div class="series-editor__preview-status">
-                <span v-if="isPreviewLoading" class="series-editor__muted">正在生成 Markdown / BBCode 预览...</span>
-                <span v-else class="series-editor__muted">已根据当前模板生成多站点输出预览。</span>
-              </div>
-              <div class="series-editor__site-preview-list">
-                <article v-for="site in selectedSiteCards" :key="site.id" class="series-editor__site-preview">
-                  <div class="series-editor__site-preview-head">
-                    <div class="series-editor__site-name">{{ site.name }}</div>
-                    <el-tag effect="plain" size="small">{{ getSiteFormatLabel(site.id) }}</el-tag>
-                  </div>
-                  <div class="series-editor__site-note">{{ getSitePreviewNote(site.id) }}</div>
-                  <pre class="series-editor__site-code">
-{{ getSitePreviewContent(site.id) || '当前模板暂无可转换内容。' }}</pre
-                  >
-                </article>
-                <div v-if="selectedSiteCards.length === 0" class="series-editor__muted">
-                  先在下面勾选站点，这里才会按站点格式显示预览。
-                </div>
-              </div>
-            </article>
+          <div v-if="bodyTemplateView === 'editor'" class="series-editor__template-body">
+            <el-input
+              v-model="profileForm.bodyTemplate"
+              type="textarea"
+              :rows="24"
+              resize="none"
+              placeholder="在这里编写全站通用的 Markdown 正文模板。"
+            />
           </div>
+
+          <article v-else class="series-editor__template-body">
+            <div v-if="renderedHtmlPreview" class="series-editor__html-preview series-editor__html-preview--expanded" v-html="renderedHtmlPreview"></div>
+            <div v-else class="series-editor__muted">模板为空时，这里不会生成预览。</div>
+          </article>
         </div>
       </section>
 
@@ -1002,35 +1215,23 @@ onMounted(() => {
 
         <el-alert v-if="siteError" type="warning" :closable="false" show-icon :title="siteError" />
 
-        <div v-if="authenticatedSites.length" class="series-editor__site-grid">
-          <label
+        <div v-if="authenticatedSites.length" class="series-editor__site-button-grid">
+          <button
             v-for="site in authenticatedSites"
-            :key="site.id"
-            class="series-editor__site-card"
-            :class="{ 'is-active': profileForm.targetSites.includes(site.id) }"
+            :key="`site-button-${site.id}`"
+            type="button"
+            class="series-editor__site-button"
+            :class="{ 'is-active': isSiteSelected(site.id) }"
+            @click="toggleSite(site.id)"
           >
-            <div class="series-editor__site-card-head">
-              <div>
-                <div class="series-editor__site-name">{{ site.name }}</div>
-                <div class="series-editor__site-note">{{ site.baseUrl }}</div>
-              </div>
-              <el-checkbox
-                :model-value="profileForm.targetSites.includes(site.id)"
-                @update:model-value="
-                  value =>
-                    (profileForm.targetSites = value
-                      ? sortSiteIds([...profileForm.targetSites, site.id])
-                      : profileForm.targetSites.filter(current => current !== site.id))
-                "
-              />
-            </div>
-            <div class="series-editor__site-foot">
-              <el-tag effect="plain" size="small">{{ getSiteFormatLabel(site.id) }}</el-tag>
-              <span class="series-editor__muted">{{ site.accountMessage || '已通过账号校验' }}</span>
-            </div>
-          </label>
+            <span class="series-editor__site-button-name">{{ site.name }}</span>
+            <span class="series-editor__site-button-meta">{{ getSiteFormatLabel(site.id) }}</span>
+          </button>
         </div>
 
+        <div v-if="authenticatedSites.length" class="series-editor__muted">
+          当前已选站点：{{ selectedSiteNames.length > 0 ? selectedSiteNames.join(' / ') : '还没有选择发布站点' }}
+        </div>
         <div v-else class="series-editor__empty-card">当前没有已登录且有效的站点，请先去账号页面完成登录校验。</div>
       </section>
     </template>
@@ -1051,10 +1252,32 @@ onMounted(() => {
         <el-button type="primary" :loading="isCreatingEpisode" @click="createEpisode">建立剧集</el-button>
       </template>
     </el-dialog>
-  </div>
-</template>
 
-<style scoped>
+    <el-dialog v-model="torrentOverrideDialogVisible" title="单个种子覆盖" width="820px">
+      <div class="series-editor__dialog-grid">
+        <label class="series-editor__field">
+          <span class="series-editor__label">标题覆盖</span>
+          <el-input v-model="torrentOverrideForm.titleOverride" placeholder="留空则沿用默认标题" />
+        </label>
+        <label class="series-editor__field">
+          <span class="series-editor__label">正文覆盖（Markdown）</span>
+          <el-input
+            v-model="torrentOverrideForm.bodyOverride"
+            type="textarea"
+            :rows="16"
+            resize="none"
+            placeholder="留空则沿用当前配置模板的 Markdown 正文。"
+          />
+        </label>
+      </div>
+      <template #footer>
+        <el-button @click="torrentOverrideDialogVisible = false">取消</el-button>
+        <el-button plain @click="clearTorrentOverride">清空单独覆盖</el-button>
+        <el-button type="primary" @click="saveTorrentOverride">保存</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template><style scoped>
 .series-editor {
   display: grid;
   gap: 18px;
@@ -1062,8 +1285,7 @@ onMounted(() => {
 
 .series-editor__overview,
 .series-editor__section,
-.series-editor__preview-card,
-.series-editor__editor-card,
+.series-editor__template-panel,
 .series-editor__site-preview,
 .series-editor__site-card,
 .series-editor__profile-card,
@@ -1092,10 +1314,12 @@ onMounted(() => {
 }
 
 .series-editor__overview-item,
+.series-editor__field-grid,
 .series-editor__preview-stack,
 .series-editor__dialog-grid,
 .series-editor__field,
-.series-editor__site-preview-list {
+.series-editor__site-preview-list,
+.series-editor__torrent-copy {
   display: grid;
   gap: 10px;
 }
@@ -1164,7 +1388,9 @@ onMounted(() => {
 .series-editor__site-card-head,
 .series-editor__site-foot,
 .series-editor__section-head,
-.series-editor__site-preview-head {
+.series-editor__site-preview-head,
+.series-editor__preview-head,
+.series-editor__torrent-tags {
   display: flex;
   gap: 10px;
   align-items: center;
@@ -1321,40 +1547,120 @@ onMounted(() => {
   flex: 1 1 320px;
 }
 
-.series-editor__template-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: 16px;
+.series-editor__field-grid {
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.series-editor__editor-card,
-.series-editor__preview-card,
+.series-editor__template-panel,
 .series-editor__site-card,
 .series-editor__site-preview,
 .series-editor__empty-card {
   padding: 16px;
 }
 
-.series-editor__token-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.series-editor__template-panel,
+.series-editor__template-head,
+.series-editor__template-body {
+  display: grid;
+  gap: 12px;
 }
 
-.series-editor__token {
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-panel) 86%, #eef2f7);
+.series-editor__editor-hint {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.series-editor__torrent-strip {
+  display: grid;
+  gap: 10px;
+  max-height: 220px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.series-editor__torrent-chip {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: start;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-panel) 94%, #eef2f7);
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.series-editor__torrent-chip:hover {
+  transform: translateY(-1px);
+}
+
+.series-editor__torrent-chip.is-active {
+  border-color: color-mix(in srgb, var(--accent) 54%, white);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+}
+
+.series-editor__torrent-chip.has-override {
+  border-style: dashed;
+}
+
+.series-editor__torrent-chip.is-disabled {
+  opacity: 0.62;
+}
+
+.series-editor__torrent-check {
+  padding-top: 2px;
+}
+
+.series-editor__torrent-copy {
+  min-width: 0;
+}
+
+.series-editor__torrent-name {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.series-editor__torrent-path {
   color: var(--text-secondary);
   font-size: 12px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.series-editor__torrent-tags {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.series-editor__empty-inline {
+  padding: 14px;
+  border: 1px dashed var(--border-soft);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+}
+
+.series-editor__template-body :deep(.el-textarea__inner) {
+  min-height: 540px !important;
+  line-height: 1.7;
 }
 
 .series-editor__html-preview {
-  min-height: 160px;
+  min-height: 320px;
+  max-height: 320px;
   padding: 14px;
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--bg-panel) 90%, #eef2f7);
   overflow: auto;
+}
+
+.series-editor__html-preview--expanded {
+  min-height: 540px;
+  max-height: 640px;
 }
 
 .series-editor__preview-status {
@@ -1370,6 +1676,53 @@ onMounted(() => {
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.series-editor__site-preview-list {
+  max-height: 320px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.series-editor__site-button-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.series-editor__site-button {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  min-height: 88px;
+  padding: 14px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-panel) 94%, #eef2f7);
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.series-editor__site-button:hover {
+  transform: translateY(-1px);
+}
+
+.series-editor__site-button.is-active {
+  border-color: color-mix(in srgb, var(--accent) 54%, white);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+}
+
+.series-editor__site-button-name {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.series-editor__site-button-meta {
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .series-editor__site-grid {
@@ -1404,12 +1757,15 @@ onMounted(() => {
 }
 
 @media (max-width: 1120px) {
-  .series-editor__overview,
-  .series-editor__template-grid {
+  .series-editor__overview {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .series-editor__overview-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .series-editor__field-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -1425,5 +1781,18 @@ onMounted(() => {
     flex-direction: column;
     align-items: stretch;
   }
+
+  .series-editor__torrent-chip {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .series-editor__torrent-tags {
+    justify-content: flex-start;
+  }
 }
 </style>
+
+
+
+
+
