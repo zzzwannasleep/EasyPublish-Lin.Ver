@@ -1,53 +1,67 @@
-# EasyPublish-Lin.Ver
+# Nexus Publish
 
-`EasyPublish-Lin.Ver` 是一个基于 Electron + Vue 3 + TypeScript 的桌面发布工作台，面向 PT / NexusPHP 发布流程。这个仓库仍然沿用 `EasyPublish-Lin.Ver` 的历史仓库名，但当前桌面应用、构建产物和后续重构方向都已经切换到 `EasyPublish-Lin.Ver`。
+`Nexus Publish` 是一个基于 `Electron + Vue 3 + TypeScript` 的桌面发布工作台，面向 PT / NexusPHP 发布场景。
+
+这个仓库来自对 `EasyPublish` 的二次改造，当前重点已经从“单次发布脚本”转向“以项目为中心的桌面工作流”。
 
 ## 当前定位
 
-项目已经不再是单纯的“自动发布脚本”，而是在把旧 EasyPublish 工作流逐步收口为一个以“项目”为中心的桌面应用：
+- 本地创建、管理、继续编辑发布项目
+- 支持单集项目，以及合集 / 电影类项目
+- 使用 Markdown 编写正文模板，并在发布时自动转换为 HTML / BBCode
+- 管理站点账号、Cookie / Token、代理和日志
+- 通过新的 adapter 链路处理 NexusPHP 站点元数据、校验和发布
+- 保留部分旧发布链路的兼容入口，便于逐步迁移
 
-- 本地创建、管理和继续编辑发布项目
-- 区分 `单集` 与 `合集 / 电影` 两套创建与发布流程
-- 记录目标站点、发布结果、失败记录和缺失站点
-- 管理 PT 站点账号、Cookie / Token、代理与诊断日志
-- 用新的 adapter 链路处理 NexusPHP 站点元数据拉取、校验和种子发布
-- 保留 Bangumi、Mikan、MioBT、Nyaa、主站发布等旧链路的兼容入口
+## 当前能力
 
-## 当前已落地的能力
+- 项目列表、项目详情、阶段化工作流页面
+- 剧集项目工作台与发布配置管理
+- 多站点账号管理，支持自定义 NexusPHP / UNIT3D 站点录入
+- 发布历史持久化，可回看成功链接和失败记录
+- 正文模板统一改为 Markdown 编辑，并自动派生 HTML / BBCode
+- GitHub Actions 可构建 Windows / macOS / Linux 安装包并发布到 Releases
 
-- 新的项目工作台、项目列表、项目详情和阶段路由
-- 单集项目专用创建表单与编辑器
-- 合集 / 电影项目保留 `quick`、`file`、`template` 三种内容来源
-- PT 站点账号管理，支持录入自定义 NexusPHP / UNIT3D 站点
-- NexusPHP adapter：站点元数据、分类 / 标签 / 子分类、发布校验、发布请求、原始响应诊断
-- 发布历史持久化，可回看成功链接与失败记录
-- 敏感字段开始走安全存储兼容迁移
+## 技术栈
 
-说明：
+- Electron
+- Vue 3
+- TypeScript
+- electron-vite
+- electron-builder
+- lowdb
 
-- `NexusPHP` 是当前已经接入的新适配器主链路。
-- `UNIT3D` 目前以站点录入和后续扩展占位为主，还不是完整对等能力。
-- 旧发布流程仍然存在，因此当前状态更准确地说是“新项目工作台 + 兼容旧发布引擎”的混合阶段。
+## 开发环境
 
-## 技术结构
+建议使用：
 
-- `src/main`：主进程服务、存储、站点适配器、IPC 注册
-- `src/preload`：渲染层桥接与类型契约
-- `src/renderer`：桌面 UI、视图、功能模块和本地化文案
-- `src/shared`：项目、站点、发布相关共享类型
-- `docs`：重构规划、实现 backlog 和单双流工作流方案
+- Node.js 20
+- npm 10+
+- Windows 或 macOS
 
-## 开发
+首次安装依赖：
 
 ```powershell
 npm install
+```
+
+启动开发环境：
+
+```powershell
 npm run dev
 ```
 
 ## 构建
 
+通用构建：
+
 ```powershell
 npm run build
+```
+
+平台构建：
+
+```powershell
 npm run build:win
 npm run build:mac
 npm run build:linux
@@ -55,21 +69,57 @@ npm run build:linux
 
 说明：
 
-- `npm run build` 会先执行类型检查，再构建 Electron 应用。
-- `npm run build:mac` 必须在 macOS 主机上运行；在 Windows 上调用会被 `electron-builder` 平台限制拦住。
-- 当前仓库已经保留 Linux 构建脚本，但产品规划文档仍以 Windows / macOS 为主要桌面分发目标。
+- `npm run build` 会先执行 TypeScript 类型检查，再执行 Electron 构建。
+- `npm run build:win` 会输出 Windows 安装包和更新元数据。
+- `npm run build:mac` 需要在 macOS 主机上运行。
+- `npm run build:linux` 当前脚本会构建 Linux ARM64 的 `deb` 包。
 
-## 关键文档
+## GitHub Release 工作流
 
-- `docs/easypublish-redesign-plan.md`：整体产品定位与重构约束
-- `docs/implementation-backlog.md`：当前实现状态、阶段拆分和验收记录
-- `docs/episode-feature-workflow-plan.md`：单集 / 合集双工作流设计
+仓库内置了 [`.github/workflows/release.yml`](.github/workflows/release.yml)。
+
+它支持两种触发方式：
+
+1. 推送版本标签，例如 `v0.1.0`
+2. 在 GitHub Actions 中手动运行 `Release`
+
+工作流会：
+
+- 按发布版本重写 `package.json` 版本号
+- 分别在 Windows / macOS / Linux runner 上打包
+- 汇总安装包、压缩包、更新元数据
+- 自动创建或更新 GitHub Release
+- 将构建产物直接上传到 Release Assets
+
+发布说明默认读取仓库根目录的 `NEW.md`。
+
+## 目录结构
+
+```text
+src/
+  main/        主进程服务、存储、站点适配器、IPC 注册
+  preload/     渲染层桥接与类型定义
+  renderer/    桌面端 UI、页面与功能模块
+  shared/      项目、站点、发布相关共享类型
+docs/          重构规划、实现计划与工作流文档
+build/         打包资源与构建脚本
+scripts/       辅助脚本
+```
+
+## 重要文档
+
+- [docs/easypublish-redesign-plan.md](docs/easypublish-redesign-plan.md)
+- [docs/implementation-backlog.md](docs/implementation-backlog.md)
+- [docs/episode-feature-workflow-plan.md](docs/episode-feature-workflow-plan.md)
+- [QUICKSTART.md](QUICKSTART.md)
+- [GUIDE.md](GUIDE.md)
 
 ## 仓库状态
 
-- Electron 应用已经在仓库根目录运行和打包
-- 旧的 Tauri / Rust 原型不再作为当前主工作区的一部分
+- 当前主线是 Electron 桌面版
+- 旧的 Tauri / Rust 原型不再作为当前主工作区
+- 项目仍在持续重构中，部分旧链路仍处于兼容阶段
 
-二改自：https://github.com/vcb-s/EasyPublish
-二改自：https://github.com/vcb-s/EasyPublish
-二改自：https://github.com/vcb-s/EasyPublish
+## 致谢
+
+- 原项目：<https://github.com/vcb-s/EasyPublish>

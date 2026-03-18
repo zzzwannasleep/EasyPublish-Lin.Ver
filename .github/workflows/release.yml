@@ -1,19 +1,47 @@
-name: Build and Publish Release
+name: Release
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Release version written into package.json, for example 0.1.0'
+        required: false
+        type: string
+      release_tag:
+        description: 'Git tag to publish, for example v0.1.0. Defaults to v<release_version>.'
+        required: false
+        type: string
+      release_name:
+        description: 'Release title shown in GitHub Releases'
+        required: false
+        type: string
+      prerelease:
+        description: 'Publish as prerelease'
+        required: false
+        default: false
+        type: boolean
+      draft:
+        description: 'Create release as draft'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
 
 jobs:
-  prepare_release:
-    name: Prepare Release Version
+  prepare:
+    name: Prepare Release Metadata
     runs-on: ubuntu-latest
     outputs:
-      release_version: ${{ steps.version.outputs.release_version }}
-      release_tag: ${{ steps.version.outputs.release_tag }}
-      release_name: ${{ steps.version.outputs.release_name }}
+      release_version: ${{ steps.meta.outputs.release_version }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+      release_name: ${{ steps.meta.outputs.release_name }}
+      release_prerelease: ${{ steps.meta.outputs.release_prerelease }}
+      release_draft: ${{ steps.meta.outputs.release_draft }}
 
     steps:
       - name: Checkout
@@ -21,35 +49,96 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Compute release version
-        id: version
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Resolve release metadata
+        id: meta
         shell: bash
         run: |
-          release_version=$(node <<'NODE'
+          node <<'NODE'
+          const fs = require('node:fs')
+
           const pkg = require('./package.json')
-          const [major, minor, patch] = pkg.version.split('.').map((value) => Number.parseInt(value, 10))
-          if ([major, minor, patch].some((value) => Number.isNaN(value))) {
-            throw new Error(`package.json version must be major.minor.patch, got ${pkg.version}`)
+          const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'))
+          const inputs = event.inputs || {}
+          const outputPath = process.env.GITHUB_OUTPUT
+
+          const semverPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
+          const refName = (process.env.GITHUB_REF_NAME || '').trim()
+          const refType = (process.env.GITHUB_REF_TYPE || '').trim()
+          const inputVersion = String(inputs.release_version || '').trim()
+          const inputTag = String(inputs.release_tag || '').trim()
+          const inputName = String(inputs.release_name || '').trim()
+          const inputPrerelease = Object.prototype.hasOwnProperty.call(inputs, 'prerelease')
+            ? String(inputs.prerelease).trim()
+            : ''
+          const inputDraft = Object.prototype.hasOwnProperty.call(inputs, 'draft') ? String(inputs.draft).trim() : ''
+
+          let releaseTag = refType === 'tag' ? refName : inputTag
+          let releaseVersion =
+            refType === 'tag'
+              ? refName.replace(/^v/, '')
+              : inputVersion || (releaseTag ? releaseTag.replace(/^v/, '') : '') || pkg.version
+
+          if (!releaseTag) {
+            releaseTag = `v${releaseVersion}`
+          }
+          if (!releaseTag.startsWith('v')) {
+            releaseTag = `v${releaseTag}`
+          }
+          if (!semverPattern.test(releaseVersion)) {
+            throw new Error(`Invalid release version: ${releaseVersion}`)
           }
 
-          const runNumber = Number.parseInt(process.env.GITHUB_RUN_NUMBER || '0', 10)
-          const runAttempt = Number.parseInt(process.env.GITHUB_RUN_ATTEMPT || '1', 10)
+          const releaseName = inputName || `Nexus Publish ${releaseTag}`
+          const releasePrerelease =
+            inputPrerelease === 'true' ? 'true' : inputPrerelease === 'false' ? 'false' : String(releaseVersion.includes('-'))
+          const releaseDraft = inputDraft === 'true' ? 'true' : 'false'
 
-          // Keep the configured major/minor version, and derive a monotonic patch
-          // from the workflow run so every build publishes a distinct release.
-          const releasePatch = patch * 1000000 + runNumber * 100 + runAttempt
-          process.stdout.write(`${major}.${minor}.${releasePatch}`)
+          fs.appendFileSync(outputPath, `release_version=${releaseVersion}\n`)
+          fs.appendFileSync(outputPath, `release_tag=${releaseTag}\n`)
+          fs.appendFileSync(outputPath, `release_name=${releaseName}\n`)
+          fs.appendFileSync(outputPath, `release_prerelease=${releasePrerelease}\n`)
+          fs.appendFileSync(outputPath, `release_draft=${releaseDraft}\n`)
           NODE
-          )
 
-          echo "release_version=$release_version" >> "$GITHUB_OUTPUT"
-          echo "release_tag=v$release_version" >> "$GITHUB_OUTPUT"
-          echo "release_name=Nexus Publish v$release_version" >> "$GITHUB_OUTPUT"
-
-  build_windows:
-    name: Build Windows
-    runs-on: windows-latest
-    needs: prepare_release
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows
+            os: windows-latest
+            build_command: npm run build:win
+            artifact_name: release-windows
+            artifact_paths: |
+              dist/*.exe
+              dist/*.blockmap
+              dist/*.zip
+              dist/latest.yml
+          - label: Linux
+            os: ubuntu-latest
+            build_command: npm run build:linux
+            artifact_name: release-linux
+            artifact_paths: |
+              dist/*.deb
+              dist/latest-linux.yml
+          - label: macOS
+            os: macos-latest
+            build_command: npm run build:mac
+            artifact_name: release-macos
+            artifact_paths: |
+              dist/*.dmg
+              dist/*.pkg
+              dist/*.zip
+              dist/*.blockmap
+              dist/latest-mac.yml
 
     steps:
       - name: Checkout
@@ -67,112 +156,25 @@ jobs:
         run: npm ci
 
       - name: Stamp release version
-        shell: bash
-        env:
-          RELEASE_VERSION: ${{ needs.prepare_release.outputs.release_version }}
-        run: npm version --no-git-tag-version "$RELEASE_VERSION"
+        run: npm version --no-git-tag-version "${{ needs.prepare.outputs.release_version }}"
 
-      - name: Build Windows package
-        run: npm run build:win
+      - name: Build package
+        run: ${{ matrix.build_command }}
 
-      - name: Upload Windows artifacts
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: win-dist
+          name: ${{ matrix.artifact_name }}
           if-no-files-found: error
-          path: |
-            dist/*.exe
-            dist/*.blockmap
-            dist/*.zip
-            dist/latest.yml
+          retention-days: 7
+          path: ${{ matrix.artifact_paths }}
 
-  build_linux:
-    name: Build Linux
-    runs-on: ubuntu-latest
-    needs: prepare_release
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Stamp release version
-        shell: bash
-        env:
-          RELEASE_VERSION: ${{ needs.prepare_release.outputs.release_version }}
-        run: npm version --no-git-tag-version "$RELEASE_VERSION"
-
-      - name: Build Linux package
-        run: npm run build:linux
-
-      - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-dist
-          if-no-files-found: error
-          path: |
-            dist/*.deb
-            dist/latest-linux.yml
-
-  build_macos:
-    name: Build macOS
-    runs-on: macos-latest
-    needs: prepare_release
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Stamp release version
-        shell: bash
-        env:
-          RELEASE_VERSION: ${{ needs.prepare_release.outputs.release_version }}
-        run: npm version --no-git-tag-version "$RELEASE_VERSION"
-
-      - name: Build macOS package
-        run: npm run build:mac
-
-      - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: mac-dist
-          if-no-files-found: warn
-          path: |
-            dist/*.dmg
-            dist/*.pkg
-            dist/*.zip
-            dist/*.blockmap
-            dist/latest-mac.yml
-
-  upload_release:
-    name: Publish Release
+  publish:
+    name: Publish GitHub Release
     runs-on: ubuntu-latest
     needs:
-      - prepare_release
-      - build_windows
-      - build_linux
-      - build_macos
+      - prepare
+      - build
 
     steps:
       - name: Checkout
@@ -180,33 +182,53 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Download Windows artifacts
+      - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: win-dist
-          path: release-assets/windows
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
 
-      - name: Download Linux artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: linux-dist
-          path: release-assets/linux
+      - name: Generate checksums
+        shell: bash
+        run: |
+          find release-assets -type f ! -name 'SHA256SUMS.txt' -print0 \
+            | sort -z \
+            | xargs -0 sha256sum > release-assets/SHA256SUMS.txt
 
-      - name: Download macOS artifacts
-        continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: mac-dist
-          path: release-assets/macos
+      - name: Prepare release notes
+        shell: bash
+        env:
+          RELEASE_NAME: ${{ needs.prepare.outputs.release_name }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.release_version }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          {
+            echo "# ${RELEASE_NAME}"
+            echo
+            echo "- Tag: \`${RELEASE_TAG}\`"
+            echo "- Version: \`${RELEASE_VERSION}\`"
+            echo "- Commit: \`${RELEASE_COMMIT}\`"
+            echo
+            echo "## Changes"
+            echo
+            if [ -s NEW.md ]; then
+              cat NEW.md
+            else
+              echo "- Automated release build."
+            fi
+          } > release-notes.md
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.prepare_release.outputs.release_tag }}
-          name: ${{ needs.prepare_release.outputs.release_name }}
-          draft: false
-          prerelease: false
+          tag_name: ${{ needs.prepare.outputs.release_tag }}
+          name: ${{ needs.prepare.outputs.release_name }}
           target_commitish: ${{ github.sha }}
-          body_path: NEW.md
-          files: release-assets/**/*
-          token: ${{ secrets.GITHUB_TOKEN }}
+          body_path: release-notes.md
+          draft: ${{ needs.prepare.outputs.release_draft }}
+          prerelease: ${{ needs.prepare.outputs.release_prerelease }}
+          files: release-assets/**
+          overwrite_files: true
+          fail_on_unmatched_files: true
