@@ -156,7 +156,26 @@ jobs:
         run: npm ci
 
       - name: Stamp release version
-        run: npm version --no-git-tag-version "${{ needs.prepare.outputs.release_version }}"
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.release_version }}
+        run: |
+          node <<'NODE'
+          const { execFileSync } = require('node:child_process')
+
+          const targetVersion = process.env.RELEASE_VERSION
+          const pkg = require('./package.json')
+
+          if (pkg.version === targetVersion) {
+            console.log(`package.json version already set to ${targetVersion}; skipping stamp.`)
+            process.exit(0)
+          }
+
+          const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+          execFileSync(npmCommand, ['version', '--no-git-tag-version', targetVersion], {
+            stdio: 'inherit'
+          })
+          NODE
 
       - name: Build package
         run: ${{ matrix.build_command }}
