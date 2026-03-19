@@ -34,7 +34,7 @@ export const legacyApiStatusText = {
 } as const
 
 const orderedStatusVariants: Array<[Exclude<LegacyAccountStatus, 'unknown'>, string[]]> = [
-  ['disabled', [legacyAccountStatusText.disabled, '鐠愶附鍩涘鑼洣閻?']],
+  ['disabled', [legacyAccountStatusText.disabled, '璐︽埛宸茬鐢?', '鐠愶附鍩涘鑼洣閻?']],
   ['passwordError', [legacyAccountStatusText.passwordError, '鐠愶箑褰跨€靛棛鐖滈柨娆掝嚖']],
   ['captchaError', [legacyAccountStatusText.captchaError, '楠岃瘉鐮侀敊璇?', '妤犲矁鐦夐惍渚€鏁婄拠?']],
   ['validationFailed', [legacyAccountStatusText.validationFailed, '楠岃瘉鏈€氳繃', '妤犲矁鐦夐張顏堚偓姘崇箖']],

@@ -12,6 +12,13 @@ export interface PublishResult {
   timestamp?: string
 }
 
+export interface SitePublishBatchEntry {
+  id: string
+  name: string
+  torrentPath: string
+  title: string
+}
+
 export interface SitePublishDraft {
   projectId?: number
   siteId: SiteId
@@ -19,6 +26,7 @@ export interface SitePublishDraft {
   title: string
   description: string
   torrentPath: string
+  batchEntries?: SitePublishBatchEntry[]
   trackers?: string[]
   bangumiId?: number
   subtitleGroupId?: number

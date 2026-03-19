@@ -1,9 +1,13 @@
+import fs from 'fs'
+import { join } from 'path'
 import { fail, ok } from '../../shared/types/api'
+import type { PublishResult, SitePublishBatchEntry } from '../../shared/types/publish'
 import type { PtSiteDraft } from '../../shared/types/pt-site'
 import type { SiteCatalogEntry, SiteId } from '../../shared/types/site'
 import { createSiteRegistry } from '../sites/registry'
 import { createCredentialStore } from '../storage/credential-store'
 import { createProjectStore } from '../storage/project-store'
+import { applyPublishTorrentEntry, buildEpisodeDerivedContent, getSelectedPublishTorrentEntries } from './episode-publish-support'
 
 interface CreateSiteServiceOptions {
   siteRegistry: ReturnType<typeof createSiteRegistry>
@@ -15,6 +19,144 @@ interface CreateSiteServiceOptions {
 export function createSiteService(options: CreateSiteServiceOptions) {
   const { siteRegistry, credentialStore, projectStore, notifyProjectDataChanged } = options
   const ptAdapters = new Set(['nexusphp', 'unit3d'])
+
+  function readOptionalString(value: unknown) {
+    return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+  }
+
+  function normalizeBatchEntries(value: unknown) {
+    if (!Array.isArray(value)) {
+      return [] as SitePublishBatchEntry[]
+    }
+
+    return value.reduce<SitePublishBatchEntry[]>((entries, item, index) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        return entries
+      }
+
+      const raw = item as Record<string, unknown>
+      entries.push({
+        id: readOptionalString(raw.id) ?? `batch-entry-${index + 1}`,
+        name: readOptionalString(raw.name) ?? `Torrent ${index + 1}`,
+        torrentPath: typeof raw.torrentPath === 'string' ? raw.torrentPath.trim() : '',
+        title: typeof raw.title === 'string' ? raw.title : '',
+      })
+      return entries
+    }, [])
+  }
+
+  function readProjectPublishContext(projectId?: number) {
+    if (!projectId) {
+      return undefined
+    }
+
+    const task = projectStore.findLegacyTaskById(projectId)
+    if (!task) {
+      return undefined
+    }
+
+    const configPath = join(task.path, 'config.json')
+    if (!fs.existsSync(configPath)) {
+      return undefined
+    }
+
+    try {
+      const config = JSON.parse(fs.readFileSync(configPath, { encoding: 'utf-8' })) as Config.PublishConfig
+      const htmlPath = join(task.path, 'bangumi.html')
+      const defaultDescription = fs.existsSync(htmlPath)
+        ? fs.readFileSync(htmlPath, { encoding: 'utf-8' })
+        : undefined
+
+      return {
+        task,
+        config,
+        defaultDescription,
+      }
+    } catch {
+      return undefined
+    }
+  }
+
+  function resolveBatchEntryOverride(
+    overrides: SitePublishBatchEntry[],
+    entry: {
+      id: string
+      name: string
+      path: string
+    },
+  ) {
+    return (
+      overrides.find(item => item.id === entry.id) ??
+      overrides.find(item => item.torrentPath === entry.path) ??
+      overrides.find(item => item.name === entry.name)
+    )
+  }
+
+  function buildBatchPublishInputs(input: Record<string, unknown>) {
+    const projectId = typeof input.projectId === 'number' && input.projectId > 0 ? input.projectId : undefined
+    const context = readProjectPublishContext(projectId)
+    if (!context) {
+      return []
+    }
+
+    const selectedEntries = getSelectedPublishTorrentEntries(context.config)
+    if (selectedEntries.length <= 1) {
+      return []
+    }
+
+    const rawContent = context.config.content
+    const isEpisodeContent = Boolean(rawContent && typeof rawContent === 'object' && 'episodeLabel' in rawContent)
+    if (!isEpisodeContent) {
+      return []
+    }
+
+    const overrides = normalizeBatchEntries(input.batchEntries)
+    const inputDescription = typeof input.description === 'string' ? input.description : ''
+    const shouldUseDerivedDescription =
+      typeof context.defaultDescription === 'string' && inputDescription.trim() === context.defaultDescription.trim()
+
+    return selectedEntries.map(entry => {
+      const override = resolveBatchEntryOverride(overrides, entry)
+      const nextEntry = {
+        ...entry,
+        titleOverride: override ? override.title : entry.titleOverride,
+      }
+      const nextConfig = applyPublishTorrentEntry(context.config, nextEntry)
+      const resolvedTitle = override ? override.title.trim() : readOptionalString(nextConfig.title) ?? ''
+      nextConfig.title = resolvedTitle
+
+      return {
+        entryId: entry.id,
+        entryName: entry.name,
+        payload: {
+          ...input,
+          title: resolvedTitle,
+          torrentPath: override?.torrentPath.trim() || entry.path,
+          description: shouldUseDerivedDescription
+            ? buildEpisodeDerivedContent(nextConfig, nextEntry.bodyOverride).html
+            : inputDescription,
+        } as Record<string, unknown>,
+      }
+    })
+  }
+
+  function stripBatchEntries(payload: Record<string, unknown>) {
+    const { batchEntries, ...nextPayload } = payload
+    void batchEntries
+    return nextPayload
+  }
+
+  function summarizeBatchPublishMessage(siteName: string, total: number, publishedCount: number) {
+    if (publishedCount === total) {
+      return `Published ${publishedCount} torrents to ${siteName}`
+    }
+
+    if (publishedCount === 0) {
+      return `Failed to publish ${total} torrents to ${siteName}`
+    }
+
+    return `Published ${publishedCount} of ${total} torrents to ${siteName}`
+  }
 
   function hasConfiguredCredentials(siteId: SiteId) {
     try {
@@ -209,9 +351,36 @@ export function createSiteService(options: CreateSiteServiceOptions) {
         )
       }
 
+      const batchInputs = buildBatchPublishInputs(input)
+      if (batchInputs.length > 0) {
+        const issueGroups = await Promise.all(
+          batchInputs.map(entry =>
+            adapter.validatePublish!({
+              profile,
+              payload: stripBatchEntries(entry.payload),
+            }),
+          ),
+        )
+        const issues = issueGroups.flatMap((group, index) =>
+          group.map(issue => ({
+            ...issue,
+            field: `batchEntries.${batchInputs[index].entryId}.${issue.field}`,
+            message: `[${batchInputs[index].entryName}] ${issue.message}`,
+          })),
+        )
+
+        return JSON.stringify(
+          ok({
+            siteId,
+            valid: issues.every(issue => issue.severity !== 'error'),
+            issues,
+          }),
+        )
+      }
+
       const issues = await adapter.validatePublish({
         profile,
-        payload: input,
+        payload: stripBatchEntries(input),
       })
 
       return JSON.stringify(
@@ -243,10 +412,89 @@ export function createSiteService(options: CreateSiteServiceOptions) {
         )
       }
 
+      const batchInputs = buildBatchPublishInputs(input)
+      if (batchInputs.length > 0) {
+        const batchResults: PublishResult[] = []
+        const rawResponse: Array<{
+          entryId: string
+          entryName: string
+          status: string
+          remoteId?: string
+          remoteUrl?: string
+          message?: string
+          rawResponse?: unknown
+        }> = []
+
+        for (const entry of batchInputs) {
+          try {
+            const { result, raw } = await adapter.publish({
+              profile,
+              projectId: typeof input.projectId === 'number' ? input.projectId : 0,
+              payload: stripBatchEntries(entry.payload),
+              account,
+              credentials,
+            })
+
+            const entryResult: PublishResult = {
+              ...result,
+              message: `[${entry.entryName}] ${result.message ?? 'Published'}`,
+              rawResponse: raw ?? result.rawResponse,
+              timestamp: result.timestamp ?? new Date().toISOString(),
+            }
+
+            batchResults.push(entryResult)
+            rawResponse.push({
+              entryId: entry.entryId,
+              entryName: entry.entryName,
+              status: entryResult.status,
+              remoteId: entryResult.remoteId,
+              remoteUrl: entryResult.remoteUrl,
+              message: entryResult.message,
+              rawResponse: entryResult.rawResponse,
+            })
+          } catch (error) {
+            const entryError = (error as Error).message
+            const failedResult: PublishResult = {
+              siteId,
+              status: 'failed',
+              message: `[${entry.entryName}] ${entryError}`,
+              timestamp: new Date().toISOString(),
+            }
+
+            batchResults.push(failedResult)
+            rawResponse.push({
+              entryId: entry.entryId,
+              entryName: entry.entryName,
+              status: 'failed',
+              message: entryError,
+            })
+          }
+        }
+
+        if (projectId) {
+          batchResults.forEach(result => projectStore.recordPublishResult(projectId!, result))
+          await projectStore.write()
+          notifyProjectDataChanged?.()
+        }
+
+        const publishedResults = batchResults.filter(result => result.status === 'published')
+        const aggregateResult: PublishResult = {
+          siteId,
+          status: publishedResults.length === batchResults.length ? 'published' : 'failed',
+          remoteId: publishedResults.length === 1 ? publishedResults[0].remoteId : undefined,
+          remoteUrl: publishedResults.length === 1 ? publishedResults[0].remoteUrl : undefined,
+          message: summarizeBatchPublishMessage(profile.name, batchResults.length, publishedResults.length),
+          rawResponse,
+          timestamp: new Date().toISOString(),
+        }
+
+        return JSON.stringify(ok({ result: aggregateResult }))
+      }
+
       const { result } = await adapter.publish({
         profile,
         projectId: typeof input.projectId === 'number' ? input.projectId : 0,
-        payload: input,
+        payload: stripBatchEntries(input),
         account,
         credentials,
       })

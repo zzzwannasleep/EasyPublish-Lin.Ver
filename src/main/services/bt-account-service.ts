@@ -1412,19 +1412,19 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
       const response = await axios.post('https://www.dmhy.org/user/login', formData, { responseType: 'text' })
       const payload = response.data as string
 
-      if (payload.includes('閻ц鍙嗛幋鎰')) {
+      if (payload.includes('登录成功')) {
         await storeResponseCookies(info, 'https://www.dmhy.org', response.headers['set-cookie'])
         await verifyAuthenticated(info, checkDmhyLoginStatusClean)
         await persistUserData()
         return
       }
 
-      if (payload.includes('鐢劖鍩涚€靛棛鐖滈柨娆掝嚖')) {
+      if (payload.includes('帐户密码错误') || payload.includes('账户密码错误')) {
         await setStatusAndPersist(info, legacyAccountStatusText.passwordError)
         return
       }
 
-      if (payload.includes('妤犲矁鐦夐惍渚€鏁婄拠?')) {
+      if (payload.includes('验证码错误')) {
         await setStatusAndPersist(info, legacyAccountStatusText.captchaError)
         return
       }
@@ -1464,7 +1464,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
         return
       }
 
-      if ((response.data as string).includes('閻у瀵楃€靛棛鈷撴稉宥嗩劀绾?')) {
+      if ((response.data as string).includes('登錄密碼不正確') || (response.data as string).includes('登录密码不正确')) {
         await setStatusAndPersist(info, legacyAccountStatusText.passwordError)
         return
       }
@@ -1504,7 +1504,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
         return
       }
 
-      if ((response.data as string).includes('閻у瀵楃€靛棛鈷撴稉宥嗩劀绾?')) {
+      if ((response.data as string).includes('登錄密碼不正確') || (response.data as string).includes('登录密码不正确')) {
         await setStatusAndPersist(info, legacyAccountStatusText.passwordError)
         return
       }

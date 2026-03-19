@@ -1805,7 +1805,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       notifyProjectDataChanged()
       return JSON.stringify(ok({ episode, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
     } catch (err) {
-      dialog.showErrorBox('闂佹寧鐟ㄩ?', (err as Error).message)
+      dialog.showErrorBox('创建剧集失败', (err as Error).message)
       return JSON.stringify(fail('SERIES_EPISODE_CREATE_FAILED', 'Unable to create series episode', (err as Error).message))
     }
   }
@@ -1910,7 +1910,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       notifyProjectDataChanged()
       return JSON.stringify(ok({ episode: nextEpisode, variant, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
     } catch (err) {
-      dialog.showErrorBox('闂備焦瀵ч悷銊╊敋?', (err as Error).message)
+      dialog.showErrorBox('创建版本失败', (err as Error).message)
       return JSON.stringify(fail('SERIES_VARIANT_CREATE_FAILED', 'Unable to create series variant', (err as Error).message))
     }
   }
@@ -2051,7 +2051,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         }),
       )
     } catch (err) {
-      dialog.showErrorBox('闂傚倷鐒︾€笛囨偡閵娾晩鏁?', (err as Error).message)
+      dialog.showErrorBox('批量创建版本失败', (err as Error).message)
       return JSON.stringify(
         fail('SERIES_VARIANT_BATCH_FAILED', 'Unable to batch create series variants', (err as Error).message),
       )
@@ -2198,7 +2198,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         }),
       )
     } catch (err) {
-      dialog.showErrorBox('闂傚倷鐒︾€笛囨偡閵娾晩鏁?', (err as Error).message)
+      dialog.showErrorBox('保存发布配置失败', (err as Error).message)
       return JSON.stringify(
         fail('SERIES_PUBLISH_PROFILE_SAVE_FAILED', 'Unable to save series publish profile', (err as Error).message),
       )
@@ -2365,7 +2365,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       notifyProjectDataChanged()
       return JSON.stringify(ok({ profileId, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
     } catch (err) {
-      dialog.showErrorBox('闂傚倷鐒︾€笛囨偡閵娾晩鏁?', (err as Error).message)
+      dialog.showErrorBox('删除发布配置失败', (err as Error).message)
       return JSON.stringify(
         fail(
           'SERIES_PUBLISH_PROFILE_REMOVE_FAILED',
@@ -2502,7 +2502,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       notifyProjectDataChanged()
       return JSON.stringify(ok({ episode: nextEpisode, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace), copiedCount: copiedVariants.length }))
     } catch (err) {
-      dialog.showErrorBox('闂傚倷鐒︾€笛囨偡閵娾晩鏁?', (err as Error).message)
+      dialog.showErrorBox('继承上一集版本失败', (err as Error).message)
       return JSON.stringify(
         fail(
           'SERIES_VARIANT_INHERIT_FAILED',
@@ -2594,7 +2594,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         }),
       )
     } catch (err) {
-      dialog.showErrorBox('闂備焦瀵ч悷銊╊敋?', (err as Error).message)
+      dialog.showErrorBox('复制版本失败', (err as Error).message)
       return JSON.stringify(
         fail('SERIES_VARIANT_DUPLICATE_FAILED', 'Unable to duplicate series variant', (err as Error).message),
       )
@@ -2657,7 +2657,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       notifyProjectDataChanged()
       return JSON.stringify(ok({ episode: nextEpisode, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
     } catch (err) {
-      dialog.showErrorBox('闂備焦瀵ч悷銊╊敋?', (err as Error).message)
+      dialog.showErrorBox('删除版本失败', (err as Error).message)
       return JSON.stringify(
         fail('SERIES_VARIANT_REMOVE_FAILED', 'Unable to remove series variant', (err as Error).message),
       )
@@ -2721,7 +2721,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       notifyProjectDataChanged()
       return JSON.stringify(ok({ episode: nextEpisode, variant: nextVariant, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
     } catch (err) {
-      dialog.showErrorBox('闂備焦瀵ч悷銊╊敋?', (err as Error).message)
+      dialog.showErrorBox('激活版本失败', (err as Error).message)
       return JSON.stringify(
         fail('SERIES_VARIANT_ACTIVATE_FAILED', 'Unable to activate series variant', (err as Error).message),
       )
@@ -2778,7 +2778,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       notifyProjectDataChanged()
       return JSON.stringify(ok({ episode: nextEpisode, variant: nextVariant, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
     } catch (err) {
-      dialog.showErrorBox('闂備焦瀵ч悷銊╊敋?', (err as Error).message)
+      dialog.showErrorBox('同步草稿到版本失败', (err as Error).message)
       return JSON.stringify(
         fail(
           'SERIES_VARIANT_SYNC_FAILED',
@@ -2834,7 +2834,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     const task = projectStore.findLegacyTaskById(id)!
     const result: Message.Task.PublishStatus = {}
     const isPublishedLink = (value?: string) => Boolean(value && /^https?:\/\//.test(value))
-    const publishedLabel = '閸欐垵绔风€瑰本鍨?'
+    const publishedLabel = '发布完成'
 
     if (isPublishedLink(task.bangumi)) {
       result.bangumi = publishedLabel

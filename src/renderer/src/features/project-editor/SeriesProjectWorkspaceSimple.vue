@@ -87,7 +87,6 @@ let bodyTemplateEditor: InstanceType<typeof Editor> | null = null
 let isSyncingBodyTemplateEditor = false
 
 const torrentOverrideForm = reactive({
-  titleOverride: '',
   bodyOverride: '',
 })
 
@@ -311,7 +310,6 @@ function getSiteFormatLabel(siteId: SiteId) {
 }
 
 function loadDraftState(config?: Config.PublishConfig | null) {
-  draftTitle.value = config?.title ?? ''
   draftTorrentEntries.value = normalizeDraftTorrentEntries(config)
 
   const preferredActiveId = config?.activeTorrentId?.trim()
@@ -321,6 +319,7 @@ function loadDraftState(config?: Config.PublishConfig | null) {
     draftTorrentEntries.value[0]
 
   activeTorrentId.value = activeEntry?.id ?? ''
+  draftTitle.value = activeEntry?.titleOverride.trim() || (config?.title ?? '')
 }
 
 function serializeDraftTorrentEntries() {
@@ -347,7 +346,7 @@ function buildDraftConfigSnapshot(seed?: Config.PublishConfig | null) {
     draftTorrentEntries.value.find(entry => entry.enabled) ??
     draftTorrentEntries.value[0]
 
-  nextConfig.title = draftTitle.value.trim()
+  nextConfig.title = activeEntry?.titleOverride.trim() || draftTitle.value.trim()
   nextConfig.torrentEntries = serializedEntries.length > 0 ? serializedEntries : undefined
   nextConfig.activeTorrentId = activeEntry?.id
   nextConfig.torrentPath = activeEntry?.path ?? ''
@@ -641,8 +640,17 @@ function beginCreateProfile() {
   profileForm.targetSites = getDraftTargetSites().filter(siteId => authenticatedSites.value.some(site => site.id === siteId))
 }
 
-async function saveDraftTitle() {
-  await syncDraftState({ successMessage: '已保存当前标题' })
+async function saveTorrentTitle(entryId: string) {
+  const entry = draftTorrentEntries.value.find(item => item.id === entryId)
+  if (!entry) {
+    return
+  }
+
+  if (activeTorrentId.value === entryId && entry.titleOverride.trim()) {
+    draftTitle.value = entry.titleOverride.trim()
+  }
+
+  await syncDraftState()
 }
 
 async function appendTorrentEntries(paths: string[]) {
@@ -699,7 +707,11 @@ async function setActiveTorrent(entryId: string) {
     return
   }
 
+  const entry = draftTorrentEntries.value.find(item => item.id === entryId)
   activeTorrentId.value = entryId
+  if (entry?.titleOverride.trim()) {
+    draftTitle.value = entry.titleOverride.trim()
+  }
   await syncDraftState({ successMessage: '已切换当前发布种子' })
 }
 
@@ -756,7 +768,6 @@ function openTorrentOverrideDialog(entryId: string) {
   }
 
   editingTorrentId.value = entry.id
-  torrentOverrideForm.titleOverride = entry.titleOverride
   torrentOverrideForm.bodyOverride = entry.bodyOverride
   torrentOverrideDialogVisible.value = true
 }
@@ -768,14 +779,12 @@ async function saveTorrentOverride() {
     return
   }
 
-  entry.titleOverride = torrentOverrideForm.titleOverride
   entry.bodyOverride = torrentOverrideForm.bodyOverride
   torrentOverrideDialogVisible.value = false
-  await syncDraftState({ successMessage: `宸叉洿鏂扮瀛愬唴瀹癸細${entry.name}` })
+  await syncDraftState({ successMessage: `已更新种子内容：${entry.name}` })
 }
 
 async function clearTorrentOverride() {
-  torrentOverrideForm.titleOverride = ''
   torrentOverrideForm.bodyOverride = ''
   await saveTorrentOverride()
 }
@@ -805,7 +814,7 @@ async function saveOverview() {
 
     workspace.value = result.data.workspace
     overviewForm.plannedEpisodeCount = result.data.workspace.plannedEpisodeCount
-    ElMessage.success('鎬婚泦鏁板凡淇濆瓨')
+    ElMessage.success('总集数已保存')
   } finally {
     isSavingOverview.value = false
   }
@@ -889,40 +898,6 @@ async function renameProfile(profile: SeriesPublishProfile) {
   ElMessage.success(`\u5df2\u91cd\u547d\u540d\u914d\u7f6e\uff1a${nextName}`)
 }
 
-/*
-async function saveProfile() {
-  if (!profileForm.name.trim()) {
-    const nextName = await promptProfileName('', selectedProfileId.value ? '閲嶅懡鍚嶅彂甯冮厤缃? : '淇濆瓨鍙戝竷閰嶇疆')
-    if (!nextName) {
-      return
-    }
-
-    profileForm.name = nextName
-  }
-
-  if (!profileForm.name.trim()) {
-    ElMessage.error('璇峰厛濉啓閰嶇疆鍚嶇О')
-    return
-  }
-
-  isSavingProfile.value = true
-  try {
-    const result = await projectBridge.saveSeriesPublishProfile(buildProfilePayload())
-    if (!result.ok) {
-      ElMessage.error(result.error.message)
-      return
-    }
-
-    workspace.value = result.data.workspace
-    overviewForm.plannedEpisodeCount = result.data.workspace.plannedEpisodeCount
-    await applyProfile(result.data.profile.id, false)
-    await syncDraftConfigFromProfile(result.data.profile)
-    ElMessage.success(`閰嶇疆宸蹭繚瀛橈細${result.data.profile.name}`)
-  } finally {
-    isSavingProfile.value = false
-  }
-}
-*/
 async function saveProfile() {
   if (!profileForm.name.trim()) {
     const nextName = await promptProfileName(
@@ -977,7 +952,7 @@ async function importProfile() {
     overviewForm.plannedEpisodeCount = result.data.workspace.plannedEpisodeCount
     await applyProfile(result.data.profile.id, false)
     await syncDraftConfigFromProfile(result.data.profile)
-    ElMessage.success(`宸插鍏ラ厤缃細${result.data.profile.name}`)
+    ElMessage.success(`已导入配置：${result.data.profile.name}`)
   } finally {
     isImportingProfile.value = false
   }
@@ -1011,7 +986,7 @@ async function exportProfile() {
 
 async function createEpisode() {
   if (!episodeForm.episodeLabel.trim()) {
-    ElMessage.error('璇峰厛濉啓闆嗘暟')
+    ElMessage.error('请先填写集数')
     return
   }
 
@@ -1033,7 +1008,7 @@ async function createEpisode() {
     episodeDialogVisible.value = false
     episodeForm.episodeLabel = ''
     episodeForm.episodeTitle = ''
-    ElMessage.success(`宸插缓绔嬪墽闆嗭細${result.data.episode.episodeLabel}`)
+    ElMessage.success(`已建立剧集：${result.data.episode.episodeLabel}`)
   } finally {
     isCreatingEpisode.value = false
   }
@@ -1253,15 +1228,10 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="series-editor__field-grid">
-          <label class="series-editor__field">
-            <span class="series-editor__label">发布标题</span>
-            <el-input v-model="draftTitle" placeholder="输入当前草稿的默认标题" @blur="saveDraftTitle" />
-          </label>
-
           <div class="series-editor__field series-editor__field--summary">
             <span class="series-editor__label">种子列表</span>
             <div class="series-editor__muted">
-              已导入 {{ draftTorrentEntries.length }} 个，已选 {{ selectedTorrentCount }} 个。支持一次选择多个 `.torrent` 文件；左键切换当前种子，右键编辑单个种子的标题或正文。
+              已导入 {{ draftTorrentEntries.length }} 个，已选 {{ selectedTorrentCount }} 个。支持一次选择多个 `.torrent` 文件；左键切换当前种子，可直接在卡片顶部编辑标题，右键继续编辑单个种子的正文。
             </div>
             <div class="series-editor__torrent-strip">
               <div
@@ -1271,7 +1241,7 @@ onBeforeUnmount(() => {
                 :class="{
                   'is-active': activeTorrentId === torrent.id,
                   'is-disabled': !torrent.enabled,
-                  'has-override': Boolean(torrent.titleOverride.trim() || torrent.bodyOverride.trim()),
+                  'has-override': Boolean(torrent.bodyOverride.trim()),
                 }"
                 @click="void setActiveTorrent(torrent.id)"
                 @contextmenu.prevent="openTorrentOverrideDialog(torrent.id)"
@@ -1283,13 +1253,21 @@ onBeforeUnmount(() => {
                   />
                 </span>
                 <div class="series-editor__torrent-copy">
-                  <div class="series-editor__torrent-name">{{ torrent.name }}</div>
+                  <el-input
+                    v-model="torrent.titleOverride"
+                    class="series-editor__torrent-title-input"
+                    type="textarea"
+                    :autosize="{ minRows: 1, maxRows: 3 }"
+                    resize="none"
+                    :placeholder="torrent.name"
+                    @blur="void saveTorrentTitle(torrent.id)"
+                  />
                   <div class="series-editor__torrent-path">{{ torrent.path }}</div>
                 </div>
                 <div class="series-editor__torrent-tags">
                   <el-tag v-if="activeTorrentId === torrent.id" effect="plain" type="success" size="small">当前</el-tag>
-                  <el-tag v-if="torrent.titleOverride.trim() || torrent.bodyOverride.trim()" effect="plain" size="small">
-                    单独覆盖
+                  <el-tag v-if="torrent.bodyOverride.trim()" effect="plain" size="small">
+                    正文覆盖
                   </el-tag>
                 </div>
                 <el-button link type="danger" @click.stop="void removeTorrentEntry(torrent.id)">移除</el-button>
@@ -1356,12 +1334,8 @@ onBeforeUnmount(() => {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="torrentOverrideDialogVisible" title="单个种子覆盖" width="820px">
+    <el-dialog v-model="torrentOverrideDialogVisible" title="单个种子正文覆盖" width="820px">
       <div class="series-editor__dialog-grid">
-        <label class="series-editor__field">
-          <span class="series-editor__label">标题覆盖</span>
-          <el-input v-model="torrentOverrideForm.titleOverride" placeholder="留空则沿用默认标题" />
-        </label>
         <label class="series-editor__field">
           <span class="series-editor__label">正文覆盖（Markdown）</span>
           <el-input
@@ -1683,20 +1657,17 @@ onBeforeUnmount(() => {
 
 .series-editor__torrent-strip {
   display: grid;
-  gap: 10px;
-  max-height: 220px;
-  overflow: auto;
-  padding-right: 4px;
+  gap: 8px;
 }
 
 .series-editor__torrent-chip {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
-  gap: 12px;
+  gap: 8px;
   align-items: start;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
+  border-radius: 10px;
   background: color-mix(in srgb, var(--bg-panel) 94%, #eef2f7);
   cursor: pointer;
   transition:
@@ -1727,12 +1698,16 @@ onBeforeUnmount(() => {
 }
 
 .series-editor__torrent-copy {
+  gap: 6px;
   min-width: 0;
 }
 
-.series-editor__torrent-name {
-  font-size: 15px;
-  font-weight: 700;
+.series-editor__torrent-title-input :deep(.el-textarea__inner) {
+  min-height: 0 !important;
+  padding: 8px 10px;
+  font-size: 14px;
+  line-height: 1.45;
+  resize: none;
 }
 
 .series-editor__torrent-path {

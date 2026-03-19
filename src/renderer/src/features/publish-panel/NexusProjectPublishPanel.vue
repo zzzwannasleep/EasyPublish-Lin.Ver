@@ -71,6 +71,13 @@ interface SitePublishDraftForm {
   nfoPath: string
 }
 
+interface BatchTorrentDraftForm {
+  id: string
+  name: string
+  torrentPath: string
+  title: string
+}
+
 const props = defineProps<{
   id: number
 }>()
@@ -94,6 +101,7 @@ const publishValidationLoadingBySite = ref<Partial<Record<SiteId, boolean>>>({})
 const publishErrorBySite = ref<Partial<Record<SiteId, string>>>({})
 const publishLoadingBySite = ref<Partial<Record<SiteId, boolean>>>({})
 const publishResultBySite = ref<Partial<Record<SiteId, PublishResult>>>({})
+const batchTorrentEntries = ref<BatchTorrentDraftForm[]>([])
 
 const sharedDraft = reactive<SharedPublishDraftForm>({
   title: '',
@@ -104,6 +112,7 @@ const sharedDraft = reactive<SharedPublishDraftForm>({
 })
 
 const selectedSites = computed(() => sites.value.filter(site => selectedSiteIds.value.includes(site.id)))
+const isBatchTorrentMode = computed(() => batchTorrentEntries.value.length > 1)
 
 const descriptionPreview = computed(() => {
   if (selectedSiteIds.value.length === 0) {
@@ -272,6 +281,60 @@ function joinProjectPath(basePath: string, fileName: string) {
 
   const separator = basePath.includes('\\') ? '\\' : '/'
   return `${basePath.replace(/[\\/]+$/, '')}${separator}${fileName.replace(/^[\\/]+/, '')}`
+}
+
+function getFileName(path: string) {
+  return path.replace(/^.*[\\/]/, '')
+}
+
+function readOptionalString(value: unknown) {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+}
+
+function createBatchTorrentEntries(config: Config.PublishConfig) {
+  const rawContent = config.content
+  if (!rawContent || typeof rawContent !== 'object' || !('episodeLabel' in rawContent)) {
+    return [] as BatchTorrentDraftForm[]
+  }
+
+  const rawEntries = Array.isArray(config.torrentEntries) ? config.torrentEntries : []
+  const activeTorrentId = readOptionalString(config.activeTorrentId)
+  const fallbackTitle = typeof config.title === 'string' ? config.title : ''
+  const selectedEntries = rawEntries.reduce<Array<BatchTorrentDraftForm & { enabled: boolean }>>((entries, raw, index) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return entries
+    }
+
+    const path = readOptionalString((raw as Record<string, unknown>).path)
+    if (!path) {
+      return entries
+    }
+
+    const id = readOptionalString((raw as Record<string, unknown>).id) ?? `torrent-${index + 1}`
+    entries.push({
+      id,
+      name: readOptionalString((raw as Record<string, unknown>).name) ?? getFileName(path),
+      torrentPath: path,
+      title:
+        typeof (raw as Record<string, unknown>).titleOverride === 'string'
+          ? ((raw as Record<string, unknown>).titleOverride as string)
+          : id === activeTorrentId
+            ? fallbackTitle
+            : '',
+      enabled: (raw as Record<string, unknown>).enabled !== false,
+    })
+    return entries
+  }, [])
+
+  const batchEntries = selectedEntries.filter(entry => entry.enabled)
+  if (batchEntries.length <= 1) {
+    return [] as BatchTorrentDraftForm[]
+  }
+
+  return batchEntries.map(({ enabled, ...entry }) => {
+    void enabled
+    return entry
+  })
 }
 
 function createEmptyDraft(): SitePublishDraftForm {
@@ -526,14 +589,27 @@ function onSectionChange(siteId: SiteId) {
 function buildPublishInput(siteId: SiteId): SitePublishDraft {
   const draft = ensureDraft(siteId)
   const site = getSite(siteId)
+  const primaryBatchEntry = batchTorrentEntries.value[0]
+  const resolvedTitle = isBatchTorrentMode.value ? primaryBatchEntry?.title.trim() ?? '' : sharedDraft.title.trim()
+  const resolvedTorrentPath = isBatchTorrentMode.value
+    ? primaryBatchEntry?.torrentPath.trim() ?? ''
+    : sharedDraft.torrentPath.trim()
 
   const baseInput: SitePublishDraft = {
     projectId: props.id,
     siteId,
     typeId: draft.typeId ?? 0,
-    title: sharedDraft.title.trim(),
+    title: resolvedTitle,
     description: sharedDraft.description.trim(),
-    torrentPath: sharedDraft.torrentPath.trim(),
+    torrentPath: resolvedTorrentPath,
+    batchEntries: isBatchTorrentMode.value
+      ? batchTorrentEntries.value.map(entry => ({
+          id: entry.id,
+          name: entry.name,
+          torrentPath: entry.torrentPath.trim(),
+          title: entry.title,
+        }))
+      : undefined,
     anonymous: sharedDraft.anonymous,
     subCategories: Object.entries(draft.subCategories).reduce<Record<string, number>>((accumulator, [field, value]) => {
       if (typeof value === 'number' && value > 0) {
@@ -753,6 +829,7 @@ async function bootstrap() {
       site => site.adapter === 'mikan' || site.adapter === 'nexusphp' || site.adapter === 'unit3d',
     )
     applySharedDraft(config, content)
+    batchTorrentEntries.value = createBatchTorrentEntries(config)
     sites.value.forEach(site => {
       publishDrafts.value[site.id] = createInitialDraft(config, content, site.id)
       publishErrorBySite.value[site.id] = ''
@@ -813,7 +890,40 @@ onMounted(() => {
           <StatusChip tone="info">{{ t('nexus.common.hint') }}</StatusChip>
         </header>
 
-        <div class="nexus-form__grid">
+        <div v-if="isBatchTorrentMode" class="nexus-batch">
+          <div class="nexus-batch__intro">
+            <StatusChip tone="warning">{{ batchTorrentEntries.length }} Torrent Titles</StatusChip>
+            <span class="nexus-batch__intro-text">
+              Batch mode is active. Each torrent uses its own publish title.
+            </span>
+          </div>
+
+          <article v-for="(entry, index) in batchTorrentEntries" :key="entry.id" class="nexus-batch__entry">
+            <div class="nexus-batch__entry-head">
+              <div>
+                <div class="nexus-batch__entry-label">Torrent {{ index + 1 }}</div>
+                <div class="nexus-batch__entry-name">{{ entry.name }}</div>
+              </div>
+              <StatusChip :tone="entry.title.trim() ? 'success' : 'warning'">
+                {{ entry.title.trim() ? 'Title ready' : 'Title required' }}
+              </StatusChip>
+            </div>
+
+            <el-form-item :label="`${t('sites.form.title')} · ${entry.name}`">
+              <el-input v-model="entry.title" :placeholder="`Used when uploading ${entry.name}`" />
+            </el-form-item>
+
+            <div class="nexus-batch__entry-hint">
+              This title field belongs to <strong>{{ entry.name }}</strong>.
+            </div>
+
+            <el-form-item :label="t('sites.form.torrentFile')">
+              <el-input :model-value="entry.torrentPath" readonly />
+            </el-form-item>
+          </article>
+        </div>
+
+        <div v-else class="nexus-form__grid">
           <el-form-item :label="t('sites.form.title')">
             <el-input v-model="sharedDraft.title" />
           </el-form-item>
@@ -1211,7 +1321,9 @@ onMounted(() => {
 .nexus-site-card__body,
 .nexus-site-card__validation,
 .nexus-site-card__result,
-.nexus-site-card__optional-stack {
+.nexus-site-card__optional-stack,
+.nexus-batch,
+.nexus-batch__entry {
   display: grid;
   gap: 16px;
 }
@@ -1228,7 +1340,9 @@ onMounted(() => {
 .file-picker,
 .nexus-common__flags,
 .nexus-selector__card-head,
-.nexus-selector__meta {
+.nexus-selector__meta,
+.nexus-batch__intro,
+.nexus-batch__entry-head {
   display: flex;
 }
 
@@ -1241,7 +1355,9 @@ onMounted(() => {
 .nexus-block__header,
 .nexus-site-card__header,
 .nexus-site-card__actions,
-.nexus-selector__card-head {
+.nexus-selector__card-head,
+.nexus-batch__intro,
+.nexus-batch__entry-head {
   justify-content: space-between;
   gap: 14px;
 }
@@ -1291,7 +1407,9 @@ onMounted(() => {
 .nexus-site-card__error,
 .nexus-site-card__hint,
 .nexus-site-card__result-link,
-.nexus-site-card__shared-text {
+.nexus-site-card__shared-text,
+.nexus-batch__intro-text,
+.nexus-batch__entry-hint {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.6;
@@ -1318,7 +1436,8 @@ onMounted(() => {
 
 .nexus-block,
 .nexus-site-card,
-.nexus-selector__card {
+.nexus-selector__card,
+.nexus-batch__entry {
   padding: 18px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
@@ -1380,6 +1499,30 @@ onMounted(() => {
   line-height: 1.5;
 }
 
+.nexus-batch__intro,
+.nexus-batch__entry-head {
+  align-items: flex-start;
+}
+
+.nexus-batch__entry {
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.nexus-batch__entry-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.nexus-batch__entry-name {
+  margin-top: 6px;
+  font-weight: 700;
+  word-break: break-word;
+}
+
 .nexus-form__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1430,7 +1573,9 @@ onMounted(() => {
   .nexus-site-card__actions,
   .nexus-site-card__action-buttons,
   .file-picker,
-  .nexus-selector__card-head {
+  .nexus-selector__card-head,
+  .nexus-batch__intro,
+  .nexus-batch__entry-head {
     flex-direction: column;
     align-items: stretch;
   }
