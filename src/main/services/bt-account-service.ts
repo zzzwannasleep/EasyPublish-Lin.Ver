@@ -130,6 +130,52 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
     await syncSiteCookies(info, url)
   }
 
+  function parseJsonObject(payload: unknown) {
+    if (payload && typeof payload === 'object') {
+      return payload as Record<string, unknown>
+    }
+
+    if (typeof payload !== 'string') {
+      return undefined
+    }
+
+    try {
+      const parsed = JSON.parse(payload)
+      return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  function getRequestErrorCode(error: unknown) {
+    if (axios.isAxiosError(error)) {
+      if (error.response?.status) {
+        return String(error.response.status)
+      }
+      if (error.code) {
+        return error.code
+      }
+    }
+
+    if (error instanceof Error && error.name) {
+      return error.name
+    }
+
+    return 'request_error'
+  }
+
+  function getRequestErrorMessage(error: unknown) {
+    if (axios.isAxiosError(error)) {
+      return error.message
+    }
+
+    if (error instanceof Error) {
+      return error.message
+    }
+
+    return 'Unknown request error'
+  }
+
   async function verifyAuthenticated(
     info: Config.LoginInfo,
     checker: (info: Config.LoginInfo) => Promise<void>,
@@ -995,17 +1041,130 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
     }
   }
 
-  async function checkMikanLoginStatusClean(info: Config.LoginInfo) {
-    setStatus(info, info.apiToken?.trim() ? legacyApiStatusText.tokenConfigured : legacyApiStatusText.tokenMissing)
+  async function checkMikanLoginStatusClean(info: Config.LoginInfo): Promise<Omit<Message.BT.LoginStatus, 'status'>> {
+    const apiToken = info.apiToken?.trim()
+    if (!apiToken) {
+      setStatus(info, legacyApiStatusText.tokenMissing)
+      return {}
+    }
+
+    try {
+      const response = await axios.post(
+        'https://api.mikanani.me/api/episode',
+        {},
+        {
+          responseType: 'text',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `MikanHash ${apiToken}`,
+          },
+        },
+      )
+
+      if ([200, 400, 415, 422].includes(response.status)) {
+        setStatus(info, legacyApiStatusText.tokenConfigured)
+        return {}
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        const errorCode = String(response.status)
+        log.error('[BTAccount][mikan] token validation rejected', {
+          status: response.status,
+          data: response.data,
+        })
+        setStatus(info, `${legacyApiStatusText.tokenRejected} (${errorCode})`)
+        return {
+          errorCode,
+          message: 'Mikan API token rejected',
+        }
+      }
+
+      const errorCode = String(response.status)
+      log.error('[BTAccount][mikan] token validation unexpected response', {
+        status: response.status,
+        data: response.data,
+      })
+      setStatus(info, `${legacyAccountStatusText.failed} (${errorCode})`)
+      return {
+        errorCode,
+        message: `Mikan validation returned unexpected status ${errorCode}`,
+      }
+    } catch (err) {
+      const errorCode = getRequestErrorCode(err)
+      const message = getRequestErrorMessage(err)
+      log.error('[BTAccount][mikan] token validation request failed', {
+        errorCode,
+        message,
+        error: err,
+      })
+      setStatus(info, `${legacyAccountStatusText.failed} (${errorCode})`)
+      return {
+        errorCode,
+        message,
+      }
+    }
   }
 
-  async function checkMioBtLoginStatusClean(info: Config.LoginInfo) {
-    setStatus(
-      info,
-      info.username.trim() && info.apiToken?.trim()
-        ? legacyApiStatusText.credentialsConfigured
-        : legacyApiStatusText.credentialsMissing,
-    )
+  async function checkMioBtLoginStatusClean(info: Config.LoginInfo): Promise<Omit<Message.BT.LoginStatus, 'status'>> {
+    const userId = info.username.trim()
+    const apiKey = info.apiToken?.trim()
+    if (!userId || !apiKey) {
+      setStatus(info, legacyApiStatusText.credentialsMissing)
+      return {}
+    }
+
+    try {
+      const formData = new FormData()
+      formData.append('user_id', userId)
+      formData.append('api_key', apiKey)
+      const response = await axios.post('https://www.miobt.com/addon.php?r=api/post/76cad81b', formData, {
+        responseType: 'text',
+      })
+      const data = parseJsonObject(response.data)
+      const responseCode =
+        typeof data?.code === 'number' || typeof data?.code === 'string' ? String(data.code) : String(response.status)
+      const responseMessage = typeof data?.message === 'string' ? data.message : ''
+
+      if (responseCode === '114' || responseMessage === 'auth failed') {
+        log.error('[BTAccount][miobt] credentials rejected', {
+          status: response.status,
+          data: response.data,
+        })
+        setStatus(info, `${legacyApiStatusText.credentialsRejected} (${responseCode})`)
+        return {
+          errorCode: responseCode,
+          message: responseMessage || 'MioBT API credentials rejected',
+        }
+      }
+
+      if (response.status === 200) {
+        setStatus(info, legacyApiStatusText.credentialsConfigured)
+        return {}
+      }
+
+      log.error('[BTAccount][miobt] credentials validation unexpected response', {
+        status: response.status,
+        data: response.data,
+      })
+      setStatus(info, `${legacyAccountStatusText.failed} (${responseCode})`)
+      return {
+        errorCode: responseCode,
+        message: responseMessage || `MioBT validation returned unexpected status ${responseCode}`,
+      }
+    } catch (err) {
+      const errorCode = getRequestErrorCode(err)
+      const message = getRequestErrorMessage(err)
+      log.error('[BTAccount][miobt] credentials validation request failed', {
+        errorCode,
+        message,
+        error: err,
+      })
+      setStatus(info, `${legacyAccountStatusText.failed} (${errorCode})`)
+      return {
+        errorCode,
+        message,
+      }
+    }
   }
 
   async function checkNyaaLoginStatusClean(info: Config.LoginInfo) {
@@ -1379,6 +1538,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
       }
 
       const info = getLoginInfo(type)
+      let resultDetails: Omit<Message.BT.LoginStatus, 'status'> = {}
       if (!info.enable) {
         await setStatusAndPersist(info, legacyAccountStatusText.disabled)
         return JSON.stringify({ status: info.status } satisfies Message.BT.LoginStatus)
@@ -1401,12 +1561,12 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
       }
 
       if (type == 'mikan') {
-        await checkMikanLoginStatusClean(info)
+        resultDetails = await checkMikanLoginStatusClean(info)
         await persistUserData()
       }
 
       if (type == 'miobt') {
-        await checkMioBtLoginStatusClean(info)
+        resultDetails = await checkMioBtLoginStatusClean(info)
         await persistUserData()
       }
 
@@ -1447,7 +1607,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
         }
       }
 
-      const result: Message.BT.LoginStatus = { status: info.status }
+      const result: Message.BT.LoginStatus = { status: info.status, ...resultDetails }
       return JSON.stringify(result)
     } catch (err) {
       log.error(err)

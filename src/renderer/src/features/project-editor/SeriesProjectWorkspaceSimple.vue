@@ -1,6 +1,10 @@
 ﻿<script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useDark } from '@vueuse/core'
 import { Download, EditPen, FolderOpened, Plus, Upload } from '@element-plus/icons-vue'
+import Editor from '@toast-ui/editor'
+import '@toast-ui/editor/dist/toastui-editor.css'
+import '@toast-ui/editor/dist/theme/toastui-editor-dark.css'
 import { marked } from 'marked'
 import { useRouter } from 'vue-router'
 import { projectBridge } from '../../services/bridge/project'
@@ -56,6 +60,7 @@ const props = defineProps<{
 }>()
 
 const router = useRouter()
+const isDark = useDark()
 
 const workspace = ref<SeriesProjectWorkspace | null>(null)
 const draftConfig = ref<Config.PublishConfig | null>(null)
@@ -76,6 +81,10 @@ const draftTorrentEntries = ref<DraftTorrentEntry[]>([])
 const activeTorrentId = ref('')
 const torrentOverrideDialogVisible = ref(false)
 const editingTorrentId = ref<string | null>(null)
+const bodyTemplateEditorRoot = ref<HTMLElement | null>(null)
+
+let bodyTemplateEditor: InstanceType<typeof Editor> | null = null
+let isSyncingBodyTemplateEditor = false
 
 const torrentOverrideForm = reactive({
   titleOverride: '',
@@ -440,6 +449,68 @@ const renderedHtmlPreview = computed(() => {
 
   return marked.parse(markdownSource, { async: false }) as string
 })
+
+function normalizeMarkdownEditorValue(value: string | undefined) {
+  return (value ?? '').replace(/\r\n/g, '\n')
+}
+
+function destroyBodyTemplateEditor() {
+  bodyTemplateEditor?.destroy()
+  bodyTemplateEditor = null
+}
+
+function syncBodyTemplateEditorFromState(options?: { force?: boolean }) {
+  if (!bodyTemplateEditor) {
+    return
+  }
+
+  const nextValue = normalizeMarkdownEditorValue(profileForm.bodyTemplate)
+  const currentValue = normalizeMarkdownEditorValue(bodyTemplateEditor.getMarkdown())
+  if (!options?.force && currentValue === nextValue) {
+    return
+  }
+
+  isSyncingBodyTemplateEditor = true
+  bodyTemplateEditor.setMarkdown(nextValue, false)
+  bodyTemplateEditor.changeMode('wysiwyg', true)
+  isSyncingBodyTemplateEditor = false
+}
+
+async function ensureBodyTemplateEditor() {
+  if (bodyTemplateEditor || !bodyTemplateEditorRoot.value) {
+    return
+  }
+
+  await nextTick()
+  if (!bodyTemplateEditorRoot.value) {
+    return
+  }
+
+  bodyTemplateEditor = new Editor({
+    el: bodyTemplateEditorRoot.value,
+    height: '540px',
+    minHeight: '540px',
+    initialValue: normalizeMarkdownEditorValue(profileForm.bodyTemplate),
+    initialEditType: 'wysiwyg',
+    previewStyle: 'tab',
+    hideModeSwitch: true,
+    usageStatistics: false,
+    autofocus: false,
+    placeholder: '在这里编写全站通用的 Markdown 正文模板。',
+    theme: isDark.value ? 'dark' : undefined,
+    events: {
+      change: () => {
+        if (!bodyTemplateEditor || isSyncingBodyTemplateEditor) {
+          return
+        }
+
+        profileForm.bodyTemplate = normalizeMarkdownEditorValue(bodyTemplateEditor.getMarkdown())
+      },
+    },
+  })
+
+  syncBodyTemplateEditorFromState({ force: true })
+}
 
 function fillProfileForm(profile: SeriesPublishProfile | null) {
   const fallbackTargetSites = getDraftTargetSites().filter(siteId =>
@@ -976,8 +1047,44 @@ function openAccountsPage() {
   void router.push({ name: 'account' })
 }
 
-onMounted(() => {
-  void loadWorkspace()
+watch(
+  () => profileForm.bodyTemplate,
+  () => {
+    syncBodyTemplateEditorFromState()
+  },
+)
+
+watch(bodyTemplateView, async view => {
+  if (view !== 'editor') {
+    return
+  }
+
+  await ensureBodyTemplateEditor()
+  syncBodyTemplateEditorFromState({ force: true })
+})
+
+watch(isDark, async () => {
+  const currentMarkdown = bodyTemplateEditor
+    ? normalizeMarkdownEditorValue(bodyTemplateEditor.getMarkdown())
+    : normalizeMarkdownEditorValue(profileForm.bodyTemplate)
+
+  destroyBodyTemplateEditor()
+  await ensureBodyTemplateEditor()
+
+  if (currentMarkdown !== normalizeMarkdownEditorValue(profileForm.bodyTemplate)) {
+    profileForm.bodyTemplate = currentMarkdown
+  }
+  syncBodyTemplateEditorFromState({ force: true })
+})
+
+onMounted(async () => {
+  await ensureBodyTemplateEditor()
+  await loadWorkspace()
+  syncBodyTemplateEditorFromState({ force: true })
+})
+
+onBeforeUnmount(() => {
+  destroyBodyTemplateEditor()
 })
 </script>
 
@@ -1104,21 +1211,43 @@ onMounted(() => {
       <section class="series-editor__section">
         <div class="series-editor__section-head">
           <div>
-            <h3 class="series-editor__title">正文模板</h3>
-            <p class="series-editor__text">正文模板统一用 Markdown 编写，生成发布稿时会自动转换为 HTML 和 BBCode。</p>
+            <h3 class="series-editor__title">发布站点</h3>
+            <p class="series-editor__text">后续会按已选站点展开各自的可选字段，所以先在这里勾选本次配置要覆盖的目标站点。</p>
           </div>
           <div class="series-editor__actions">
-            <el-button-group>
-              <el-button :type="bodyTemplateView === 'editor' ? 'primary' : 'default'" @click="bodyTemplateView = 'editor'">
-                源稿
-              </el-button>
-              <el-button
-                :type="bodyTemplateView === 'preview' ? 'primary' : 'default'"
-                @click="bodyTemplateView = 'preview'"
-              >
-                预览
-              </el-button>
-            </el-button-group>
+            <el-button plain @click="openAccountsPage">去账号页检查登录状态</el-button>
+          </div>
+        </div>
+
+        <el-alert v-if="siteError" type="warning" :closable="false" show-icon :title="siteError" />
+
+        <div v-if="authenticatedSites.length" class="series-editor__site-button-grid">
+          <button
+            v-for="site in authenticatedSites"
+            :key="`site-button-${site.id}`"
+            type="button"
+            class="series-editor__site-button"
+            :class="{ 'is-active': isSiteSelected(site.id) }"
+            @click="toggleSite(site.id)"
+          >
+            <span class="series-editor__site-button-name">{{ site.name }}</span>
+            <span class="series-editor__site-button-meta">{{ getSiteFormatLabel(site.id) }}</span>
+          </button>
+        </div>
+
+        <div v-if="authenticatedSites.length" class="series-editor__muted">
+          当前已选站点：{{ selectedSiteNames.length > 0 ? selectedSiteNames.join(' / ') : '还没有选择发布站点' }}
+        </div>
+        <div v-else class="series-editor__empty-card">当前没有已登录且有效的站点，请先去账号页面完成登录校验。</div>
+      </section>
+
+      <section class="series-editor__section">
+        <div class="series-editor__section-head">
+          <div>
+            <h3 class="series-editor__title">正文模板</h3>
+            <p class="series-editor__text">源稿模式直接使用富文本 Markdown 编辑器，保存后仍会按原链路转换为 HTML 和 BBCode。</p>
+          </div>
+          <div class="series-editor__actions">
             <el-button plain @click="addTorrentEntry">批量添加种子</el-button>
           </div>
         </div>
@@ -1175,64 +1304,38 @@ onMounted(() => {
 
         <div class="series-editor__template-panel">
           <div class="series-editor__template-head">
-            <div class="series-editor__label">{{ bodyTemplateView === 'editor' ? 'Markdown 正文模板' : '渲染预览' }}</div>
+            <div class="series-editor__template-toolbar">
+              <div class="series-editor__label">{{ bodyTemplateView === 'editor' ? 'Markdown 正文模板' : '渲染预览' }}</div>
+              <el-button-group>
+                <el-button :type="bodyTemplateView === 'editor' ? 'primary' : 'default'" @click="bodyTemplateView = 'editor'">
+                  源稿
+                </el-button>
+                <el-button
+                  :type="bodyTemplateView === 'preview' ? 'primary' : 'default'"
+                  @click="bodyTemplateView = 'preview'"
+                >
+                  预览
+                </el-button>
+              </el-button-group>
+            </div>
             <div class="series-editor__editor-hint">
               {{
                 bodyTemplateView === 'editor'
-                  ? '正文统一使用 Markdown 编写，保存后会在生成发布稿时自动转换为 HTML 和 BBCode。'
-                  : '这里展示 Markdown 渲染后的效果。实际发布时会按站点要求继续转换格式。'
+                  ? '这里直接编辑 Markdown 源稿，但输入体验改成富文本；底层仍会回写 Markdown。'
+                  : '这里展示 Markdown 渲染后的完整效果。实际发布时会按站点要求继续转换格式。'
               }}
             </div>
           </div>
 
-          <div v-if="bodyTemplateView === 'editor'" class="series-editor__template-body">
-            <el-input
-              v-model="profileForm.bodyTemplate"
-              type="textarea"
-              :rows="24"
-              resize="none"
-              placeholder="在这里编写全站通用的 Markdown 正文模板。"
-            />
+          <div v-show="bodyTemplateView === 'editor'" class="series-editor__template-body">
+            <div ref="bodyTemplateEditorRoot" class="series-editor__wysiwyg-host"></div>
           </div>
 
-          <article v-else class="series-editor__template-body">
+          <article v-show="bodyTemplateView === 'preview'" class="series-editor__template-body">
             <div v-if="renderedHtmlPreview" class="series-editor__html-preview series-editor__html-preview--expanded" v-html="renderedHtmlPreview"></div>
             <div v-else class="series-editor__muted">模板为空时，这里不会生成预览。</div>
           </article>
         </div>
-      </section>
-
-      <section class="series-editor__section">
-        <div class="series-editor__section-head">
-          <div>
-            <h3 class="series-editor__title">发布站点</h3>
-            <p class="series-editor__text">这里只显示已经登录且状态有效的站点，直接勾选要同步发布的目标站点即可。</p>
-          </div>
-          <div class="series-editor__actions">
-            <el-button plain @click="openAccountsPage">去账号页检查登录状态</el-button>
-          </div>
-        </div>
-
-        <el-alert v-if="siteError" type="warning" :closable="false" show-icon :title="siteError" />
-
-        <div v-if="authenticatedSites.length" class="series-editor__site-button-grid">
-          <button
-            v-for="site in authenticatedSites"
-            :key="`site-button-${site.id}`"
-            type="button"
-            class="series-editor__site-button"
-            :class="{ 'is-active': isSiteSelected(site.id) }"
-            @click="toggleSite(site.id)"
-          >
-            <span class="series-editor__site-button-name">{{ site.name }}</span>
-            <span class="series-editor__site-button-meta">{{ getSiteFormatLabel(site.id) }}</span>
-          </button>
-        </div>
-
-        <div v-if="authenticatedSites.length" class="series-editor__muted">
-          当前已选站点：{{ selectedSiteNames.length > 0 ? selectedSiteNames.join(' / ') : '还没有选择发布站点' }}
-        </div>
-        <div v-else class="series-editor__empty-card">当前没有已登录且有效的站点，请先去账号页面完成登录校验。</div>
       </section>
     </template>
 
@@ -1565,6 +1668,13 @@ onMounted(() => {
   gap: 12px;
 }
 
+.series-editor__template-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
 .series-editor__editor-hint {
   color: var(--text-secondary);
   font-size: 13px;
@@ -1644,9 +1754,49 @@ onMounted(() => {
   color: var(--text-secondary);
 }
 
-.series-editor__template-body :deep(.el-textarea__inner) {
-  min-height: 540px !important;
-  line-height: 1.7;
+.series-editor__wysiwyg-host {
+  min-height: 540px;
+}
+
+.series-editor__template-body :deep(.toastui-editor-defaultUI) {
+  border-color: var(--border-soft);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.series-editor__template-body :deep(.toastui-editor-defaultUI-toolbar) {
+  background: color-mix(in srgb, var(--bg-panel) 94%, #eef2f7);
+  border-bottom-color: var(--border-soft);
+}
+
+.series-editor__template-body :deep(.toastui-editor-toolbar-icons) {
+  opacity: 0.88;
+}
+
+.series-editor__template-body :deep(.toastui-editor-main) {
+  min-height: 540px;
+}
+
+.series-editor__template-body :deep(.toastui-editor-md-container),
+.series-editor__template-body :deep(.toastui-editor-ww-container) {
+  background: var(--bg-panel);
+}
+
+.series-editor__template-body :deep(.toastui-editor-contents),
+.series-editor__template-body :deep(.ProseMirror) {
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.series-editor__template-body :deep(.toastui-editor-contents p),
+.series-editor__template-body :deep(.ProseMirror p) {
+  margin: 0 0 0.9em;
+}
+
+.series-editor__template-body :deep(.toastui-editor-md-preview),
+.series-editor__template-body :deep(.toastui-editor-md-mode),
+.series-editor__template-body :deep(.toastui-editor-ww-mode) {
+  border-color: var(--border-soft);
 }
 
 .series-editor__html-preview {
@@ -1776,6 +1926,7 @@ onMounted(() => {
   .series-editor__profile-footer,
   .series-editor__config-bar,
   .series-editor__inline-form,
+  .series-editor__template-toolbar,
   .series-editor__site-card-head,
   .series-editor__site-foot {
     flex-direction: column;

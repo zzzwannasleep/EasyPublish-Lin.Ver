@@ -28,6 +28,7 @@ interface SitePublishDraftForm {
   title: string
   description: string
   torrentPath: string
+  trackersText: string
   smallDescription: string
   url: string
   technicalInfo: string
@@ -51,6 +52,9 @@ interface SitePublishDraftForm {
   categoryId?: number
   typeId?: number
   resolutionId?: number
+  bangumiId?: number
+  subtitleGroupId?: number
+  publishGroupId?: number
   regionId?: number
   distributorId?: number
   seasonNumber?: number
@@ -169,8 +173,20 @@ function isUnit3dSite(site: SiteCatalogEntry) {
   return site.adapter === 'unit3d'
 }
 
+function isMikanSite(site: SiteCatalogEntry) {
+  return site.adapter === 'mikan'
+}
+
 function supportsMetadata(site: SiteCatalogEntry) {
   return site.capabilitySet.metadata.sections
+}
+
+function hasSiteSpecificRequiredFields(site: SiteCatalogEntry) {
+  return (site.fieldSchemas ?? []).some(field => field.mode === 'required')
+}
+
+function hasOptionalSiteFields(site: SiteCatalogEntry) {
+  return supportsMetadata(site) || isUnit3dSite(site) || isMikanSite(site)
 }
 
 function isSiteSelected(siteId: SiteId) {
@@ -192,6 +208,10 @@ function getMetadataStateLabel(site: SiteCatalogEntry) {
     return t('nexus.selector.metadataLoading')
   }
 
+  if (!hasSiteSpecificRequiredFields(site)) {
+    return t('nexus.selector.sharedOnly')
+  }
+
   if (!supportsMetadata(site)) {
     return t('nexus.selector.manualEntry')
   }
@@ -202,6 +222,10 @@ function getMetadataStateLabel(site: SiteCatalogEntry) {
 function getMetadataStateTone(site: SiteCatalogEntry): 'neutral' | 'info' | 'success' | 'warning' | 'danger' {
   if (isMetadataLoading(site.id)) {
     return 'info'
+  }
+
+  if (!hasSiteSpecificRequiredFields(site)) {
+    return 'neutral'
   }
 
   if (!supportsMetadata(site)) {
@@ -226,6 +250,21 @@ function getAccountStatusLabel(siteId: SiteId) {
   return t('nexus.account.error')
 }
 
+function getSharedFieldText(site: SiteCatalogEntry) {
+  return isMikanSite(site) ? t('nexus.site.sharedFieldsMikan') : t('nexus.site.sharedFields')
+}
+
+function parseTrackerText(value: string) {
+  return [
+    ...new Set(
+      value
+        .split(/[\r\n,]+/)
+        .map(item => item.trim())
+        .filter(Boolean),
+    ),
+  ]
+}
+
 function joinProjectPath(basePath: string, fileName: string) {
   if (!basePath || !fileName) {
     return ''
@@ -240,6 +279,7 @@ function createEmptyDraft(): SitePublishDraftForm {
     title: '',
     description: '',
     torrentPath: '',
+    trackersText: '',
     smallDescription: '',
     url: '',
     technicalInfo: '',
@@ -263,6 +303,9 @@ function createEmptyDraft(): SitePublishDraftForm {
     categoryId: undefined,
     typeId: undefined,
     resolutionId: undefined,
+    bangumiId: undefined,
+    subtitleGroupId: undefined,
+    publishGroupId: undefined,
     regionId: undefined,
     distributorId: undefined,
     seasonNumber: undefined,
@@ -320,6 +363,17 @@ function readStoredNumberArray(value: unknown) {
     : []
 }
 
+function readStoredTrackersText(value: unknown) {
+  if (Array.isArray(value)) {
+    return value
+      .map(item => (typeof item === 'string' ? item.trim() : ''))
+      .filter(Boolean)
+      .join('\n')
+  }
+
+  return readStoredString(value)
+}
+
 function readStoredNumberRecord(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return {}
@@ -358,6 +412,10 @@ function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefa
   draft.categoryId = readStoredNumber(siteFieldDefaults.categoryId)
   draft.typeId = readStoredNumber(siteFieldDefaults.typeId)
   draft.resolutionId = readStoredNumber(siteFieldDefaults.resolutionId)
+  draft.trackersText = readStoredTrackersText(siteFieldDefaults.trackers ?? siteFieldDefaults.trackersText)
+  draft.bangumiId = readStoredNumber(siteFieldDefaults.bangumiId)
+  draft.subtitleGroupId = readStoredNumber(siteFieldDefaults.subtitleGroupId)
+  draft.publishGroupId = readStoredNumber(siteFieldDefaults.publishGroupId)
   draft.regionId = readStoredNumber(siteFieldDefaults.regionId)
   draft.distributorId = readStoredNumber(siteFieldDefaults.distributorId)
   draft.seasonNumber = readStoredNumber(siteFieldDefaults.seasonNumber)
@@ -512,6 +570,17 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
       duUntil: draft.duUntil,
       sticky: draft.sticky,
       modQueueOptIn: draft.modQueueOptIn,
+    }
+  }
+
+  if (site?.adapter === 'mikan') {
+    const trackers = parseTrackerText(draft.trackersText)
+    return {
+      ...baseInput,
+      trackers: trackers.length > 0 ? trackers : undefined,
+      bangumiId: draft.bangumiId,
+      subtitleGroupId: draft.subtitleGroupId,
+      publishGroupId: draft.publishGroupId,
     }
   }
 
@@ -680,7 +749,9 @@ async function bootstrap() {
       return
     }
 
-    sites.value = siteResult.data.sites.filter(site => site.adapter === 'nexusphp' || site.adapter === 'unit3d')
+    sites.value = siteResult.data.sites.filter(
+      site => site.adapter === 'mikan' || site.adapter === 'nexusphp' || site.adapter === 'unit3d',
+    )
     applySharedDraft(config, content)
     sites.value.forEach(site => {
       publishDrafts.value[site.id] = createInitialDraft(config, content, site.id)
@@ -821,7 +892,7 @@ onMounted(() => {
           <div>
             <div class="nexus-site-card__name">{{ site.name }}</div>
             <div class="nexus-site-card__endpoint">{{ site.apiBaseUrl || site.normalizedBaseUrl }}</div>
-            <p class="nexus-site-card__shared-text">{{ t('nexus.site.sharedFields') }}</p>
+            <p class="nexus-site-card__shared-text">{{ getSharedFieldText(site) }}</p>
           </div>
           <div class="nexus-site-card__header-actions">
             <el-button
@@ -901,7 +972,7 @@ onMounted(() => {
             </div>
           </div>
 
-          <div v-else class="nexus-form__grid nexus-form__grid--meta">
+          <div v-else-if="site.adapter === 'unit3d'" class="nexus-form__grid nexus-form__grid--meta">
             <el-form-item :label="t('nexus.site.manualCategoryId')">
               <el-input-number v-model="ensureDraft(site.id).categoryId" :controls="false" :min="1" />
             </el-form-item>
@@ -913,7 +984,13 @@ onMounted(() => {
             </el-form-item>
           </div>
 
-          <el-collapse v-model="advancedSiteIds" class="nexus-site-card__collapse">
+          <div v-else class="nexus-site-card__manual">
+            <div class="nexus-site-card__hint">
+              {{ t('nexus.site.noRequiredFields') }}
+            </div>
+          </div>
+
+          <el-collapse v-if="hasOptionalSiteFields(site)" v-model="advancedSiteIds" class="nexus-site-card__collapse">
             <el-collapse-item :name="site.id" :title="t('nexus.site.optionalSection')">
               <div v-if="supportsMetadata(site)" class="nexus-site-card__optional-stack">
                 <div class="nexus-form__grid">
@@ -987,6 +1064,37 @@ onMounted(() => {
                     </el-select>
                   </el-form-item>
                 </div>
+              </div>
+
+              <div v-if="isMikanSite(site)" class="nexus-site-card__optional-stack">
+                <div class="nexus-site-card__hint">
+                  {{ t('nexus.site.mikanOptionalHint') }}
+                </div>
+
+                <div class="nexus-form__grid">
+                  <el-form-item :label="t('sites.form.bangumiId')">
+                    <el-input-number v-model="ensureDraft(site.id).bangumiId" :controls="false" :min="1" />
+                  </el-form-item>
+                  <el-form-item :label="t('sites.form.subtitleGroupId')">
+                    <el-input-number v-model="ensureDraft(site.id).subtitleGroupId" :controls="false" :min="1" />
+                  </el-form-item>
+                </div>
+
+                <div class="nexus-form__grid">
+                  <el-form-item :label="t('sites.form.publishGroupId')">
+                    <el-input-number v-model="ensureDraft(site.id).publishGroupId" :controls="false" :min="1" />
+                  </el-form-item>
+                  <div />
+                </div>
+
+                <el-form-item :label="t('sites.form.trackers')">
+                  <el-input
+                    v-model="ensureDraft(site.id).trackersText"
+                    type="textarea"
+                    :rows="4"
+                    :placeholder="t('sites.form.trackersPlaceholder')"
+                  />
+                </el-form-item>
               </div>
 
               <div v-if="isUnit3dSite(site)" class="nexus-site-card__optional-stack">

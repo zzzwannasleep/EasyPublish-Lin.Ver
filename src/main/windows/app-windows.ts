@@ -36,14 +36,28 @@ function getLoginUrl(type: string) {
   return 'https://vcb-s.com'
 }
 
-function buildCookieHeader(cookies: Electron.Cookie[]) {
-  return cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
-}
-
 function parseMikanApiToken(data: unknown) {
+  function normalizeCandidate(value: string) {
+    const token = value.trim()
+    const lowered = token.toLowerCase()
+    if (!token) {
+      return ''
+    }
+
+    if (lowered === 'apikey' || lowered === 'api_key' || lowered === 'your_api_key') {
+      return ''
+    }
+
+    if (token.includes('api/Message/apikey')) {
+      return ''
+    }
+
+    return token
+  }
+
   if (data && typeof data === 'object' && 'Message' in data) {
     const token = (data as { Message?: unknown }).Message
-    return typeof token === 'string' ? token.trim() : ''
+    return typeof token === 'string' ? normalizeCandidate(token) : ''
   }
 
   if (typeof data !== 'string') {
@@ -52,10 +66,38 @@ function parseMikanApiToken(data: unknown) {
 
   try {
     const payload = JSON.parse(data) as { Message?: unknown }
-    return typeof payload.Message === 'string' ? payload.Message.trim() : ''
+    return typeof payload.Message === 'string' ? normalizeCandidate(payload.Message) : ''
   } catch {
     const match = data.match(/"Message"\s*:\s*"([^"]+)"/)
-    return match?.[1]?.trim() ?? ''
+    return match?.[1] ? normalizeCandidate(match[1]) : ''
+  }
+}
+
+function parseMikanApiTokenFromUrl(rawUrl: string) {
+  try {
+    const url = new URL(rawUrl)
+    if (url.origin !== 'https://api.mikanani.me') {
+      return ''
+    }
+
+    const prefix = '/api/Message/'
+    if (!url.pathname.startsWith(prefix)) {
+      return ''
+    }
+
+    const candidate = decodeURIComponent(url.pathname.slice(prefix.length)).trim()
+    if (!candidate || candidate.includes('/')) {
+      return ''
+    }
+
+    const lowered = candidate.toLowerCase()
+    if (lowered === 'apikey' || lowered === 'api_key' || lowered === 'your_api_key') {
+      return ''
+    }
+
+    return candidate
+  } catch {
+    return ''
   }
 }
 
@@ -184,9 +226,13 @@ export function createMainAppWindow(options: CreateMainAppWindowOptions) {
 export async function openLoginWindow(options: OpenLoginWindowOptions) {
   const { type, appIcon, userAgent, getUserDB, checkBtLoginStatus, refreshLoginData } = options
   const url = getLoginUrl(type)
+  const mikanApiMessagePrefix = 'https://api.mikanani.me/api/Message/'
+  const mikanApiKeyUrl = 'https://api.mikanani.me/api/Message/apikey'
   const userDB = getUserDB()
   const partition = `persist:${userDB.data.name}`
   const browserSession = session.fromPartition(partition)
+  let loginWindowClosed = false
+  let mikanAutoCompleteTimer: ReturnType<typeof setInterval> | undefined
 
   async function setCookies(accountType: string, targetUrl: string) {
     await browserSession.cookies
@@ -213,38 +259,51 @@ export async function openLoginWindow(options: OpenLoginWindowOptions) {
   }
 
   async function fetchMikanApiToken() {
-    const [siteCookies, apiCookies] = await Promise.all([
-      browserSession.cookies.get({ url: 'https://mikanani.me' }),
-      browserSession.cookies.get({ url: 'https://api.mikanani.me' }),
-    ])
-    const cookies = [...siteCookies, ...apiCookies].filter(
-      (cookie, index, list) =>
-        list.findIndex(
-          item =>
-            item.name === cookie.name &&
-            item.domain === cookie.domain &&
-            item.path === cookie.path &&
-            item.value === cookie.value,
-        ) === index,
-    )
-    const cookieHeader = buildCookieHeader(cookies)
-    if (!cookieHeader) {
-      return ''
-    }
-
-    const response = await net.fetch('https://api.mikanani.me/api/Message/apikey', {
+    const response = await browserSession.fetch(mikanApiKeyUrl, {
       headers: {
         Accept: 'application/json, text/plain, */*',
-        Cookie: cookieHeader,
         'User-Agent': userAgent,
       },
       bypassCustomProtocolHandlers: true,
     })
     if (!response.ok) {
+      log.error('[Mikan] Failed to fetch API key with session', { status: response.status })
       return ''
     }
 
-    return parseMikanApiToken(await response.text())
+    const token = parseMikanApiToken(await response.text())
+    if (!token) {
+      log.warn('[Mikan] API key endpoint returned no usable token')
+    }
+
+    return token
+  }
+
+  async function storeMikanApiToken(apiToken: string) {
+    const nextToken = apiToken.trim()
+    if (!nextToken) {
+      return false
+    }
+
+    const info = userDB.data.info.find(item => item.name === 'mikan')
+    if (!info) {
+      return false
+    }
+
+    if (info.apiToken === nextToken) {
+      log.info('[Mikan] API token already matches stored value')
+      refreshLoginData()
+      return true
+    }
+
+    log.info('[Mikan] Storing API token from login window', {
+      previousLength: info.apiToken?.length ?? 0,
+      nextLength: nextToken.length,
+    })
+    info.apiToken = nextToken
+    await userDB.write()
+    refreshLoginData()
+    return true
   }
 
   const loginWindow = new BrowserWindow({
@@ -264,9 +323,17 @@ export async function openLoginWindow(options: OpenLoginWindowOptions) {
     loginWindow.show()
   })
 
-  loginWindow.on('close', async event => {
+  async function finalizeLoginWindow(explicitMikanApiToken = '') {
+    if (loginWindowClosed) {
+      return
+    }
+
+    loginWindowClosed = true
+    if (mikanAutoCompleteTimer) {
+      clearInterval(mikanAutoCompleteTimer)
+      mikanAutoCompleteTimer = undefined
+    }
     try {
-      event.preventDefault()
       if (type === 'vcb') {
         await browserSession.cookies
           .get({ url })
@@ -288,10 +355,11 @@ export async function openLoginWindow(options: OpenLoginWindowOptions) {
       } else {
         await setCookies(type, url)
         if (type === 'mikan') {
-          const apiToken = await fetchMikanApiToken()
+          const apiToken = explicitMikanApiToken.trim() || (await fetchMikanApiToken())
           if (apiToken) {
-            userDB.data.info.find(item => item.name === 'mikan')!.apiToken = apiToken
-            await userDB.write()
+            await storeMikanApiToken(apiToken)
+          } else {
+            log.warn('[Mikan] Login window finalized without an API token')
           }
         }
         await checkBtLoginStatus(type)
@@ -302,7 +370,91 @@ export async function openLoginWindow(options: OpenLoginWindowOptions) {
     } finally {
       loginWindow.destroy()
     }
+  }
+
+  async function tryAutoCompleteMikanLogin() {
+    if (type !== 'mikan' || loginWindowClosed || loginWindow.isDestroyed()) {
+      return
+    }
+
+    try {
+      const currentUrl = loginWindow.webContents.getURL()
+      let apiToken = parseMikanApiTokenFromUrl(currentUrl)
+
+      if (apiToken) {
+        log.info('[Mikan] Extracted API token directly from redirect URL', {
+          currentUrl,
+          tokenLength: apiToken.length,
+        })
+        await finalizeLoginWindow(apiToken)
+        return
+      }
+
+      if (currentUrl.startsWith(mikanApiMessagePrefix)) {
+        try {
+          const bodyText = await loginWindow.webContents.executeJavaScript('document.body?.innerText ?? ""')
+          apiToken = parseMikanApiToken(bodyText)
+        } catch (err) {
+          log.error('[Mikan] Failed to read API key page body', err)
+        }
+      }
+
+      if (!apiToken && currentUrl.includes('mikanani.me')) {
+        try {
+          const shouldOpenApiKeyPage = await loginWindow.webContents.executeJavaScript(`
+            (() => {
+              const apiUrl = ${JSON.stringify(mikanApiKeyUrl)}
+              const bodyText = document.body?.innerText ?? ''
+              if (bodyText.includes(apiUrl)) {
+                return true
+              }
+
+              return Array.from(document.querySelectorAll('a'))
+                .some(anchor => (anchor instanceof HTMLAnchorElement ? anchor.href : '').includes(apiUrl))
+            })()
+          `)
+          if (shouldOpenApiKeyPage && !currentUrl.includes(mikanApiKeyUrl)) {
+            await loginWindow.loadURL(mikanApiKeyUrl)
+            return
+          }
+        } catch (err) {
+          log.error('[Mikan] Failed to inspect login page for API key entry', err)
+        }
+      }
+
+      if (!apiToken) {
+        apiToken = await fetchMikanApiToken()
+      }
+
+      if (!apiToken) {
+        return
+      }
+
+      await finalizeLoginWindow(apiToken)
+    } catch (err) {
+      log.error('[Mikan] Auto-complete login failed', err)
+    }
+  }
+
+  loginWindow.on('close', async event => {
+    event.preventDefault()
+    await finalizeLoginWindow()
   })
+
+  if (type === 'mikan') {
+    mikanAutoCompleteTimer = setInterval(() => {
+      void tryAutoCompleteMikanLogin()
+    }, 1200)
+    loginWindow.webContents.on('did-finish-load', () => {
+      void tryAutoCompleteMikanLogin()
+    })
+    loginWindow.webContents.on('did-navigate', () => {
+      void tryAutoCompleteMikanLogin()
+    })
+    loginWindow.webContents.on('did-navigate-in-page', () => {
+      void tryAutoCompleteMikanLogin()
+    })
+  }
 
   browserSession.webRequest.onBeforeSendHeaders((details, callback) => {
     details.requestHeaders['user-agent'] = userAgent

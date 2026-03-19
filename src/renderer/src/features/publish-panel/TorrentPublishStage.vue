@@ -7,7 +7,7 @@ import ProjectStageAside from '../project-detail/ProjectStageAside.vue'
 import { useProjectContext } from '../project-detail/project-context'
 import NexusProjectPublishPanel from './NexusProjectPublishPanel.vue'
 
-type LegacyStageSiteType = 'bangumi_all' | 'bangumi' | 'mikan' | 'miobt' | 'nyaa'
+type LegacyStageSiteType = 'bangumi_all' | 'bangumi' | 'miobt' | 'nyaa'
 
 const props = defineProps<{
   id: number
@@ -16,14 +16,20 @@ const props = defineProps<{
 const { t } = useI18n()
 const { project, isLoading, errorMessage } = useProjectContext()
 const projectName = computed(() => project.value?.name ?? t('common.projectWithId', { id: props.id }))
+const shouldShowAdapterPanel = computed(() => {
+  if (!project.value) {
+    return false
+  }
+
+  return project.value.projectMode !== 'episode' || project.value.targetSites.includes('mikan')
+})
 const legacySiteTypes = computed<LegacyStageSiteType[]>(() => {
   if (!project.value || project.value.projectMode !== 'episode') {
-    return ['bangumi_all', 'bangumi', 'mikan', 'miobt', 'nyaa']
+    return ['bangumi_all', 'bangumi', 'miobt', 'nyaa']
   }
 
   const siteMap: Partial<Record<string, LegacyStageSiteType>> = {
     bangumi: 'bangumi',
-    mikan: 'mikan',
     miobt: 'miobt',
     nyaa: 'nyaa',
   }
@@ -32,8 +38,13 @@ const legacySiteTypes = computed<LegacyStageSiteType[]>(() => {
     .map(siteId => siteMap[siteId])
     .filter((siteType): siteType is LegacyStageSiteType => Boolean(siteType))
 
-  return targetRows.length > 0 ? [...new Set(targetRows)] : ['bangumi', 'mikan', 'miobt', 'nyaa']
+  if (project.value.targetSites.length === 0) {
+    return ['bangumi', 'miobt', 'nyaa']
+  }
+
+  return [...new Set(targetRows)]
 })
+const shouldShowLegacyFallback = computed(() => legacySiteTypes.value.length > 0)
 
 const notes = computed(() => [
   {
@@ -66,9 +77,9 @@ const notes = computed(() => [
     :aside-description="t('stage.torrent.asideDescription')"
   >
     <div class="publish-stage-stack">
-      <NexusProjectPublishPanel v-if="project && project.projectMode !== 'episode'" :id="id" />
+      <NexusProjectPublishPanel v-if="shouldShowAdapterPanel" :id="id" />
 
-      <section class="legacy-fallback">
+      <section v-if="shouldShowLegacyFallback" class="legacy-fallback">
         <div class="legacy-fallback__eyebrow">{{ t('stage.torrent.legacyEyebrow') }}</div>
         <h3 class="legacy-fallback__title">{{ t('stage.torrent.legacyTitle') }}</h3>
         <p class="legacy-fallback__description">{{ t('stage.torrent.legacyDescription') }}</p>

@@ -19,6 +19,10 @@ export interface SitePublishDraft {
   title: string
   description: string
   torrentPath: string
+  trackers?: string[]
+  bangumiId?: number
+  subtitleGroupId?: number
+  publishGroupId?: number
   categoryId?: number
   resolutionId?: number
   smallDescription?: string

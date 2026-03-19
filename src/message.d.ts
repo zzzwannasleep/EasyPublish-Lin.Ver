@@ -60,6 +60,8 @@ declare namespace Message {
 
     interface LoginStatus {
       status: string
+      errorCode?: string
+      message?: string
     }
 
     interface AccountInfo {

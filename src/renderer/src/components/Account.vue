@@ -15,7 +15,7 @@ import StatusChip from './feedback/StatusChip.vue'
 import { useI18n } from '../i18n'
 import { getSiteLabel } from '../services/project/presentation'
 import type { SiteId } from '../types/site'
-import { normalizeLegacyAccountStatus } from '../../../shared/utils/legacy-account-status'
+import { legacyApiStatusText, normalizeLegacyAccountStatus } from '../../../shared/utils/legacy-account-status'
 
 type LegacyAccountType = Exclude<SiteId, 'forum'>
 
@@ -176,6 +176,25 @@ function getApiTokenLabel(siteId: LegacyAccountType) {
   return siteId === 'miobt' ? t('accounts.fields.apiKey') : t('accounts.fields.apiToken')
 }
 
+function isConfiguredOnlyStatus(status: string) {
+  return (
+    status === legacyApiStatusText.tokenConfigured ||
+    status === legacyApiStatusText.credentialsConfigured
+  )
+}
+
+function getDisplayAccountStatus(status: string, enabled: boolean) {
+  if (!enabled) {
+    return 'disabled'
+  }
+
+  if (isConfiguredOnlyStatus(status)) {
+    return 'unknown'
+  }
+
+  return normalizeLegacyAccountStatus(status, enabled)
+}
+
 const visibleSiteAccounts = computed(() =>
   props.siteIds?.length ? siteAccounts.filter(item => props.siteIds!.includes(item.siteId)) : siteAccounts,
 )
@@ -193,15 +212,14 @@ const overviewItems = computed(() => [
   },
   {
     label: t('accounts.summary.authenticated'),
-    value: visibleSiteAccounts.value.filter(item => normalizeLegacyAccountStatus(item.status, item.enable) === 'loggedIn')
-      .length,
+    value: visibleSiteAccounts.value.filter(item => getDisplayAccountStatus(item.status, item.enable) === 'loggedIn').length,
     tone: 'success' as const,
   },
   {
     label: t('accounts.summary.attention'),
     value: visibleSiteAccounts.value.filter(item =>
       ['blocked', 'failed', 'passwordError', 'captchaError', 'validationFailed'].includes(
-        normalizeLegacyAccountStatus(item.status, item.enable),
+        getDisplayAccountStatus(item.status, item.enable),
       ),
     ).length,
     tone: 'warning' as const,
@@ -212,7 +230,11 @@ function getAccountStatusTone(
   status: string,
   enabled: boolean,
 ): 'neutral' | 'info' | 'success' | 'warning' | 'danger' {
-  switch (normalizeLegacyAccountStatus(status, enabled)) {
+  if (isConfiguredOnlyStatus(status)) {
+    return 'info'
+  }
+
+  switch (getDisplayAccountStatus(status, enabled)) {
     case 'loggedIn':
       return 'success'
     case 'loggedOut':
@@ -233,7 +255,11 @@ function getAccountStatusTone(
 }
 
 function getAccountStatusLabel(status: string, enabled: boolean) {
-  switch (normalizeLegacyAccountStatus(status, enabled)) {
+  if (isConfiguredOnlyStatus(status)) {
+    return status
+  }
+
+  switch (getDisplayAccountStatus(status, enabled)) {
     case 'disabled':
       return t('accounts.status.disabled')
     case 'loggedIn':
@@ -303,9 +329,39 @@ function importCookies(type: LegacyAccountType) {
   window.BTAPI.importCookies(JSON.stringify(msg))
 }
 
-function checkLoginStatus(type: LegacyAccountType | 'all') {
+async function checkLoginStatus(type: LegacyAccountType | 'all') {
   const msg: Message.BT.AccountType = { type }
-  window.BTAPI.checkLoginStatus(JSON.stringify(msg))
+  const raw = await window.BTAPI.checkLoginStatus(JSON.stringify(msg))
+  if (!raw || type === 'all') {
+    return
+  }
+
+  const result: Message.BT.LoginStatus = JSON.parse(raw)
+  const toastSiteLabel = getSiteLabel(type)
+  if (result.errorCode) {
+    ElMessage.error(`${toastSiteLabel} check failed: ${result.errorCode}`)
+    return
+  }
+  if (result.errorCode) {
+    ElMessage.error(`${getSiteLabel(type)} 检查失败，错误代码：${result.errorCode}`)
+    return
+  }
+
+  const account = siteAccounts.find(item => item.type === type)
+  const normalizedStatus: string = getDisplayAccountStatus(result.status, account?.enable ?? true)
+  if (normalizedStatus === 'failed' || normalizedStatus === 'passwordError') {
+    ElMessage.error(`${toastSiteLabel}: ${result.status}`)
+    return
+  }
+  if (normalizedStatus === 'blocked' || normalizedStatus === 'captchaError' || normalizedStatus === 'validationFailed') {
+    ElMessage.warning(`${toastSiteLabel}: ${result.status}`)
+    return
+  }
+  if (normalizedStatus === 'failed' || normalizedStatus === 'passwordError') {
+    ElMessage.error(`${getSiteLabel(type)}：${result.status}`)
+  } else if (normalizedStatus === 'blocked' || normalizedStatus === 'captchaError' || normalizedStatus === 'validationFailed') {
+    ElMessage.warning(`${getSiteLabel(type)}：${result.status}`)
+  }
 }
 
 function saveAccountInfo(type: LegacyAccountType) {
