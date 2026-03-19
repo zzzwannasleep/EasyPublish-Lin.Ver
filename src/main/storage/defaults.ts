@@ -1,10 +1,12 @@
+import { legacyApiStatusText, legacyAccountStatusText } from '../../shared/utils/legacy-account-status'
+
 export const defaultTaskData: Config.TaskData = { tasks: [] }
 
 function createDefaultLoginInfo(name: string): Config.LoginInfo {
   return {
     name,
     time: '--',
-    status: '账号未登录',
+    status: legacyAccountStatusText.loggedOut,
     username: '',
     password: '',
     apiToken: '',
@@ -39,11 +41,11 @@ export const defaultUserData: Config.UserData = {
     createDefaultLoginInfo('nyaa'),
     {
       ...createDefaultLoginInfo('mikan'),
-      status: 'API token missing',
+      status: legacyApiStatusText.tokenMissing,
     },
     {
       ...createDefaultLoginInfo('miobt'),
-      status: 'API credentials missing',
+      status: legacyApiStatusText.credentialsMissing,
     },
     createDefaultLoginInfo('acgrip'),
     createDefaultLoginInfo('dmhy'),

@@ -260,7 +260,7 @@ export const defaultSiteProfiles: SiteProfile[] = [
     name: 'Mikan',
     adapter: 'mikan',
     baseUrl: 'https://mikanani.me',
-    capabilities: ['torrent_publish', 'token_auth', 'content_preview', 'raw_response'],
+    capabilities: ['torrent_publish', 'token_auth', 'browser_login', 'content_preview', 'raw_response'],
   },
   {
     id: 'miobt',

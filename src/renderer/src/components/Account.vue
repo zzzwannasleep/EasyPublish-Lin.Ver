@@ -160,6 +160,10 @@ function usesApiToken(siteId: LegacyAccountType) {
   return siteId === 'mikan' || siteId === 'miobt'
 }
 
+function supportsBrowserLogin(siteId: LegacyAccountType) {
+  return siteId === 'mikan' || !usesApiToken(siteId)
+}
+
 function usesApiUid(siteId: LegacyAccountType) {
   return siteId === 'miobt'
 }
@@ -461,7 +465,7 @@ onMounted(() => {
           <el-button type="primary" @click="checkLoginStatus(account.type)">
             {{ t('accounts.actions.check') }}
           </el-button>
-          <el-button v-if="!usesApiToken(account.type)" plain @click="openLoginWindow(account.type)">
+          <el-button v-if="supportsBrowserLogin(account.type)" plain @click="openLoginWindow(account.type)">
             {{ t('accounts.actions.manualLogin') }}
           </el-button>
           <el-button v-if="!usesApiToken(account.type)" plain @click="importCookies(account.type)">

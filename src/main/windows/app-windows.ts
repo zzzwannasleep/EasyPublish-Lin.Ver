@@ -27,12 +27,36 @@ interface OpenLoginWindowOptions {
 
 function getLoginUrl(type: string) {
   if (type === 'bangumi') return 'https://bangumi.moe'
+  if (type === 'mikan') return 'https://mikanani.me/Account/ApiLogin'
   if (type === 'nyaa') return 'https://nyaa.si/login'
   if (type === 'acgrip') return 'https://acg.rip/users/sign_in'
   if (type === 'dmhy') return 'https://www.dmhy.org/user'
   if (type === 'acgnx_g') return 'https://www.acgnx.se/user.php?o=login'
   if (type === 'acgnx_a') return 'https://share.acgnx.se/user.php?o=login'
   return 'https://vcb-s.com'
+}
+
+function buildCookieHeader(cookies: Electron.Cookie[]) {
+  return cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ')
+}
+
+function parseMikanApiToken(data: unknown) {
+  if (data && typeof data === 'object' && 'Message' in data) {
+    const token = (data as { Message?: unknown }).Message
+    return typeof token === 'string' ? token.trim() : ''
+  }
+
+  if (typeof data !== 'string') {
+    return ''
+  }
+
+  try {
+    const payload = JSON.parse(data) as { Message?: unknown }
+    return typeof payload.Message === 'string' ? payload.Message.trim() : ''
+  } catch {
+    const match = data.match(/"Message"\s*:\s*"([^"]+)"/)
+    return match?.[1]?.trim() ?? ''
+  }
 }
 
 export function createMainAppWindow(options: CreateMainAppWindowOptions) {
@@ -188,6 +212,41 @@ export async function openLoginWindow(options: OpenLoginWindowOptions) {
     await userDB.write()
   }
 
+  async function fetchMikanApiToken() {
+    const [siteCookies, apiCookies] = await Promise.all([
+      browserSession.cookies.get({ url: 'https://mikanani.me' }),
+      browserSession.cookies.get({ url: 'https://api.mikanani.me' }),
+    ])
+    const cookies = [...siteCookies, ...apiCookies].filter(
+      (cookie, index, list) =>
+        list.findIndex(
+          item =>
+            item.name === cookie.name &&
+            item.domain === cookie.domain &&
+            item.path === cookie.path &&
+            item.value === cookie.value,
+        ) === index,
+    )
+    const cookieHeader = buildCookieHeader(cookies)
+    if (!cookieHeader) {
+      return ''
+    }
+
+    const response = await net.fetch('https://api.mikanani.me/api/Message/apikey', {
+      headers: {
+        Accept: 'application/json, text/plain, */*',
+        Cookie: cookieHeader,
+        'User-Agent': userAgent,
+      },
+      bypassCustomProtocolHandlers: true,
+    })
+    if (!response.ok) {
+      return ''
+    }
+
+    return parseMikanApiToken(await response.text())
+  }
+
   const loginWindow = new BrowserWindow({
     width: 1200,
     minWidth: 950,
@@ -228,6 +287,13 @@ export async function openLoginWindow(options: OpenLoginWindowOptions) {
         await userDB.write()
       } else {
         await setCookies(type, url)
+        if (type === 'mikan') {
+          const apiToken = await fetchMikanApiToken()
+          if (apiToken) {
+            userDB.data.info.find(item => item.name === 'mikan')!.apiToken = apiToken
+            await userDB.write()
+          }
+        }
         await checkBtLoginStatus(type)
         refreshLoginData()
       }
