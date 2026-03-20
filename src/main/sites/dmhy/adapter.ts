@@ -67,20 +67,6 @@ const DMHY_FIELD_SCHEMAS: SiteFieldSchemaEntry[] = [
     control: 'text',
     mode: 'optional',
   },
-  {
-    key: 'syncKey',
-    labelKey: 'sites.form.syncKey',
-    helpKey: 'seriesWorkspace.profileEditor.siteFields.dmhySyncKeyHelp',
-    control: 'text',
-    mode: 'optional',
-  },
-  {
-    key: 'disableDownloadSeedFile',
-    labelKey: 'sites.form.disableDownloadSeedFile',
-    helpKey: 'seriesWorkspace.profileEditor.siteFields.dmhyDisableDownloadSeedFileHelp',
-    control: 'checkbox',
-    mode: 'optional',
-  },
 ]
 
 interface DmhyResolvedAuth {

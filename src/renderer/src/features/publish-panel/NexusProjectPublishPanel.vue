@@ -31,7 +31,6 @@ interface SitePublishDraftForm {
   trackersText: string
   posterUrl: string
   emuleResource: string
-  syncKey: string
   smallDescription: string
   url: string
   technicalInfo: string
@@ -51,7 +50,6 @@ interface SitePublishDraftForm {
   doubleup: boolean
   sticky: boolean
   modQueueOptIn: boolean
-  disableDownloadSeedFile: boolean
   sectionId?: number
   categoryId?: number
   typeId?: number
@@ -374,7 +372,6 @@ function createEmptyDraft(): SitePublishDraftForm {
     trackersText: '',
     posterUrl: '',
     emuleResource: '',
-    syncKey: '',
     smallDescription: '',
     url: '',
     technicalInfo: '',
@@ -394,7 +391,6 @@ function createEmptyDraft(): SitePublishDraftForm {
     doubleup: false,
     sticky: false,
     modQueueOptIn: false,
-    disableDownloadSeedFile: false,
     sectionId: undefined,
     categoryId: undefined,
     typeId: undefined,
@@ -513,7 +509,6 @@ function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefa
   draft.trackersText = readStoredTrackersText(siteFieldDefaults.trackers ?? siteFieldDefaults.trackersText)
   draft.posterUrl = readStoredString(siteFieldDefaults.posterUrl)
   draft.emuleResource = readStoredString(siteFieldDefaults.emuleResource)
-  draft.syncKey = readStoredString(siteFieldDefaults.syncKey)
   draft.bangumiId = readStoredNumber(siteFieldDefaults.bangumiId)
   draft.subtitleGroupId = readStoredNumber(siteFieldDefaults.subtitleGroupId)
   draft.publishGroupId = readStoredNumber(siteFieldDefaults.publishGroupId)
@@ -536,7 +531,6 @@ function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefa
   draft.doubleup = readStoredBoolean(siteFieldDefaults.doubleup)
   draft.sticky = readStoredBoolean(siteFieldDefaults.sticky)
   draft.modQueueOptIn = readStoredBoolean(siteFieldDefaults.modQueueOptIn)
-  draft.disableDownloadSeedFile = readStoredBoolean(siteFieldDefaults.disableDownloadSeedFile)
 
   return draft
 }
@@ -744,9 +738,7 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
       teamId: draft.teamId,
       posterUrl: draft.posterUrl.trim() || undefined,
       trackers: trackers.length > 0 ? trackers : undefined,
-      disableDownloadSeedFile: draft.disableDownloadSeedFile,
       emuleResource: draft.emuleResource.trim() || undefined,
-      syncKey: draft.syncKey.trim() || undefined,
     }
   }
 
@@ -1338,9 +1330,7 @@ onMounted(() => {
                   <el-form-item :label="t('sites.form.posterUrl')">
                     <el-input v-model="ensureDraft(site.id).posterUrl" />
                   </el-form-item>
-                  <el-form-item :label="t('sites.form.syncKey')">
-                    <el-input v-model="ensureDraft(site.id).syncKey" />
-                  </el-form-item>
+                  <div />
                 </div>
 
                 <el-form-item :label="t('sites.form.trackers')">
@@ -1355,12 +1345,6 @@ onMounted(() => {
                 <el-form-item :label="t('sites.form.emuleResource')">
                   <el-input v-model="ensureDraft(site.id).emuleResource" type="textarea" :rows="4" />
                 </el-form-item>
-
-                <div class="nexus-site-card__flags">
-                  <el-checkbox v-model="ensureDraft(site.id).disableDownloadSeedFile">
-                    {{ t('sites.form.disableDownloadSeedFile') }}
-                  </el-checkbox>
-                </div>
               </div>
 
               <div v-if="isMikanSite(site)" class="nexus-site-card__optional-stack">

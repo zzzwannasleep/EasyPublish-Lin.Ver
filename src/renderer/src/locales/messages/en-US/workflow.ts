@@ -506,10 +506,6 @@ const workflow = {
     'This value is account-specific. After login, the publish panel can load a readable DMHY publish-team dropdown; this field is only for prefilling a known ID.',
   'seriesWorkspace.profileEditor.siteFields.dmhyPosterUrlHelp':
     'Prefill the DMHY poster URL. If left empty, the adapter will try to use the first image in the description.',
-  'seriesWorkspace.profileEditor.siteFields.dmhySyncKeyHelp':
-    'Prefill the optional BitTorrent Sync key for long-running DMHY series posts.',
-  'seriesWorkspace.profileEditor.siteFields.dmhyDisableDownloadSeedFileHelp':
-    'Enable this when DMHY should publish only a magnet link without allowing torrent file downloads.',
   'seriesWorkspace.profileEditor.siteFields.noExtraFieldsTag': 'No extra fields',
   'seriesWorkspace.profileEditor.siteFields.noExtraFieldsText':
     'This site does not expose editable default fields yet, so the current draft values will be kept for now.',

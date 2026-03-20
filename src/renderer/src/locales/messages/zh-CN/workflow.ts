@@ -486,10 +486,6 @@ const workflow = {
     '这项和账号绑定。登录后，发布面板可以读取中文“发布方式”下拉；这里仅用于预填你已经知道的 ID。',
   'seriesWorkspace.profileEditor.siteFields.dmhyPosterUrlHelp':
     '预填宣传海报地址；如果留空，适配器会尝试使用简介里的第一张图片。',
-  'seriesWorkspace.profileEditor.siteFields.dmhySyncKeyHelp':
-    '预填 BitTorrent Sync Key，适合长期连载资源复用。',
-  'seriesWorkspace.profileEditor.siteFields.dmhyDisableDownloadSeedFileHelp':
-    '默认勾选“取消种子下载，仅提供磁力链接”。',
   'seriesWorkspace.profileEditor.siteFields.noExtraFieldsTag': '暂无字段',
   'seriesWorkspace.profileEditor.siteFields.noExtraFieldsText': '这个站点的默认字段还没有接入，当前先沿用草稿里的原始值。',
   'seriesWorkspace.profileEditor.siteFields.mode.required': '必填',
