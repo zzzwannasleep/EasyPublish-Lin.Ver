@@ -7,6 +7,7 @@ import '@toast-ui/editor/dist/toastui-editor.css'
 import '@toast-ui/editor/dist/theme/toastui-editor-dark.css'
 import { marked } from 'marked'
 import { useRouter } from 'vue-router'
+import { useI18n } from '../../i18n'
 import { projectBridge } from '../../services/bridge/project'
 import { siteBridge } from '../../services/bridge/site'
 import { taskBridge } from '../../services/bridge/task'
@@ -21,7 +22,7 @@ import type {
   SeriesPublishProfileSiteDrafts,
   SeriesPublishProfileSiteFieldDefaults,
 } from '../../types/project'
-import type { SiteCatalogEntry, SiteId } from '../../types/site'
+import type { SiteCatalogEntry, SiteFieldSchemaEntry, SiteId } from '../../types/site'
 
 const SITE_ORDER: SiteId[] = ['bangumi', 'mikan', 'miobt', 'nyaa', 'acgrip', 'dmhy', 'acgnx_a', 'acgnx_g']
 const SITE_FORMAT_MAP: Partial<Record<SiteId, MarkupFormat | 'auto'>> = {
@@ -54,6 +55,15 @@ type DraftTorrentEntry = {
   bodyOverride: string
 }
 
+type PublishProfileSiteFieldValue = string | number | boolean | undefined
+type PublishProfileSiteFieldSchema = SiteFieldSchemaEntry
+type OptionalSiteFieldCard = {
+  siteId: SiteId
+  siteName: string
+  fields: PublishProfileSiteFieldSchema[]
+  entry: Record<string, PublishProfileSiteFieldValue>
+}
+
 const props = defineProps<{
   id: number
   project: PublishProject
@@ -61,6 +71,7 @@ const props = defineProps<{
 
 const router = useRouter()
 const isDark = useDark()
+const { t } = useI18n()
 
 const workspace = ref<SeriesProjectWorkspace | null>(null)
 const draftConfig = ref<Config.PublishConfig | null>(null)
@@ -73,6 +84,7 @@ const isSavingOverview = ref(false)
 const isSavingProfile = ref(false)
 const isImportingProfile = ref(false)
 const isExportingProfile = ref(false)
+const isPreparingReview = ref(false)
 const isCreatingEpisode = ref(false)
 const episodeDialogVisible = ref(false)
 const bodyTemplateView = ref<'editor' | 'preview'>('editor')
@@ -245,6 +257,74 @@ function createHiddenProfileState(seed?: Partial<HiddenProfileState>): HiddenPro
   }
 }
 
+function normalizeSiteFieldString(value: unknown) {
+  if (typeof value === 'string') {
+    return value.trim()
+  }
+
+  return ''
+}
+
+function normalizeSiteFieldNumber(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+
+  return undefined
+}
+
+function normalizeSiteFieldBoolean(value: unknown) {
+  if (value === true || value === false) {
+    return value
+  }
+
+  return undefined
+}
+
+function getSiteFieldDefaultValue(field: PublishProfileSiteFieldSchema): PublishProfileSiteFieldValue {
+  switch (field.control) {
+    case 'checkbox':
+      return undefined
+    case 'number':
+      return undefined
+    case 'text':
+    case 'select':
+    default:
+      return ''
+  }
+}
+
+function normalizeSiteFieldFormValue(value: unknown, field: PublishProfileSiteFieldSchema): PublishProfileSiteFieldValue {
+  switch (field.control) {
+    case 'checkbox':
+      return normalizeSiteFieldBoolean(value)
+    case 'number':
+      return normalizeSiteFieldNumber(value)
+    case 'text':
+    case 'select':
+    default:
+      return normalizeSiteFieldString(value)
+  }
+}
+
+function serializeSiteFieldValue(field: PublishProfileSiteFieldSchema, value: unknown) {
+  switch (field.control) {
+    case 'checkbox':
+      return normalizeSiteFieldBoolean(value)
+    case 'number':
+      return normalizeSiteFieldNumber(value)
+    case 'text':
+    case 'select':
+    default:
+      return normalizeSiteFieldString(value) || undefined
+  }
+}
+
 function sortSiteIds(siteIds: SiteId[]) {
   const uniqueSiteIds = [...new Set(siteIds.filter(Boolean))]
   return uniqueSiteIds.sort((left, right) => {
@@ -309,6 +389,73 @@ function getSiteFormatLabel(siteId: SiteId) {
   return 'HTML'
 }
 
+function getSiteFieldSchemas(siteId: SiteId): PublishProfileSiteFieldSchema[] {
+  return availableSites.value.find(site => site.id === siteId)?.fieldSchemas ?? []
+}
+
+function getOptionalSiteFieldSchemas(siteId: SiteId): PublishProfileSiteFieldSchema[] {
+  return getSiteFieldSchemas(siteId).filter(field => field.mode === 'optional')
+}
+
+function ensureOptionalSiteFieldDefaults(siteIds: SiteId[] = profileForm.targetSites) {
+  const nextSiteFieldDefaults = hiddenProfileState.siteFieldDefaults ?? {}
+  if (!hiddenProfileState.siteFieldDefaults) {
+    hiddenProfileState.siteFieldDefaults = nextSiteFieldDefaults
+  }
+
+  sortSiteIds([...siteIds, ...(Object.keys(nextSiteFieldDefaults) as SiteId[])]).forEach(siteId => {
+    const fields = getOptionalSiteFieldSchemas(siteId)
+    if (!fields.length) {
+      return
+    }
+
+    const currentEntry = nextSiteFieldDefaults[siteId]
+    const nextEntry =
+      currentEntry && typeof currentEntry === 'object' && !Array.isArray(currentEntry)
+        ? ({ ...(currentEntry as Record<string, unknown>) } as Record<string, PublishProfileSiteFieldValue>)
+        : ({} as Record<string, PublishProfileSiteFieldValue>)
+
+    fields.forEach(field => {
+      const normalizedValue = normalizeSiteFieldFormValue(nextEntry[field.key], field)
+      nextEntry[field.key] = normalizedValue === undefined ? getSiteFieldDefaultValue(field) : normalizedValue
+    })
+
+    nextSiteFieldDefaults[siteId] = nextEntry
+  })
+}
+
+function buildSiteFieldDefaultsPayload() {
+  const source = hiddenProfileState.siteFieldDefaults
+  if (!source) {
+    return undefined
+  }
+
+  const nextFieldDefaults: SeriesPublishProfileSiteFieldDefaults = {}
+  sortSiteIds([...profileForm.targetSites, ...(Object.keys(source) as SiteId[])]).forEach(siteId => {
+    const sourceEntry = source[siteId]
+    if (!sourceEntry || typeof sourceEntry !== 'object' || Array.isArray(sourceEntry)) {
+      return
+    }
+
+    const nextEntry: Record<string, unknown> = { ...(sourceEntry as Record<string, unknown>) }
+    getOptionalSiteFieldSchemas(siteId).forEach(field => {
+      const serializedValue = serializeSiteFieldValue(field, nextEntry[field.key])
+      if (serializedValue === undefined) {
+        delete nextEntry[field.key]
+        return
+      }
+
+      nextEntry[field.key] = serializedValue
+    })
+
+    if (Object.keys(nextEntry).length > 0) {
+      nextFieldDefaults[siteId] = nextEntry
+    }
+  })
+
+  return Object.keys(nextFieldDefaults).length > 0 ? nextFieldDefaults : undefined
+}
+
 function loadDraftState(config?: Config.PublishConfig | null) {
   draftTorrentEntries.value = normalizeDraftTorrentEntries(config)
 
@@ -345,12 +492,43 @@ function buildDraftConfigSnapshot(seed?: Config.PublishConfig | null) {
     draftTorrentEntries.value.find(entry => entry.id === activeTorrentId.value) ??
     draftTorrentEntries.value.find(entry => entry.enabled) ??
     draftTorrentEntries.value[0]
+  const nextTargetSites = sortSiteIds([...profileForm.targetSites])
+  const nextBodyTemplate = profileForm.bodyTemplate.trim()
+  const nextSiteFieldDefaults = buildSiteFieldDefaultsPayload()
 
   nextConfig.title = activeEntry?.titleOverride.trim() || draftTitle.value.trim()
   nextConfig.torrentEntries = serializedEntries.length > 0 ? serializedEntries : undefined
   nextConfig.activeTorrentId = activeEntry?.id
   nextConfig.torrentPath = activeEntry?.path ?? ''
   nextConfig.torrentName = activeEntry?.name ?? ''
+  nextConfig.targetSites = nextTargetSites
+
+  if (nextConfig.content && typeof nextConfig.content === 'object' && 'targetSites' in nextConfig.content) {
+    nextConfig.content.targetSites = [...nextTargetSites]
+  }
+
+  if (nextBodyTemplate) {
+    nextConfig.bodyTemplate = nextBodyTemplate
+    nextConfig.bodyTemplateFormat = 'md'
+  } else {
+    delete nextConfig.bodyTemplate
+    delete nextConfig.bodyTemplateFormat
+  }
+
+  if (nextSiteFieldDefaults && Object.keys(nextSiteFieldDefaults).length > 0) {
+    nextConfig.siteFieldDefaults = nextSiteFieldDefaults
+    const bangumiCategory = nextSiteFieldDefaults.bangumi?.category_bangumi
+    const nyaaCategory = nextSiteFieldDefaults.nyaa?.category_nyaa
+    if (typeof bangumiCategory === 'string' && bangumiCategory.trim()) {
+      nextConfig.category_bangumi = bangumiCategory
+    }
+    if (typeof nyaaCategory === 'string' && nyaaCategory.trim()) {
+      nextConfig.category_nyaa = nyaaCategory
+    }
+  } else {
+    delete nextConfig.siteFieldDefaults
+  }
+
   return nextConfig
 }
 
@@ -416,6 +594,24 @@ const authenticatedSites = computed(() =>
 const publishProfiles = computed(() => workspace.value?.publishProfiles ?? [])
 const builtEpisodeCount = computed(() => workspace.value?.episodes.length ?? 0)
 const selectedSiteNames = computed(() => profileForm.targetSites.map(siteId => getSiteName(siteId)))
+const optionalSiteFieldCards = computed<OptionalSiteFieldCard[]>(() =>
+  profileForm.targetSites.flatMap(siteId => {
+    const fields = getOptionalSiteFieldSchemas(siteId)
+    if (fields.length === 0) {
+      return []
+    }
+
+    const entry = (hiddenProfileState.siteFieldDefaults?.[siteId] ?? {}) as Record<string, PublishProfileSiteFieldValue>
+    return [
+      {
+        siteId,
+        siteName: getSiteName(siteId),
+        fields,
+        entry,
+      },
+    ]
+  }),
+)
 const overviewEpisodeText = computed(() => {
   if (!overviewForm.plannedEpisodeCount) {
     return `${builtEpisodeCount.value} 集已建立`
@@ -532,6 +728,7 @@ function fillProfileForm(profile: SeriesPublishProfile | null) {
   profileForm.name = profile?.name ?? ''
   profileForm.targetSites = nextTargetSites
   profileForm.bodyTemplate = profile?.bodyTemplate?.trim() || draftConfig.value?.bodyTemplate?.trim() || DEFAULT_BODY_TEMPLATE
+  ensureOptionalSiteFieldDefaults(nextTargetSites)
 }
 
 async function syncDraftConfigFromProfile(profile: SeriesPublishProfile | null) {
@@ -638,6 +835,7 @@ function beginCreateProfile() {
   profileForm.name = ''
   profileForm.bodyTemplate = draftConfig.value?.bodyTemplate?.trim() || profileForm.bodyTemplate || DEFAULT_BODY_TEMPLATE
   profileForm.targetSites = getDraftTargetSites().filter(siteId => authenticatedSites.value.some(site => site.id === siteId))
+  ensureOptionalSiteFieldDefaults(profileForm.targetSites)
 }
 
 async function saveTorrentTitle(entryId: string) {
@@ -797,6 +995,40 @@ function toggleSite(siteId: SiteId) {
   profileForm.targetSites = isSiteSelected(siteId)
     ? profileForm.targetSites.filter(current => current !== siteId)
     : sortSiteIds([...profileForm.targetSites, siteId])
+  ensureOptionalSiteFieldDefaults(profileForm.targetSites)
+}
+
+async function goToConfirmStage() {
+  if (selectedTorrentEntries.value.length === 0) {
+    ElMessage.warning('请先至少保留一个已选中的种子')
+    return
+  }
+
+  if (profileForm.targetSites.length === 0) {
+    ElMessage.warning('请先选择至少一个发布站点')
+    return
+  }
+
+  const missingTitleEntries = selectedTorrentEntries.value.filter(entry => {
+    const resolvedTitle = entry.titleOverride.trim() || (entry.id === activeTorrentId.value ? draftTitle.value.trim() : '')
+    return !resolvedTitle
+  })
+
+  if (missingTitleEntries.length > 0) {
+    ElMessage.warning(`还有 ${missingTitleEntries.length} 个种子没有填写发布标题`)
+    return
+  }
+
+  isPreparingReview.value = true
+  try {
+    await syncDraftState()
+    await router.push({
+      name: 'check',
+      params: { id: props.id },
+    })
+  } finally {
+    isPreparingReview.value = false
+  }
 }
 
 async function saveOverview() {
@@ -832,7 +1064,7 @@ function buildProfilePayload(): SaveSeriesPublishProfileInput {
     bodyTemplate: profileForm.bodyTemplate.trim() || undefined,
     bodyTemplateFormat: 'md',
     siteDrafts: deepClone(hiddenProfileState.siteDrafts),
-    siteFieldDefaults: deepClone(hiddenProfileState.siteFieldDefaults),
+    siteFieldDefaults: buildSiteFieldDefaultsPayload(),
   }
 }
 
@@ -1216,6 +1448,69 @@ onBeforeUnmount(() => {
         <div v-else class="series-editor__empty-card">当前没有已登录且有效的站点，请先去账号页面完成登录校验。</div>
       </section>
 
+      <section v-if="optionalSiteFieldCards.length" class="series-editor__section">
+        <div class="series-editor__section-head">
+          <div>
+            <h3 class="series-editor__title">站点选填项</h3>
+            <p class="series-editor__text">这一栏固定放在正文模板上方，只会在当前配置选中了带选填字段的站点时显示，并且只展示这些站点各自已接入的选填项。</p>
+          </div>
+        </div>
+
+        <div class="series-editor__site-grid series-editor__site-grid--fields">
+          <article v-for="card in optionalSiteFieldCards" :key="`site-field-${card.siteId}`" class="series-editor__site-card">
+            <div class="series-editor__site-card-head">
+              <div class="series-editor__site-name">{{ card.siteName }}</div>
+              <el-tag effect="plain" size="small">{{ card.fields.length }} 项选填</el-tag>
+            </div>
+            <div class="series-editor__site-card-text">这里写的是 {{ card.siteName }} 的默认选填值，后续进入发布确认页时会自动带出。</div>
+
+            <div v-for="field in card.fields" :key="field.key" class="series-editor__field">
+              <div class="series-editor__field-head">
+                <span class="series-editor__label">{{ t(field.labelKey) }}</span>
+              </div>
+
+              <el-select v-if="field.control === 'select'" v-model="card.entry[field.key]" clearable>
+                <el-option
+                  v-for="option in field.options ?? []"
+                  :key="option.value"
+                  :label="option.labelKey ? t(option.labelKey) : option.label"
+                  :value="option.value"
+                />
+              </el-select>
+
+              <el-switch v-else-if="field.control === 'checkbox'" v-model="card.entry[field.key]" />
+
+              <el-input-number
+                v-else-if="field.control === 'number'"
+                v-model="card.entry[field.key]"
+                :controls="false"
+                :min="field.min"
+                :max="field.max"
+                :step="field.step ?? 1"
+              />
+
+              <el-input
+                v-else-if="field.key === 'trackersText'"
+                v-model="card.entry[field.key]"
+                type="textarea"
+                :rows="4"
+                resize="vertical"
+                :placeholder="field.placeholderKey ? t(field.placeholderKey) : undefined"
+              />
+
+              <el-input
+                v-else
+                v-model="card.entry[field.key]"
+                clearable
+                :placeholder="field.placeholderKey ? t(field.placeholderKey) : undefined"
+              />
+
+              <span class="series-editor__field-help">{{ t(field.helpKey) }}</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <section class="series-editor__section">
         <div class="series-editor__section-head">
           <div>
@@ -1313,6 +1608,18 @@ onBeforeUnmount(() => {
             <div v-if="renderedHtmlPreview" class="series-editor__html-preview series-editor__html-preview--expanded" v-html="renderedHtmlPreview"></div>
             <div v-else class="series-editor__muted">模板为空时，这里不会生成预览。</div>
           </article>
+        </div>
+      </section>
+
+      <section class="series-editor__section">
+        <div class="series-editor__section-head">
+          <div>
+            <h3 class="series-editor__title">确认发布</h3>
+            <p class="series-editor__text">进入确认页前会先保存当前草稿，再统一检查标题、正文和目标站点。</p>
+          </div>
+          <div class="series-editor__actions">
+            <el-button type="primary" :loading="isPreparingReview" @click="goToConfirmStage">确认并检查</el-button>
+          </div>
         </div>
       </section>
     </template>
@@ -1415,9 +1722,11 @@ onBeforeUnmount(() => {
 
 .series-editor__meta-line,
 .series-editor__text,
+.series-editor__site-card-text,
 .series-editor__site-note,
 .series-editor__muted,
-.series-editor__profile-meta {
+.series-editor__profile-meta,
+.series-editor__field-help {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.6;
@@ -1463,6 +1772,7 @@ onBeforeUnmount(() => {
 .series-editor__config-bar-actions,
 .series-editor__chip-row,
 .series-editor__site-card-head,
+.series-editor__field-head,
 .series-editor__site-foot,
 .series-editor__section-head,
 .series-editor__site-preview-head,
@@ -1856,9 +2166,21 @@ onBeforeUnmount(() => {
   gap: 14px;
 }
 
+.series-editor__site-grid--fields {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
 .series-editor__site-card {
   display: grid;
   gap: 12px;
+}
+
+.series-editor__field-head {
+  justify-content: space-between;
+}
+
+.series-editor__field :deep(.el-input-number) {
+  width: 100%;
 }
 
 .series-editor__site-card.is-active {
@@ -1903,6 +2225,7 @@ onBeforeUnmount(() => {
   .series-editor__inline-form,
   .series-editor__template-toolbar,
   .series-editor__site-card-head,
+  .series-editor__field-head,
   .series-editor__site-foot {
     flex-direction: column;
     align-items: stretch;

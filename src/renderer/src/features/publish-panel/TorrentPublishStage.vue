@@ -21,7 +21,11 @@ const shouldShowAdapterPanel = computed(() => {
     return false
   }
 
-  return project.value.projectMode !== 'episode' || project.value.targetSites.includes('mikan')
+  return (
+    project.value.projectMode !== 'episode' ||
+    project.value.targetSites.includes('mikan') ||
+    project.value.targetSites.includes('dmhy')
+  )
 })
 const legacySiteTypes = computed<LegacyStageSiteType[]>(() => {
   if (!project.value || project.value.projectMode !== 'episode') {

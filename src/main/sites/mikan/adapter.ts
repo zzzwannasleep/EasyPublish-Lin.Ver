@@ -1,10 +1,44 @@
 import axios from 'axios'
 import fs from 'fs'
 import { buildSiteCapabilitySet } from '../../../shared/types/site'
-import type { SiteCatalogEntry, SiteProfile, SiteValidationIssue } from '../../../shared/types/site'
+import type { SiteCatalogEntry, SiteFieldSchemaEntry, SiteProfile, SiteValidationIssue } from '../../../shared/types/site'
 import type { SiteAdapter } from '../adapter'
 
 const MIKAN_EPISODE_ENDPOINT = 'https://api.mikanani.me/api/episode'
+const MIKAN_FIELD_SCHEMAS: SiteFieldSchemaEntry[] = [
+  {
+    key: 'trackersText',
+    labelKey: 'sites.form.trackers',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.mikanTrackersHelp',
+    control: 'text',
+    mode: 'optional',
+    placeholderKey: 'sites.form.trackersPlaceholder',
+  },
+  {
+    key: 'bangumiId',
+    labelKey: 'sites.form.bangumiId',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.mikanBangumiIdHelp',
+    control: 'number',
+    mode: 'optional',
+    min: 1,
+  },
+  {
+    key: 'subtitleGroupId',
+    labelKey: 'sites.form.subtitleGroupId',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.mikanSubtitleGroupIdHelp',
+    control: 'number',
+    mode: 'optional',
+    min: 1,
+  },
+  {
+    key: 'publishGroupId',
+    labelKey: 'sites.form.publishGroupId',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.mikanPublishGroupIdHelp',
+    control: 'number',
+    mode: 'optional',
+    min: 1,
+  },
+]
 
 interface MikanPublishDraft {
   title: string
@@ -93,6 +127,13 @@ function readResponseMessage(data: unknown): string | undefined {
   }
 }
 
+function cloneSiteFieldSchemas(fieldSchemas: SiteFieldSchemaEntry[] = []) {
+  return fieldSchemas.map(field => ({
+    ...field,
+    options: field.options?.map(option => ({ ...option })),
+  }))
+}
+
 function describeMikanSite(profile: SiteProfile): SiteCatalogEntry {
   return {
     id: profile.id,
@@ -109,7 +150,7 @@ function describeMikanSite(profile: SiteProfile): SiteCatalogEntry {
       'Optional description, trackers, Bangumi/subtitle group ids, and publish group id are supported.',
     ],
     customFieldMap: profile.customFieldMap,
-    fieldSchemas: [],
+    fieldSchemas: cloneSiteFieldSchemas(MIKAN_FIELD_SCHEMAS),
   }
 }
 
@@ -117,7 +158,7 @@ function validateMikanPublishDraft(profile: SiteProfile, payload: Record<string,
   const issues: SiteValidationIssue[] = []
   const title = asString(payload.title)
   const torrentPath = asString(payload.torrentPath)
-  const trackers = parseTrackers(payload.trackers)
+  const trackers = parseTrackers(payload.trackers ?? payload.trackersText)
   const bangumiId = asPositiveNumber(payload.bangumiId)
   const subtitleGroupId = asPositiveNumber(payload.subtitleGroupId)
   const publishGroupId = asPositiveNumber(payload.publishGroupId)
@@ -201,7 +242,7 @@ function parseMikanPublishDraft(profile: SiteProfile, payload: Record<string, un
   const title = asString(payload.title)
   const torrentPath = asString(payload.torrentPath)
   const description = asString(payload.description)
-  const trackers = parseTrackers(payload.trackers).slice(0, 10)
+  const trackers = parseTrackers(payload.trackers ?? payload.trackersText).slice(0, 10)
   const bangumiId = asPositiveNumber(payload.bangumiId)
   const subtitleGroupId = asPositiveNumber(payload.subtitleGroupId)
   const publishGroupId = asPositiveNumber(payload.publishGroupId)

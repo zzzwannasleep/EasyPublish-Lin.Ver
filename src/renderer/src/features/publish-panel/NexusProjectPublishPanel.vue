@@ -29,6 +29,9 @@ interface SitePublishDraftForm {
   description: string
   torrentPath: string
   trackersText: string
+  posterUrl: string
+  emuleResource: string
+  syncKey: string
   smallDescription: string
   url: string
   technicalInfo: string
@@ -48,9 +51,11 @@ interface SitePublishDraftForm {
   doubleup: boolean
   sticky: boolean
   modQueueOptIn: boolean
+  disableDownloadSeedFile: boolean
   sectionId?: number
   categoryId?: number
   typeId?: number
+  teamId?: number
   resolutionId?: number
   bangumiId?: number
   subtitleGroupId?: number
@@ -186,6 +191,10 @@ function isMikanSite(site: SiteCatalogEntry) {
   return site.adapter === 'mikan'
 }
 
+function isDmhySite(site: SiteCatalogEntry) {
+  return site.adapter === 'dmhy'
+}
+
 function supportsMetadata(site: SiteCatalogEntry) {
   return site.capabilitySet.metadata.sections
 }
@@ -260,7 +269,15 @@ function getAccountStatusLabel(siteId: SiteId) {
 }
 
 function getSharedFieldText(site: SiteCatalogEntry) {
-  return isMikanSite(site) ? t('nexus.site.sharedFieldsMikan') : t('nexus.site.sharedFields')
+  if (isMikanSite(site)) {
+    return t('nexus.site.sharedFieldsMikan')
+  }
+
+  if (isDmhySite(site)) {
+    return t('nexus.site.sharedFieldsDmhy')
+  }
+
+  return t('nexus.site.sharedFields')
 }
 
 function parseTrackerText(value: string) {
@@ -343,6 +360,9 @@ function createEmptyDraft(): SitePublishDraftForm {
     description: '',
     torrentPath: '',
     trackersText: '',
+    posterUrl: '',
+    emuleResource: '',
+    syncKey: '',
     smallDescription: '',
     url: '',
     technicalInfo: '',
@@ -362,9 +382,11 @@ function createEmptyDraft(): SitePublishDraftForm {
     doubleup: false,
     sticky: false,
     modQueueOptIn: false,
+    disableDownloadSeedFile: false,
     sectionId: undefined,
     categoryId: undefined,
     typeId: undefined,
+    teamId: undefined,
     resolutionId: undefined,
     bangumiId: undefined,
     subtitleGroupId: undefined,
@@ -474,8 +496,12 @@ function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefa
   draft.sectionId = readStoredNumber(siteFieldDefaults.sectionId)
   draft.categoryId = readStoredNumber(siteFieldDefaults.categoryId)
   draft.typeId = readStoredNumber(siteFieldDefaults.typeId)
+  draft.teamId = readStoredNumber(siteFieldDefaults.teamId)
   draft.resolutionId = readStoredNumber(siteFieldDefaults.resolutionId)
   draft.trackersText = readStoredTrackersText(siteFieldDefaults.trackers ?? siteFieldDefaults.trackersText)
+  draft.posterUrl = readStoredString(siteFieldDefaults.posterUrl)
+  draft.emuleResource = readStoredString(siteFieldDefaults.emuleResource)
+  draft.syncKey = readStoredString(siteFieldDefaults.syncKey)
   draft.bangumiId = readStoredNumber(siteFieldDefaults.bangumiId)
   draft.subtitleGroupId = readStoredNumber(siteFieldDefaults.subtitleGroupId)
   draft.publishGroupId = readStoredNumber(siteFieldDefaults.publishGroupId)
@@ -498,6 +524,7 @@ function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefa
   draft.doubleup = readStoredBoolean(siteFieldDefaults.doubleup)
   draft.sticky = readStoredBoolean(siteFieldDefaults.sticky)
   draft.modQueueOptIn = readStoredBoolean(siteFieldDefaults.modQueueOptIn)
+  draft.disableDownloadSeedFile = readStoredBoolean(siteFieldDefaults.disableDownloadSeedFile)
 
   return draft
 }
@@ -571,6 +598,10 @@ function applyMetadataDefaults(siteId: SiteId, metadata: SiteMetadataRecord) {
   if (!draft.typeId || !section?.categories.some(category => category.id === draft.typeId)) {
     draft.typeId = section?.categories[0]?.id
   }
+  const teamField = section?.subCategories.find(subCategory => subCategory.field === 'teamId')
+  if (teamField && (!draft.teamId || !teamField.data.some(option => option.id === draft.teamId))) {
+    draft.teamId = teamField.data[0]?.id
+  }
   draft.subCategories = Object.fromEntries(
     (section?.subCategories ?? []).map(subCategory => [subCategory.field, draft.subCategories[subCategory.field]]),
   )
@@ -580,6 +611,14 @@ function getSelectedSection(siteId: SiteId) {
   const metadata = getMetadata(siteId)
   const draft = ensureDraft(siteId)
   return metadata?.sections.find(section => section.id === draft.sectionId) ?? metadata?.sections[0]
+}
+
+function getDmhyMetadataSection(siteId: SiteId) {
+  return getMetadata(siteId)?.sections[0]
+}
+
+function getDmhyTeamOptions(siteId: SiteId) {
+  return getDmhyMetadataSection(siteId)?.subCategories.find(subCategory => subCategory.field === 'teamId')?.data ?? []
 }
 
 function onSectionChange(siteId: SiteId) {
@@ -657,6 +696,19 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
       bangumiId: draft.bangumiId,
       subtitleGroupId: draft.subtitleGroupId,
       publishGroupId: draft.publishGroupId,
+    }
+  }
+
+  if (site?.adapter === 'dmhy') {
+    const trackers = parseTrackerText(draft.trackersText)
+    return {
+      ...baseInput,
+      teamId: draft.teamId,
+      posterUrl: draft.posterUrl.trim() || undefined,
+      trackers: trackers.length > 0 ? trackers : undefined,
+      disableDownloadSeedFile: draft.disableDownloadSeedFile,
+      emuleResource: draft.emuleResource.trim() || undefined,
+      syncKey: draft.syncKey.trim() || undefined,
     }
   }
 
@@ -1047,7 +1099,7 @@ onMounted(() => {
         <section class="nexus-site-card__body">
           <div class="nexus-site-card__section-title">{{ t('nexus.site.requiredSection') }}</div>
 
-          <div v-if="supportsMetadata(site) && getMetadata(site.id)" class="nexus-form__grid">
+          <div v-if="site.adapter === 'nexusphp' && supportsMetadata(site) && getMetadata(site.id)" class="nexus-form__grid">
             <el-form-item :label="t('sites.form.section')">
               <el-select v-model="ensureDraft(site.id).sectionId" @change="onSectionChange(site.id)">
                 <el-option
@@ -1071,6 +1123,30 @@ onMounted(() => {
             </el-form-item>
           </div>
 
+          <div v-else-if="isDmhySite(site) && getMetadata(site.id)" class="nexus-form__grid">
+            <el-form-item :label="t('sites.form.category')">
+              <el-select v-model="ensureDraft(site.id).typeId">
+                <el-option
+                  v-for="category in getDmhyMetadataSection(site.id)?.categories ?? []"
+                  :key="category.id"
+                  :label="`${category.name} (${category.id})`"
+                  :value="category.id"
+                />
+              </el-select>
+            </el-form-item>
+
+            <el-form-item :label="t('sites.form.teamId')">
+              <el-select v-model="ensureDraft(site.id).teamId">
+                <el-option
+                  v-for="team in getDmhyTeamOptions(site.id)"
+                  :key="team.id"
+                  :label="`${team.name} (${team.id})`"
+                  :value="team.id"
+                />
+              </el-select>
+            </el-form-item>
+          </div>
+
           <div v-else-if="site.adapter === 'nexusphp'" class="nexus-site-card__manual">
             <div class="nexus-site-card__hint">
               {{ getMetadataError(site.id) || t('nexus.site.manualTypeHint') }}
@@ -1078,6 +1154,20 @@ onMounted(() => {
             <div class="nexus-form__grid">
               <el-form-item :label="t('nexus.site.manualTypeId')">
                 <el-input-number v-model="ensureDraft(site.id).typeId" :controls="false" :min="1" />
+              </el-form-item>
+            </div>
+          </div>
+
+          <div v-else-if="isDmhySite(site)" class="nexus-site-card__manual">
+            <div class="nexus-site-card__hint">
+              {{ getMetadataError(site.id) || t('nexus.site.dmhyManualHint') }}
+            </div>
+            <div class="nexus-form__grid">
+              <el-form-item :label="t('sites.form.category')">
+                <el-input-number v-model="ensureDraft(site.id).typeId" :controls="false" :min="1" />
+              </el-form-item>
+              <el-form-item :label="t('sites.form.teamId')">
+                <el-input-number v-model="ensureDraft(site.id).teamId" :controls="false" :min="0" />
               </el-form-item>
             </div>
           </div>
@@ -1102,7 +1192,7 @@ onMounted(() => {
 
           <el-collapse v-if="hasOptionalSiteFields(site)" v-model="advancedSiteIds" class="nexus-site-card__collapse">
             <el-collapse-item :name="site.id" :title="t('nexus.site.optionalSection')">
-              <div v-if="supportsMetadata(site)" class="nexus-site-card__optional-stack">
+              <div v-if="site.adapter === 'nexusphp' && supportsMetadata(site)" class="nexus-site-card__optional-stack">
                 <div class="nexus-form__grid">
                   <el-form-item :label="t('sites.form.smallDescription')">
                     <el-input v-model="ensureDraft(site.id).smallDescription" />
@@ -1173,6 +1263,40 @@ onMounted(() => {
                       />
                     </el-select>
                   </el-form-item>
+                </div>
+              </div>
+
+              <div v-if="isDmhySite(site)" class="nexus-site-card__optional-stack">
+                <div class="nexus-site-card__hint">
+                  {{ t('nexus.site.dmhyOptionalHint') }}
+                </div>
+
+                <div class="nexus-form__grid">
+                  <el-form-item :label="t('sites.form.posterUrl')">
+                    <el-input v-model="ensureDraft(site.id).posterUrl" />
+                  </el-form-item>
+                  <el-form-item :label="t('sites.form.syncKey')">
+                    <el-input v-model="ensureDraft(site.id).syncKey" />
+                  </el-form-item>
+                </div>
+
+                <el-form-item :label="t('sites.form.trackers')">
+                  <el-input
+                    v-model="ensureDraft(site.id).trackersText"
+                    type="textarea"
+                    :rows="4"
+                    :placeholder="t('sites.form.trackersPlaceholder')"
+                  />
+                </el-form-item>
+
+                <el-form-item :label="t('sites.form.emuleResource')">
+                  <el-input v-model="ensureDraft(site.id).emuleResource" type="textarea" :rows="4" />
+                </el-form-item>
+
+                <div class="nexus-site-card__flags">
+                  <el-checkbox v-model="ensureDraft(site.id).disableDownloadSeedFile">
+                    {{ t('sites.form.disableDownloadSeedFile') }}
+                  </el-checkbox>
                 </div>
               </div>
 

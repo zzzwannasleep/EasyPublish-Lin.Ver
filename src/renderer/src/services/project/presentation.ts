@@ -174,13 +174,13 @@ export function summarizeTargetSiteProgress(
 export function getProjectResumeRouteName(project: PublishProject): ProjectRouteName {
   switch (project.stage) {
     case 'review':
-      return project.projectMode === 'episode' ? 'bt_publish' : 'check'
+      return 'check'
     case 'torrent_publish':
-      return 'bt_publish'
+      return project.projectMode === 'episode' ? 'check' : 'bt_publish'
     case 'forum_publish':
-      return project.projectMode === 'episode' ? 'finish' : 'forum_publish'
+      return project.projectMode === 'episode' ? 'edit' : 'forum_publish'
     case 'completed':
-      return 'finish'
+      return project.projectMode === 'episode' ? 'edit' : 'finish'
     case 'edit':
     default:
       return 'edit'
@@ -197,7 +197,7 @@ export function getProjectCompletionBackRouteName(project: PublishProject): Proj
 
 export function getProjectWorkflowRouteNames(project: PublishProject): ProjectRouteName[] {
   if (project.projectMode === 'episode') {
-    return ['edit', 'bt_publish', 'finish']
+    return ['edit', 'check']
   }
 
   return ['edit', 'check', 'bt_publish', 'forum_publish', 'finish']

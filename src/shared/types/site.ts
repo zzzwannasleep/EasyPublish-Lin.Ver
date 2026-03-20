@@ -6,7 +6,7 @@ export type BuiltInSiteId = (typeof builtinSiteIds)[number]
 
 export type SiteId = string
 
-export type SiteAdapterKind = 'bangumi' | 'mikan' | 'miobt' | 'nyaa' | 'nexusphp' | 'unit3d' | 'wordpress'
+export type SiteAdapterKind = 'bangumi' | 'mikan' | 'miobt' | 'nyaa' | 'dmhy' | 'nexusphp' | 'unit3d' | 'wordpress'
 
 export type SiteCapability =
   | 'torrent_publish'
@@ -289,18 +289,17 @@ export const defaultSiteProfiles: SiteProfile[] = [
   {
     id: 'dmhy',
     name: 'DMHY',
-    adapter: 'nexusphp',
+    adapter: 'dmhy',
     baseUrl: 'https://www.dmhy.org',
     capabilities: [
       'torrent_publish',
       'cookie_auth',
       'username_password_auth',
+      'browser_login',
       'metadata_sections',
-      'metadata_tags',
       'metadata_sub_categories',
       'content_preview',
       'raw_response',
-      'nfo_upload',
     ],
   },
   {

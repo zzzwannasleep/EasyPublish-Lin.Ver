@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import Check from '../../components/Check.vue'
 import StageWorkspace from '../../components/base/StageWorkspace.vue'
 import { useI18n } from '../../i18n'
+import EpisodePublishConfirmStage from '../publish-panel/EpisodePublishConfirmStage.vue'
 import ProjectStageAside from '../project-detail/ProjectStageAside.vue'
 import { useProjectContext } from '../project-detail/project-context'
 
@@ -13,6 +14,7 @@ const props = defineProps<{
 const { t } = useI18n()
 const { project, isLoading, errorMessage } = useProjectContext()
 const projectName = computed(() => project.value?.name ?? t('common.projectWithId', { id: props.id }))
+const isSeriesProject = computed(() => project.value?.projectMode === 'episode')
 
 const notes = computed(() => [
   {
@@ -44,7 +46,8 @@ const notes = computed(() => [
     :aside-title="t('stage.shared.asideTitle')"
     :aside-description="t('stage.review.asideDescription')"
   >
-    <Check :id="id" />
+    <EpisodePublishConfirmStage v-if="isSeriesProject" :id="id" />
+    <Check v-else :id="id" />
 
     <template #aside>
       <ProjectStageAside

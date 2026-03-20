@@ -326,17 +326,17 @@ function createEmptyProfileTemplateContextForm(): ProfileTemplateContextForm {
   return {
     title: '',
     summary: '',
-    releaseTeam: 'VCB-Studio',
+    releaseTeam: '',
     seriesLabel: '',
     seriesTitleCN: '',
     seriesTitleEN: '',
     seriesTitleJP: '',
     seasonLabel: '',
     techLabel: '',
-    sourceType: 'WebRip',
+    sourceType: '',
     resolution: '',
-    videoCodec: 'HEVC',
-    audioCodec: 'AAC',
+    videoCodec: '',
+    audioCodec: '',
     variantName: '',
     videoProfile: '',
     subtitleProfile: '',
@@ -1694,7 +1694,7 @@ function buildDraftTemplateVariables(
     {
       title: config?.title?.trim() || props.project.name,
       summary: content?.summary?.trim() || t('seriesWorkspace.profileEditor.preview.summarySample'),
-      releaseTeam: content?.releaseTeam?.trim() || 'VCB-Studio',
+      releaseTeam: content?.releaseTeam?.trim() || undefined,
       seriesLabel:
         buildSeriesLabelFromValues({
           seriesTitleCN: content?.seriesTitleCN,
@@ -1822,15 +1822,15 @@ function buildPreviewVariables() {
   const previewTitle = draftConfig.value?.title?.trim() || defaultTitlePreview.value
   const previewSummary =
     draftEpisodeContent.value?.summary?.trim() || t('seriesWorkspace.profileEditor.preview.summarySample')
-  const releaseTeam = profileForm.releaseTeam.trim() || 'VCB-Studio'
+  const releaseTeam = profileForm.releaseTeam.trim() || undefined
   const seriesTitleCN = profileForm.seriesTitleCN.trim() || props.project.name
   const seriesTitleEN = profileForm.seriesTitleEN.trim() || props.project.name
   const seriesTitleJP = profileForm.seriesTitleJP.trim() || undefined
   const seasonLabel = profileForm.seasonLabel.trim() || undefined
   const resolution = profileForm.resolution.trim() || getVideoProfileLabel(primaryVideo) || undefined
   const sourceType = profileForm.sourceType.trim() || undefined
-  const videoCodec = profileForm.videoCodec.trim() || 'HEVC'
-  const audioCodec = profileForm.audioCodec.trim() || 'AAC'
+  const videoCodec = profileForm.videoCodec.trim() || undefined
+  const audioCodec = profileForm.audioCodec.trim() || undefined
   const variantPreviewName =
     getProfileCombinationNames(
       primaryVideo ? [primaryVideo] : [],

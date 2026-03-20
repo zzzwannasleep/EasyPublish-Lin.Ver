@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { Edit, FolderOpened } from '@element-plus/icons-vue'
@@ -28,16 +28,6 @@ type TagOption = {
     label: string
     value: string
   }
-}
-
-type EpisodeReleaseProfile = {
-  id: string
-  name: string
-  releaseTeam: string
-  sourceType: string
-  resolution: string
-  videoCodec: string
-  audioCodec: string
 }
 
 type EpisodeForm = {
@@ -88,8 +78,6 @@ const isSaving = ref(false)
 const createForm = ref<FormInstance>()
 const suggestedBangumiTags = ref<TagOption[]>([])
 const inputBangumiTags = ref<TagOption[]>([])
-const releaseProfiles = ref<EpisodeReleaseProfile[]>([])
-const selectedReleaseProfileId = ref('')
 const configSiteFieldDefaults = ref<SeriesPublishProfileSiteFieldDefaults | undefined>(undefined)
 
 const form = reactive<EpisodeForm>({
@@ -101,11 +89,11 @@ const form = reactive<EpisodeForm>({
   seasonLabel: '',
   episodeLabel: '',
   episodeTitle: '',
-  releaseTeam: 'VCB-Studio',
-  sourceType: 'WebRip',
-  resolution: '1080p',
-  videoCodec: 'HEVC',
-  audioCodec: 'AAC',
+  releaseTeam: '',
+  sourceType: '',
+  resolution: '',
+  videoCodec: '',
+  audioCodec: '',
   summary: '',
   category_bangumi: '549ef207fe682f7549f1ea90',
   category_nyaa: '1_3',
@@ -121,28 +109,6 @@ const targetSiteOptions: Array<{ label: string; value: SiteId }> = [
   { label: 'Mikan', value: 'mikan' },
   { label: 'MioBT', value: 'miobt' },
   { label: 'Nyaa', value: 'nyaa' },
-]
-
-const RELEASE_PROFILE_STORAGE_KEY = 'episode-release-profiles-v1'
-const defaultReleaseProfiles: EpisodeReleaseProfile[] = [
-  {
-    id: 'vcb-webrip-1080p',
-    name: 'VCB-Studio / WebRip 1080p',
-    releaseTeam: 'VCB-Studio',
-    sourceType: 'WebRip',
-    resolution: '1080p',
-    videoCodec: 'HEVC',
-    audioCodec: 'AAC',
-  },
-  {
-    id: 'vcb-bdrip-1080p',
-    name: 'VCB-Studio / BDRip 1080p',
-    releaseTeam: 'VCB-Studio',
-    sourceType: 'BDRip',
-    resolution: '1080p',
-    videoCodec: 'HEVC',
-    audioCodec: 'FLAC',
-  },
 ]
 
 const sourceTypeOptions = ['WebRip', 'BDRip', 'TVRip', 'WEB-DL']
@@ -361,9 +327,6 @@ const failedTargetLabels = computed(() => failedTargetSites.value.map(siteId => 
 const unresolvedTargetLabels = computed(() => unresolvedTargetSites.value.map(siteId => getSiteLabel(siteId)).join(', '))
 const resolvedTitle = computed(() => form.title.trim() || buildTitle())
 const summaryPlaceholder = computed(() => (form.summary.trim() ? form.summary.trim() : '这里会作为生成的 HTML / Markdown / BBCode 简介主体。'))
-const selectedReleaseProfileName = computed(
-  () => releaseProfiles.value.find(profile => profile.id === selectedReleaseProfileId.value)?.name ?? '',
-)
 const publishProgressTone = computed(() => {
   if (unresolvedTargetSites.value.length === 0 && form.targetSites.length > 0) {
     return 'success'
@@ -564,119 +527,6 @@ const variantContextCards = computed<VariantContextCard[]>(() => {
   ]
 })
 
-function loadReleaseProfiles() {
-  try {
-    const raw = window.localStorage.getItem(RELEASE_PROFILE_STORAGE_KEY)
-    if (!raw) {
-      releaseProfiles.value = [...defaultReleaseProfiles]
-      return
-    }
-
-    const parsed = JSON.parse(raw) as EpisodeReleaseProfile[]
-    releaseProfiles.value = Array.isArray(parsed) && parsed.length > 0 ? parsed : [...defaultReleaseProfiles]
-  } catch {
-    releaseProfiles.value = [...defaultReleaseProfiles]
-  }
-}
-
-function persistReleaseProfiles() {
-  window.localStorage.setItem(RELEASE_PROFILE_STORAGE_KEY, JSON.stringify(releaseProfiles.value))
-}
-
-function applyReleaseProfile(profile: EpisodeReleaseProfile) {
-  form.releaseTeam = profile.releaseTeam
-  form.sourceType = profile.sourceType
-  form.resolution = profile.resolution
-  form.videoCodec = profile.videoCodec
-  form.audioCodec = profile.audioCodec
-  selectedReleaseProfileId.value = profile.id
-}
-
-function syncSelectedReleaseProfile() {
-  const matched = releaseProfiles.value.find(profile =>
-    profile.releaseTeam === form.releaseTeam &&
-    profile.sourceType === form.sourceType &&
-    profile.resolution === form.resolution &&
-    profile.videoCodec === form.videoCodec &&
-    profile.audioCodec === form.audioCodec,
-  )
-
-  selectedReleaseProfileId.value = matched?.id ?? ''
-}
-
-function applySelectedReleaseProfile() {
-  const profile = releaseProfiles.value.find(item => item.id === selectedReleaseProfileId.value)
-  if (!profile) {
-    ElMessage.warning('请先选择一个发布规格预设')
-    return
-  }
-
-  applyReleaseProfile(profile)
-  ElMessage.success(`已套用预设：${profile.name}`)
-}
-
-async function saveCurrentAsReleaseProfile() {
-  const response = await ElMessageBox.prompt('输入一个便于识别的名称', '保存发布规格预设', {
-    confirmButtonText: '保存',
-    cancelButtonText: '取消',
-    inputValue: form.releaseTeam ? `${form.releaseTeam} / ${form.sourceType} ${form.resolution}` : '',
-  }).catch(() => undefined)
-
-  if (!response || typeof response !== 'object' || !('value' in response)) {
-    return
-  }
-
-  const name = response.value.trim()
-  if (!name) {
-    ElMessage.warning('预设名称不能为空')
-    return
-  }
-
-  const existing = releaseProfiles.value.find(profile => profile.name === name)
-  const nextProfile: EpisodeReleaseProfile = {
-    id: existing?.id ?? `${Date.now()}`,
-    name,
-    releaseTeam: form.releaseTeam.trim(),
-    sourceType: form.sourceType.trim(),
-    resolution: form.resolution.trim(),
-    videoCodec: form.videoCodec.trim(),
-    audioCodec: form.audioCodec.trim(),
-  }
-
-  const existingIndex = releaseProfiles.value.findIndex(profile => profile.id === nextProfile.id)
-  if (existingIndex >= 0) {
-    releaseProfiles.value.splice(existingIndex, 1, nextProfile)
-  } else {
-    releaseProfiles.value = [...releaseProfiles.value, nextProfile]
-  }
-
-  persistReleaseProfiles()
-  selectedReleaseProfileId.value = nextProfile.id
-  ElMessage.success(`已保存预设：${nextProfile.name}`)
-}
-
-async function removeSelectedReleaseProfile() {
-  const profile = releaseProfiles.value.find(item => item.id === selectedReleaseProfileId.value)
-  if (!profile) {
-    return
-  }
-
-  const confirmed = await ElMessageBox.confirm(`确定删除预设“${profile.name}”吗？`, '删除发布规格预设', {
-    confirmButtonText: '删除',
-    cancelButtonText: '取消',
-    type: 'warning',
-  }).then(() => true).catch(() => false)
-
-  if (!confirmed) {
-    return
-  }
-
-  releaseProfiles.value = releaseProfiles.value.filter(item => item.id !== profile.id)
-  persistReleaseProfiles()
-  syncSelectedReleaseProfile()
-  ElMessage.success(`已删除预设：${profile.name}`)
-}
-
 function buildSeriesLabel() {
   const titles = [form.seriesTitleCN.trim(), form.seriesTitleEN.trim(), form.seriesTitleJP.trim()].filter(Boolean)
   const dedupedTitles = [...new Set(titles)]
@@ -690,7 +540,7 @@ function buildSeriesLabel() {
 }
 
 function buildTitle() {
-  const team = (form.releaseTeam || 'VCB-Studio').trim()
+  const team = form.releaseTeam.trim()
   const seriesLabel = buildSeriesLabel()
   const episodeLabel = form.episodeLabel.trim()
   const episodeTitle = form.episodeTitle.trim()
@@ -699,30 +549,31 @@ function buildTitle() {
     .filter(Boolean)
     .join(' ')
 
-  let title = `[${team}] ${seriesLabel}`
-  if (episodeLabel) {
-    title += ` - ${episodeLabel}`
-  }
-  if (episodeTitle) {
-    title += ` ${episodeTitle}`
+  const prefix = [team ? `[${team}]` : '', seriesLabel].filter(Boolean).join(' ')
+  const episodeSegment = [episodeLabel, episodeTitle].filter(Boolean).join(' ')
+
+  let title = prefix
+  if (episodeSegment) {
+    title = title ? `${title} - ${episodeSegment}` : episodeSegment
   }
   if (techLabel) {
-    title += ` [${techLabel}]`
+    title = title ? `${title} [${techLabel}]` : `[${techLabel}]`
   }
 
   if (title.length <= 128) {
     return title
   }
 
-  title = `[${team}] ${form.seriesTitleEN.trim()}`
-  if (form.seasonLabel.trim()) {
-    title += ` ${form.seasonLabel.trim()}`
+  title = [team ? `[${team}]` : '', form.seriesTitleEN.trim()].filter(Boolean).join(' ')
+  const seasonLabel = form.seasonLabel.trim()
+  if (seasonLabel) {
+    title = title ? `${title} ${seasonLabel}` : seasonLabel
   }
   if (episodeLabel) {
-    title += ` - ${episodeLabel}`
+    title = title ? `${title} - ${episodeLabel}` : episodeLabel
   }
   if (techLabel) {
-    title += ` [${techLabel}]`
+    title = title ? `${title} [${techLabel}]` : `[${techLabel}]`
   }
 
   return title.slice(0, 128)
@@ -837,7 +688,6 @@ async function getTaskInfo() {
   form.tags.forEach(value => {
     suggestedBangumiTags.value.push({ label: value.label, value })
   })
-  syncSelectedReleaseProfile()
 }
 
 async function persistConfig() {
@@ -897,19 +747,11 @@ async function createConfig() {
 }
 
 onMounted(async () => {
-  loadReleaseProfiles()
   const statusMessage: Message.Task.TaskStatus = { id: props.id, step: 'edit' }
   window.taskAPI.setTaskProcess(JSON.stringify(statusMessage))
   await getTaskInfo()
   loadCompleted.value = true
 })
-
-watch(
-  () => [form.releaseTeam, form.sourceType, form.resolution, form.videoCodec, form.audioCodec],
-  () => {
-    syncSelectedReleaseProfile()
-  },
-)
 </script>
 
 <template>
@@ -1029,55 +871,26 @@ watch(
 
           <article class="episode-edit__card">
             <div class="episode-edit__card-title">发布规格</div>
-            <div class="episode-edit__preset-tools">
-              <el-select
-                v-model="selectedReleaseProfileId"
-                clearable
-                filterable
-                placeholder="选择一个发布规格预设"
-              >
-                <el-option
-                  v-for="profile in releaseProfiles"
-                  :key="profile.id"
-                  :label="profile.name"
-                  :value="profile.id"
-                />
-              </el-select>
-              <div class="episode-edit__preset-actions">
-                <el-button plain @click="applySelectedReleaseProfile">套用预设</el-button>
-                <el-button plain @click="saveCurrentAsReleaseProfile">保存当前配置</el-button>
-                <el-button plain :disabled="!selectedReleaseProfileId" @click="removeSelectedReleaseProfile">
-                  删除预设
-                </el-button>
-              </div>
-              <div class="episode-edit__preset-text">
-                {{
-                  selectedReleaseProfileName
-                    ? `当前已匹配预设：${selectedReleaseProfileName}`
-                    : '这里的规格预设仍然只作用于当前版本编辑，不承担项目级发布配置中心的职责。'
-                }}
-              </div>
-            </div>
             <el-form-item label="发布组">
-              <el-input v-model="form.releaseTeam" placeholder="默认 VCB-Studio" />
+              <el-input v-model="form.releaseTeam" placeholder="选填" clearable />
             </el-form-item>
             <el-form-item label="来源类型">
-              <el-select v-model="form.sourceType">
+              <el-select v-model="form.sourceType" clearable placeholder="选填">
                 <el-option v-for="item in sourceTypeOptions" :key="item" :label="item" :value="item" />
               </el-select>
             </el-form-item>
             <el-form-item label="分辨率">
-              <el-select v-model="form.resolution">
+              <el-select v-model="form.resolution" clearable placeholder="选填">
                 <el-option v-for="item in resolutionOptions" :key="item" :label="item" :value="item" />
               </el-select>
             </el-form-item>
             <el-form-item label="视频编码">
-              <el-select v-model="form.videoCodec">
+              <el-select v-model="form.videoCodec" clearable placeholder="选填">
                 <el-option v-for="item in videoCodecOptions" :key="item" :label="item" :value="item" />
               </el-select>
             </el-form-item>
             <el-form-item label="音频编码">
-              <el-select v-model="form.audioCodec">
+              <el-select v-model="form.audioCodec" clearable placeholder="选填">
                 <el-option v-for="item in audioCodecOptions" :key="item" :label="item" :value="item" />
               </el-select>
             </el-form-item>
@@ -1216,7 +1029,12 @@ watch(
               </div>
               <div class="episode-edit__preview-row">
                 <span>技术标签</span>
-                <strong>{{ [form.sourceType, form.resolution, form.videoCodec, form.audioCodec].join(' / ') }}</strong>
+                <strong>{{
+                  [form.sourceType, form.resolution, form.videoCodec, form.audioCodec]
+                    .map(item => item.trim())
+                    .filter(Boolean)
+                    .join(' / ') || '未填写'
+                }}</strong>
               </div>
               <div class="episode-edit__preview-row">
                 <span>简介摘要</span>
@@ -1342,8 +1160,7 @@ watch(
 
 .episode-edit__toolbar,
 .episode-edit__actions,
-.episode-edit__grid,
-.episode-edit__preset-tools {
+.episode-edit__grid {
   display: grid;
   gap: 16px;
 }
@@ -1408,8 +1225,7 @@ watch(
 }
 
 .episode-edit__switches,
-.episode-edit__progress,
-.episode-edit__preset-actions {
+.episode-edit__progress {
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
@@ -1420,12 +1236,6 @@ watch(
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.episode-edit__preset-text {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.6;
@@ -1481,11 +1291,6 @@ watch(
 
   .episode-edit__actions {
     grid-auto-flow: row;
-  }
-
-  .episode-edit__preset-actions {
-    flex-direction: column;
-    align-items: stretch;
   }
 }
 </style>

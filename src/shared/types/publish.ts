@@ -23,9 +23,11 @@ export interface SitePublishDraft {
   projectId?: number
   siteId: SiteId
   typeId: number
+  teamId?: number
   title: string
   description: string
   torrentPath: string
+  posterUrl?: string
   batchEntries?: SitePublishBatchEntry[]
   trackers?: string[]
   bangumiId?: number
@@ -53,6 +55,9 @@ export interface SitePublishDraft {
   posState?: string
   posStateUntil?: string
   pickType?: string
+  disableDownloadSeedFile?: boolean
+  emuleResource?: string
+  syncKey?: string
   anonymous?: boolean
   personalRelease?: boolean
   internal?: boolean
