@@ -481,9 +481,9 @@ const workflow = {
   'seriesWorkspace.profileEditor.siteFields.miobtReferenceUrlHelp':
     '预填 MioBT 的主页地址字段，会映射到接口里的 discuss_url。',
   'seriesWorkspace.profileEditor.siteFields.dmhyCategoryHelp':
-    '为 DMHY 预填默认分类 ID。发布时如果成功加载元数据，也可以在面板里再改。',
+    '为 DMHY 预填默认分类。发布时如果成功加载元数据，也可以在面板里再改。',
   'seriesWorkspace.profileEditor.siteFields.dmhyTeamHelp':
-    '为 DMHY 预填默认发布方式 ID；如需个人发布，可填写 0。',
+    '这项和账号绑定。登录后，发布面板可以读取中文“发布方式”下拉；这里仅用于预填你已经知道的 ID。',
   'seriesWorkspace.profileEditor.siteFields.dmhyPosterUrlHelp':
     '预填宣传海报地址；如果留空，适配器会尝试使用简介里的第一张图片。',
   'seriesWorkspace.profileEditor.siteFields.dmhySyncKeyHelp':

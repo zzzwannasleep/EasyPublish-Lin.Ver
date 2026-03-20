@@ -501,9 +501,9 @@ const workflow = {
   'seriesWorkspace.profileEditor.siteFields.miobtReferenceUrlHelp':
     'Prefill MioBT\'s homepage field. It will be sent as discuss_url in the API request.',
   'seriesWorkspace.profileEditor.siteFields.dmhyCategoryHelp':
-    'Prefill the default DMHY category ID. You can still adjust it in the publish panel after metadata loads.',
+    'Prefill the default DMHY category. You can still adjust it in the publish panel after metadata loads.',
   'seriesWorkspace.profileEditor.siteFields.dmhyTeamHelp':
-    'Prefill the default DMHY publish team ID. Use 0 when the release should be posted as a personal publish.',
+    'This value is account-specific. After login, the publish panel can load a readable DMHY publish-team dropdown; this field is only for prefilling a known ID.',
   'seriesWorkspace.profileEditor.siteFields.dmhyPosterUrlHelp':
     'Prefill the DMHY poster URL. If left empty, the adapter will try to use the first image in the description.',
   'seriesWorkspace.profileEditor.siteFields.dmhySyncKeyHelp':

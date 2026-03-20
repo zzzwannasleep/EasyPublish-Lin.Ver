@@ -1171,7 +1171,7 @@ onMounted(() => {
                 <el-option
                   v-for="category in getDmhyMetadataSection(site.id)?.categories ?? []"
                   :key="category.id"
-                  :label="`${category.name} (${category.id})`"
+                  :label="category.name"
                   :value="category.id"
                 />
               </el-select>
@@ -1182,7 +1182,7 @@ onMounted(() => {
                 <el-option
                   v-for="team in getDmhyTeamOptions(site.id)"
                   :key="team.id"
-                  :label="`${team.name} (${team.id})`"
+                  :label="team.name"
                   :value="team.id"
                 />
               </el-select>
@@ -1224,7 +1224,7 @@ onMounted(() => {
                   <el-option
                     v-for="category in getDmhyFallbackCategoryOptions(site.id)"
                     :key="category.id"
-                    :label="`${category.name} (${category.id})`"
+                    :label="category.name"
                     :value="category.id"
                   />
                 </el-select>

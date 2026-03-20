@@ -23,6 +23,7 @@ const shouldShowAdapterPanel = computed(() => {
 
   return (
     project.value.projectMode !== 'episode' ||
+    project.value.targetSites.includes('miobt') ||
     project.value.targetSites.includes('mikan') ||
     project.value.targetSites.includes('dmhy')
   )
@@ -34,7 +35,6 @@ const legacySiteTypes = computed<LegacyStageSiteType[]>(() => {
 
   const siteMap: Partial<Record<string, LegacyStageSiteType>> = {
     bangumi: 'bangumi',
-    miobt: 'miobt',
     nyaa: 'nyaa',
   }
 
@@ -43,7 +43,7 @@ const legacySiteTypes = computed<LegacyStageSiteType[]>(() => {
     .filter((siteType): siteType is LegacyStageSiteType => Boolean(siteType))
 
   if (project.value.targetSites.length === 0) {
-    return ['bangumi', 'miobt', 'nyaa']
+    return ['bangumi', 'nyaa']
   }
 
   return [...new Set(targetRows)]

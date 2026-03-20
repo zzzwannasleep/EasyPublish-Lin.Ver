@@ -107,7 +107,8 @@ const sites = {
   'nexus.site.manualCategoryId': 'Category ID',
   'nexus.site.manualResolutionId': 'Resolution ID',
   'nexus.site.manualTypeHint': '如果暂时拿不到站点元数据，也可以先手动填写站点要求的 ID。',
-  'nexus.site.dmhyManualHint': '如果暂时拿不到 DMHY 元数据，可以手动填写分类 ID；发布方式填 0 表示个人发布。',
+  'nexus.site.dmhyManualHint':
+    '如果暂时拿不到 DMHY 元数据，也可以先在这里直接选择内置分类。登录后再加载元数据，就能读取中文“发布方式”下拉；填 0 表示个人发布。',
   'nexus.actions.validateAccount': '检测账号',
   'nexus.actions.loadMetadata': '加载元数据',
   'nexus.actions.reloadMetadata': '重新加载元数据',

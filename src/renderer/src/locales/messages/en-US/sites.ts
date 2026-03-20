@@ -110,7 +110,7 @@ const sites = {
   'nexus.site.manualResolutionId': 'Resolution ID',
   'nexus.site.manualTypeHint': 'If metadata is unavailable, you can still enter the required site IDs manually.',
   'nexus.site.dmhyManualHint':
-    'If metadata is unavailable, enter the DMHY category ID manually. Use team ID 0 for personal publishing.',
+    'If metadata is unavailable, you can still choose a built-in DMHY category here. After login, load metadata to get the publish-team dropdown. Use team ID 0 for personal publishing.',
   'nexus.actions.validateAccount': 'Validate account',
   'nexus.actions.loadMetadata': 'Load metadata',
   'nexus.actions.reloadMetadata': 'Reload metadata',

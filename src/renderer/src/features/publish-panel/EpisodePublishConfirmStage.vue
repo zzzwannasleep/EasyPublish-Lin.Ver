@@ -100,7 +100,7 @@ interface PublishProgressRow {
   remoteUrl?: string
 }
 
-const LEGACY_SITE_IDS = new Set<SiteId>(['bangumi', 'miobt', 'nyaa'])
+const LEGACY_SITE_IDS = new Set<SiteId>(['bangumi', 'nyaa'])
 
 const props = defineProps<{
   id: number
@@ -880,8 +880,6 @@ function getLegacyPublishType(siteId: SiteId) {
   switch (siteId) {
     case 'bangumi':
       return 'bangumi'
-    case 'miobt':
-      return 'miobt'
     case 'nyaa':
       return 'nyaa'
     default:

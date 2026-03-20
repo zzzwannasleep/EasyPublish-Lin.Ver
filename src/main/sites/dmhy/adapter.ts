@@ -352,7 +352,7 @@ function validateDmhyPublishDraft(profile: SiteProfile, payload: Record<string, 
   if (!typeId) {
     issues.push({
       field: 'typeId',
-      message: `A DMHY category id is required before publishing to ${profile.name}`,
+      message: `A DMHY category is required before publishing to ${profile.name}`,
       severity: 'error',
     })
   }
@@ -549,7 +549,7 @@ export function createDmhyAdapter(): SiteAdapter {
         subCategories: [
           {
             field: 'teamId',
-            label: 'Team ID',
+            label: '發布方式',
             data: teams,
           },
         ],
