@@ -1222,7 +1222,15 @@ onMounted(() => {
                 </el-select>
               </el-form-item>
               <el-form-item :label="t('sites.form.teamId')">
-                <el-input-number v-model="ensureDraft(site.id).teamId" :controls="false" :min="0" />
+                <el-select v-if="getDmhyTeamOptions(site.id).length > 0" v-model="ensureDraft(site.id).teamId" clearable>
+                  <el-option
+                    v-for="team in getDmhyTeamOptions(site.id)"
+                    :key="team.id"
+                    :label="`${team.name} (${team.id})`"
+                    :value="team.id"
+                  />
+                </el-select>
+                <el-input-number v-else v-model="ensureDraft(site.id).teamId" :controls="false" :min="0" />
               </el-form-item>
             </div>
           </div>
