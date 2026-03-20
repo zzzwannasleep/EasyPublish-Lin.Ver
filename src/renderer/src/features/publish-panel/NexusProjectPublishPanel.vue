@@ -641,6 +641,24 @@ function getDmhyTeamOptions(siteId: SiteId) {
   return getDmhyMetadataSection(siteId)?.subCategories.find(subCategory => subCategory.field === 'teamId')?.data ?? []
 }
 
+function getDmhyFallbackCategoryOptions(siteId: SiteId) {
+  return (
+    getSite(siteId)?.fieldSchemas?.find(field => field.key === 'typeId')?.options?.reduce<Array<{ id: number; name: string }>>(
+      (options, option) => {
+        const id = Number(option.value)
+        if (Number.isFinite(id) && id > 0) {
+          options.push({
+            id,
+            name: option.labelKey ? t(option.labelKey) : option.label,
+          })
+        }
+        return options
+      },
+      [],
+    ) ?? []
+  )
+}
+
 function onSectionChange(siteId: SiteId) {
   resetSectionDependentFields(siteId, getSelectedSection(siteId))
 }
@@ -1202,7 +1220,14 @@ onMounted(() => {
             </div>
             <div class="nexus-form__grid">
               <el-form-item :label="t('sites.form.category')">
-                <el-input-number v-model="ensureDraft(site.id).typeId" :controls="false" :min="1" />
+                <el-select v-model="ensureDraft(site.id).typeId">
+                  <el-option
+                    v-for="category in getDmhyFallbackCategoryOptions(site.id)"
+                    :key="category.id"
+                    :label="`${category.name} (${category.id})`"
+                    :value="category.id"
+                  />
+                </el-select>
               </el-form-item>
               <el-form-item :label="t('sites.form.teamId')">
                 <el-input-number v-model="ensureDraft(site.id).teamId" :controls="false" :min="0" />

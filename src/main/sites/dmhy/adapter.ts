@@ -21,15 +21,36 @@ const DMHY_SUBMIT_LABEL = '提交'
 const DMHY_UPLOAD_ENDPOINT = 'topics/add'
 const DMHY_USER_ENDPOINT = 'user'
 const DMHY_TEAM_LIST_ENDPOINT = 'topics/mlist/scope/team'
+const DMHY_CATEGORY_OPTIONS = [
+  { label: '動畫', value: '2' },
+  { label: '季度全集', value: '31' },
+  { label: '漫畫', value: '3' },
+  { label: '港台原版', value: '41' },
+  { label: '日文原版', value: '42' },
+  { label: '音樂', value: '4' },
+  { label: '動漫音樂', value: '43' },
+  { label: '同人音樂', value: '44' },
+  { label: '流行音樂', value: '15' },
+  { label: '日劇', value: '6' },
+  { label: 'ＲＡＷ', value: '7' },
+  { label: '遊戲', value: '9' },
+  { label: '電腦遊戲', value: '17' },
+  { label: '電視遊戲', value: '18' },
+  { label: '掌機遊戲', value: '19' },
+  { label: '網絡遊戲', value: '20' },
+  { label: '遊戲周邊', value: '21' },
+  { label: '特攝', value: '12' },
+  { label: '其他', value: '1' },
+] as const
 
 const DMHY_FIELD_SCHEMAS: SiteFieldSchemaEntry[] = [
   {
     key: 'typeId',
     labelKey: 'sites.form.category',
     helpKey: 'seriesWorkspace.profileEditor.siteFields.dmhyCategoryHelp',
-    control: 'number',
+    control: 'select',
     mode: 'required',
-    min: 1,
+    options: [...DMHY_CATEGORY_OPTIONS],
   },
   {
     key: 'teamId',
