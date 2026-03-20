@@ -496,6 +496,10 @@ const workflow = {
     'Prefill the Mikan subtitle group ID. It must be provided together with the Bangumi ID.',
   'seriesWorkspace.profileEditor.siteFields.mikanPublishGroupIdHelp':
     'Prefill the Mikan publish group ID when you need to publish on behalf of another group.',
+  'seriesWorkspace.profileEditor.siteFields.miobtCategoryHelp':
+    'Prefill the default MioBT category. You can still change it in the publish panel before uploading.',
+  'seriesWorkspace.profileEditor.siteFields.miobtReferenceUrlHelp':
+    'Prefill MioBT\'s homepage field. It will be sent as discuss_url in the API request.',
   'seriesWorkspace.profileEditor.siteFields.dmhyCategoryHelp':
     'Prefill the default DMHY category ID. You can still adjust it in the publish panel after metadata loads.',
   'seriesWorkspace.profileEditor.siteFields.dmhyTeamHelp':

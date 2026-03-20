@@ -3,6 +3,7 @@ import type { SiteAdapterKind, SiteCatalogEntry, SiteFieldSchemaEntry, SiteId, S
 import type { SiteAdapter } from './adapter'
 import { createDmhyAdapter } from './dmhy/adapter'
 import { createMikanAdapter } from './mikan/adapter'
+import { createMiobtAdapter } from './miobt/adapter'
 import { createNexusphpAdapter } from './nexusphp/adapter'
 import { createUnit3dAdapter } from './unit3d/adapter'
 
@@ -68,7 +69,7 @@ function cloneSiteFieldSchemas(fieldSchemas: SiteFieldSchemaEntry[] = []): SiteF
 }
 
 function createStaticAdapter(
-  id: Exclude<SiteAdapterKind, 'mikan' | 'dmhy' | 'nexusphp' | 'unit3d'>,
+  id: Exclude<SiteAdapterKind, 'mikan' | 'miobt' | 'dmhy' | 'nexusphp' | 'unit3d'>,
   displayName: string,
   note: string,
   fieldSchemas: SiteFieldSchemaEntry[] = [],
@@ -108,8 +109,8 @@ export function createSiteRegistry(options: CreateSiteRegistryOptions = {}) {
       BANGUMI_FIELD_SCHEMAS,
     ),
     createMikanAdapter(),
+    createMiobtAdapter(),
     createDmhyAdapter(),
-    createStaticAdapter('miobt', 'MioBT', 'MioBT publishing currently runs through the legacy BT service with API key auth.'),
     createStaticAdapter(
       'nyaa',
       'Nyaa',

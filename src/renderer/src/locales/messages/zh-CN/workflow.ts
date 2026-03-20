@@ -476,6 +476,10 @@ const workflow = {
     '为 Mikan 预填字幕组 ID。这个字段必须和 Bangumi ID 一起填写。',
   'seriesWorkspace.profileEditor.siteFields.mikanPublishGroupIdHelp':
     '为 Mikan 预填发布组 ID。只有需要代其他发布组发布时才填写。',
+  'seriesWorkspace.profileEditor.siteFields.miobtCategoryHelp':
+    '为 MioBT 预填默认分类。发布时也可以在发布面板里重新选择。',
+  'seriesWorkspace.profileEditor.siteFields.miobtReferenceUrlHelp':
+    '预填 MioBT 的主页地址字段，会映射到接口里的 discuss_url。',
   'seriesWorkspace.profileEditor.siteFields.dmhyCategoryHelp':
     '为 DMHY 预填默认分类 ID。发布时如果成功加载元数据，也可以在面板里再改。',
   'seriesWorkspace.profileEditor.siteFields.dmhyTeamHelp':

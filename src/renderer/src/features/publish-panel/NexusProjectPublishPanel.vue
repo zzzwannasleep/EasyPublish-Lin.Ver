@@ -191,6 +191,10 @@ function isMikanSite(site: SiteCatalogEntry) {
   return site.adapter === 'mikan'
 }
 
+function isMiobtSite(site: SiteCatalogEntry) {
+  return site.adapter === 'miobt'
+}
+
 function isDmhySite(site: SiteCatalogEntry) {
   return site.adapter === 'dmhy'
 }
@@ -617,6 +621,10 @@ function getDmhyMetadataSection(siteId: SiteId) {
   return getMetadata(siteId)?.sections[0]
 }
 
+function getMiobtMetadataSection(siteId: SiteId) {
+  return getMetadata(siteId)?.sections[0]
+}
+
 function getDmhyTeamOptions(siteId: SiteId) {
   return getDmhyMetadataSection(siteId)?.subCategories.find(subCategory => subCategory.field === 'teamId')?.data ?? []
 }
@@ -878,7 +886,11 @@ async function bootstrap() {
     }
 
     sites.value = siteResult.data.sites.filter(
-      site => site.adapter === 'mikan' || site.adapter === 'nexusphp' || site.adapter === 'unit3d',
+      site =>
+        site.adapter === 'mikan' ||
+        site.adapter === 'miobt' ||
+        site.adapter === 'nexusphp' ||
+        site.adapter === 'unit3d',
     )
     applySharedDraft(config, content)
     batchTorrentEntries.value = createBatchTorrentEntries(config)
@@ -1147,6 +1159,20 @@ onMounted(() => {
             </el-form-item>
           </div>
 
+          <div v-else-if="isMiobtSite(site) && getMetadata(site.id)" class="nexus-form__grid">
+            <el-form-item :label="t('sites.form.category')">
+              <el-select v-model="ensureDraft(site.id).typeId">
+                <el-option
+                  v-for="category in getMiobtMetadataSection(site.id)?.categories ?? []"
+                  :key="category.id"
+                  :label="`${category.name} (${category.id})`"
+                  :value="category.id"
+                />
+              </el-select>
+            </el-form-item>
+            <div />
+          </div>
+
           <div v-else-if="site.adapter === 'nexusphp'" class="nexus-site-card__manual">
             <div class="nexus-site-card__hint">
               {{ getMetadataError(site.id) || t('nexus.site.manualTypeHint') }}
@@ -1169,6 +1195,18 @@ onMounted(() => {
               <el-form-item :label="t('sites.form.teamId')">
                 <el-input-number v-model="ensureDraft(site.id).teamId" :controls="false" :min="0" />
               </el-form-item>
+            </div>
+          </div>
+
+          <div v-else-if="isMiobtSite(site)" class="nexus-site-card__manual">
+            <div class="nexus-site-card__hint">
+              {{ getMetadataError(site.id) || t('nexus.site.manualTypeHint') }}
+            </div>
+            <div class="nexus-form__grid">
+              <el-form-item :label="t('sites.form.category')">
+                <el-input-number v-model="ensureDraft(site.id).typeId" :controls="false" :min="1" :max="6" />
+              </el-form-item>
+              <div />
             </div>
           </div>
 
@@ -1329,6 +1367,15 @@ onMounted(() => {
                     :placeholder="t('sites.form.trackersPlaceholder')"
                   />
                 </el-form-item>
+              </div>
+
+              <div v-if="isMiobtSite(site)" class="nexus-site-card__optional-stack">
+                <div class="nexus-form__grid">
+                  <el-form-item :label="t('sites.form.referenceUrl')">
+                    <el-input v-model="ensureDraft(site.id).url" />
+                  </el-form-item>
+                  <div />
+                </div>
               </div>
 
               <div v-if="isUnit3dSite(site)" class="nexus-site-card__optional-stack">

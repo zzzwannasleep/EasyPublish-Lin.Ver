@@ -267,7 +267,7 @@ export const defaultSiteProfiles: SiteProfile[] = [
     name: 'MioBT',
     adapter: 'miobt',
     baseUrl: 'https://www.miobt.com',
-    capabilities: ['torrent_publish', 'token_auth', 'content_preview'],
+    capabilities: ['torrent_publish', 'token_auth', 'metadata_sections', 'content_preview', 'raw_response'],
   },
   {
     id: 'acgrip',
