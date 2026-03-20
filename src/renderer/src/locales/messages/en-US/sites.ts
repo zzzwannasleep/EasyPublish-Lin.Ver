@@ -100,7 +100,7 @@ const sites = {
   'nexus.site.sharedFieldsDmhy':
     'This adapter uses the shared title, description, and torrent file above. Category, publish team, and DMHY-specific options are configured below.',
   'nexus.site.requiredSection': 'Required Fields',
-  'nexus.site.optionalSection': 'Optional Fields',
+  'nexus.site.optionalSection': 'Fields to Fill',
   'nexus.site.noRequiredFields': 'This adapter does not require any site-specific fields yet.',
   'nexus.site.mikanOptionalHint': 'bangumiId and subtitleGroupId must be filled together. If you enter more than 10 trackers, only the first 10 will be sent.',
   'nexus.site.dmhyOptionalHint':

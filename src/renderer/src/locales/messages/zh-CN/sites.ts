@@ -99,7 +99,7 @@ const sites = {
   'nexus.site.sharedFieldsMikan': '这个适配器会使用上方通用字段中的标题、简介和种子文件。',
   'nexus.site.sharedFieldsDmhy': '这个适配器会使用上方通用字段中的标题、简介和种子文件，分类、发布方式与附加字段在下方填写。',
   'nexus.site.requiredSection': '站点必填项',
-  'nexus.site.optionalSection': '更多可选项',
+  'nexus.site.optionalSection': '填写项目',
   'nexus.site.noRequiredFields': '这个适配器当前还没有站点专属必填字段。',
   'nexus.site.mikanOptionalHint': 'bangumiId 和 subtitleGroupId 必须成对填写。tracker 超过 10 条时，只会发送前 10 条。',
   'nexus.site.dmhyOptionalHint': '海报地址留空时，会尝试使用简介里的第一张图片。发布方式填 0 表示个人发布。',

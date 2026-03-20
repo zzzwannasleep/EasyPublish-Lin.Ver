@@ -468,12 +468,12 @@ const workflow = {
   'seriesWorkspace.profileEditor.defaultSites.configureAction': 'Open Accounts',
   'seriesWorkspace.profileEditor.defaultSites.summary': 'Current default sites: {sites}',
   'seriesWorkspace.profileEditor.targetSitesFallback': 'Keep the current draft sites',
-  'seriesWorkspace.profileEditor.siteFields.title': 'Site Default Fields',
+  'seriesWorkspace.profileEditor.siteFields.title': 'Publish Fields',
   'seriesWorkspace.profileEditor.siteFields.text':
-    'Only selected sites that can currently publish are shown here, and their defaults are rendered from the site field schema.',
+    'Only selected sites that can currently publish are shown here, and their publish-time default values are rendered from the site field schema.',
   'seriesWorkspace.profileEditor.siteFields.pendingTag': 'Next phase',
   'seriesWorkspace.profileEditor.siteFields.pendingText':
-    'The first pass focuses on selected sites and the shared site draft. Required and optional site fields will expand from here later.',
+    'The first pass focuses on selected sites and the shared site draft. Required fields and publish fields will expand from here later.',
   'seriesWorkspace.profileEditor.siteFields.empty': 'No default sites selected yet.',
   'seriesWorkspace.profileEditor.siteFields.unavailable': 'No editable default fields are available for the currently selected sites.',
   'seriesWorkspace.profileEditor.siteFields.loadErrorTitle': 'Failed to load site default fields',

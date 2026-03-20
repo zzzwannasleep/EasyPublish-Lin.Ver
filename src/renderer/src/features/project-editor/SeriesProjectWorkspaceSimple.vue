@@ -393,8 +393,8 @@ function getSiteFieldSchemas(siteId: SiteId): PublishProfileSiteFieldSchema[] {
   return availableSites.value.find(site => site.id === siteId)?.fieldSchemas ?? []
 }
 
-function getOptionalSiteFieldSchemas(siteId: SiteId): PublishProfileSiteFieldSchema[] {
-  return getSiteFieldSchemas(siteId).filter(field => field.mode === 'optional')
+function getEditableSiteFieldSchemas(siteId: SiteId): PublishProfileSiteFieldSchema[] {
+  return getSiteFieldSchemas(siteId).filter(field => field.mode !== 'readonly')
 }
 
 function ensureOptionalSiteFieldDefaults(siteIds: SiteId[] = profileForm.targetSites) {
@@ -404,7 +404,7 @@ function ensureOptionalSiteFieldDefaults(siteIds: SiteId[] = profileForm.targetS
   }
 
   sortSiteIds([...siteIds, ...(Object.keys(nextSiteFieldDefaults) as SiteId[])]).forEach(siteId => {
-    const fields = getOptionalSiteFieldSchemas(siteId)
+    const fields = getEditableSiteFieldSchemas(siteId)
     if (!fields.length) {
       return
     }
@@ -438,7 +438,7 @@ function buildSiteFieldDefaultsPayload() {
     }
 
     const nextEntry: Record<string, unknown> = { ...(sourceEntry as Record<string, unknown>) }
-    getOptionalSiteFieldSchemas(siteId).forEach(field => {
+    getEditableSiteFieldSchemas(siteId).forEach(field => {
       const serializedValue = serializeSiteFieldValue(field, nextEntry[field.key])
       if (serializedValue === undefined) {
         delete nextEntry[field.key]
@@ -596,7 +596,7 @@ const builtEpisodeCount = computed(() => workspace.value?.episodes.length ?? 0)
 const selectedSiteNames = computed(() => profileForm.targetSites.map(siteId => getSiteName(siteId)))
 const optionalSiteFieldCards = computed<OptionalSiteFieldCard[]>(() =>
   profileForm.targetSites.flatMap(siteId => {
-    const fields = getOptionalSiteFieldSchemas(siteId)
+    const fields = getEditableSiteFieldSchemas(siteId)
     if (fields.length === 0) {
       return []
     }
@@ -1451,8 +1451,8 @@ onBeforeUnmount(() => {
       <section v-if="optionalSiteFieldCards.length" class="series-editor__section">
         <div class="series-editor__section-head">
           <div>
-            <h3 class="series-editor__title">站点选填项</h3>
-            <p class="series-editor__text">这一栏固定放在正文模板上方，只会在当前配置选中了带选填字段的站点时显示，并且只展示这些站点各自已接入的选填项。</p>
+            <h3 class="series-editor__title">发布填写项</h3>
+            <p class="series-editor__text">这一栏固定放在正文模板上方，只会在当前配置选中了带发布填写项的站点时显示，并且只展示这些站点各自已接入的填写项。</p>
           </div>
         </div>
 
@@ -1460,9 +1460,9 @@ onBeforeUnmount(() => {
           <article v-for="card in optionalSiteFieldCards" :key="`site-field-${card.siteId}`" class="series-editor__site-card">
             <div class="series-editor__site-card-head">
               <div class="series-editor__site-name">{{ card.siteName }}</div>
-              <el-tag effect="plain" size="small">{{ card.fields.length }} 项选填</el-tag>
+              <el-tag effect="plain" size="small">{{ card.fields.length }} 项填写</el-tag>
             </div>
-            <div class="series-editor__site-card-text">这里写的是 {{ card.siteName }} 的默认选填值，后续进入发布确认页时会自动带出。</div>
+            <div class="series-editor__site-card-text">这里写的是 {{ card.siteName }} 的默认填写值，后续进入发布确认页时会自动带出。</div>
 
             <div v-for="field in card.fields" :key="field.key" class="series-editor__field">
               <div class="series-editor__field-head">

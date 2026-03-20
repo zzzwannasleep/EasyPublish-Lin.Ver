@@ -89,6 +89,14 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const { project, refreshProject } = useProjectContext()
+const MIOBT_CATEGORY_OPTIONS = [
+  { id: 1, name: '动画' },
+  { id: 2, name: '漫画' },
+  { id: 3, name: '音乐' },
+  { id: 4, name: '周边' },
+  { id: 5, name: '其它' },
+  { id: 6, name: 'Raw' },
+]
 
 const isBootstrapping = ref(false)
 const bootstrapError = ref('')
@@ -625,6 +633,10 @@ function getMiobtMetadataSection(siteId: SiteId) {
   return getMetadata(siteId)?.sections[0]
 }
 
+function getMiobtCategoryOptions(siteId: SiteId) {
+  return getMiobtMetadataSection(siteId)?.categories ?? MIOBT_CATEGORY_OPTIONS
+}
+
 function getDmhyTeamOptions(siteId: SiteId) {
   return getDmhyMetadataSection(siteId)?.subCategories.find(subCategory => subCategory.field === 'teamId')?.data ?? []
 }
@@ -1159,11 +1171,11 @@ onMounted(() => {
             </el-form-item>
           </div>
 
-          <div v-else-if="isMiobtSite(site) && getMetadata(site.id)" class="nexus-form__grid">
+          <div v-else-if="isMiobtSite(site)" class="nexus-form__grid">
             <el-form-item :label="t('sites.form.category')">
               <el-select v-model="ensureDraft(site.id).typeId">
                 <el-option
-                  v-for="category in getMiobtMetadataSection(site.id)?.categories ?? []"
+                  v-for="category in getMiobtCategoryOptions(site.id)"
                   :key="category.id"
                   :label="`${category.name} (${category.id})`"
                   :value="category.id"
@@ -1195,18 +1207,6 @@ onMounted(() => {
               <el-form-item :label="t('sites.form.teamId')">
                 <el-input-number v-model="ensureDraft(site.id).teamId" :controls="false" :min="0" />
               </el-form-item>
-            </div>
-          </div>
-
-          <div v-else-if="isMiobtSite(site)" class="nexus-site-card__manual">
-            <div class="nexus-site-card__hint">
-              {{ getMetadataError(site.id) || t('nexus.site.manualTypeHint') }}
-            </div>
-            <div class="nexus-form__grid">
-              <el-form-item :label="t('sites.form.category')">
-                <el-input-number v-model="ensureDraft(site.id).typeId" :controls="false" :min="1" :max="6" />
-              </el-form-item>
-              <div />
             </div>
           </div>
 
@@ -1371,10 +1371,19 @@ onMounted(() => {
 
               <div v-if="isMiobtSite(site)" class="nexus-site-card__optional-stack">
                 <div class="nexus-form__grid">
+                  <el-form-item :label="t('sites.form.category')">
+                    <el-select v-model="ensureDraft(site.id).typeId">
+                      <el-option
+                        v-for="category in getMiobtCategoryOptions(site.id)"
+                        :key="category.id"
+                        :label="`${category.name} (${category.id})`"
+                        :value="category.id"
+                      />
+                    </el-select>
+                  </el-form-item>
                   <el-form-item :label="t('sites.form.referenceUrl')">
                     <el-input v-model="ensureDraft(site.id).url" />
                   </el-form-item>
-                  <div />
                 </div>
               </div>
 

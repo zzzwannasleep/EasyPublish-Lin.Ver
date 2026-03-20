@@ -1,6 +1,4 @@
 import axios from 'axios'
-import fs from 'fs'
-import { basename } from 'path'
 import { buildSiteCapabilitySet } from '../../../shared/types/site'
 import type {
   SiteCatalogEntry,
@@ -14,7 +12,6 @@ import type {
 import type { SiteAdapter } from '../adapter'
 
 const MIOBT_POST_API_PATH = 'addon.php?r=api/post/76cad81b'
-const MIOBT_TORRENT_FIELD_NAMES = ['torrent_file', 'bt_file', 'torrent', 'file'] as const
 const MIOBT_MAX_TITLE_LENGTH = 255
 const MIOBT_MIN_INTRO_LENGTH = 20
 const MIOBT_MAX_INTRO_LENGTH = 50000
@@ -60,7 +57,6 @@ interface MioBtPublishDraft {
   typeId: number
   title: string
   description: string
-  torrentPath: string
   discussUrl?: string
 }
 
@@ -212,7 +208,6 @@ function validateMiobtPublishDraft(profile: SiteProfile, payload: Record<string,
   const typeId = asPositiveInteger(payload.typeId)
   const title = asString(payload.title)
   const description = asString(payload.description)
-  const torrentPath = asString(payload.torrentPath)
   const discussUrl = asString(payload.url ?? payload.discussUrl ?? payload.discuss_url)
 
   if (!isKnownCategoryId(typeId)) {
@@ -257,20 +252,6 @@ function validateMiobtPublishDraft(profile: SiteProfile, payload: Record<string,
     }
   }
 
-  if (!torrentPath) {
-    issues.push({
-      field: 'torrentPath',
-      message: 'A torrent file path is required',
-      severity: 'error',
-    })
-  } else if (!fs.existsSync(torrentPath)) {
-    issues.push({
-      field: 'torrentPath',
-      message: 'The selected torrent file does not exist',
-      severity: 'error',
-    })
-  }
-
   if (discussUrl && textLength(discussUrl) > MIOBT_MAX_DISCUSS_URL_LENGTH) {
     issues.push({
       field: 'url',
@@ -291,8 +272,7 @@ function parseMiobtPublishDraft(profile: SiteProfile, payload: Record<string, un
   const typeId = asPositiveInteger(payload.typeId)
   const title = asString(payload.title)
   const description = asString(payload.description)
-  const torrentPath = asString(payload.torrentPath)
-  if (!typeId || !title || !description || !torrentPath) {
+  if (!typeId || !title || !description) {
     throw new Error('MioBT publish validation did not produce the required fields')
   }
 
@@ -300,7 +280,6 @@ function parseMiobtPublishDraft(profile: SiteProfile, payload: Record<string, un
     typeId,
     title,
     description,
-    torrentPath,
     discussUrl: asString(payload.url ?? payload.discussUrl ?? payload.discuss_url),
   }
 }
@@ -417,81 +396,67 @@ export function createMiobtAdapter(): SiteAdapter {
       const client = createMiobtHttpClient()
       const siteBaseUrl = normalizeMiobtSiteBase(profile.baseUrl)
       const endpoint = joinMiobtUrl(siteBaseUrl, MIOBT_POST_API_PATH)
-      let fallbackPayload: unknown
+      const formData = new FormData()
+      formData.append('sort_id', `${draft.typeId}`)
+      formData.append('title', draft.title)
+      formData.append('intro', draft.description)
+      formData.append('discuss_url', draft.discussUrl ?? '')
+      formData.append('user_id', userId)
+      formData.append('api_key', apiKey)
 
-      for (const fieldName of MIOBT_TORRENT_FIELD_NAMES) {
-        const formData = new FormData()
-        formData.append('sort_id', `${draft.typeId}`)
-        formData.append('title', draft.title)
-        formData.append('intro', draft.description)
-        formData.append('discuss_url', draft.discussUrl ?? '')
-        formData.append('user_id', userId)
-        formData.append('api_key', apiKey)
-        formData.append(
-          fieldName,
-          new Blob([fs.readFileSync(draft.torrentPath)], { type: 'application/x-bittorrent' }),
-          basename(draft.torrentPath),
-        )
-
-        const response = await client.post(endpoint, formData, { responseType: 'text' })
-        fallbackPayload = response.data
-        const data = parseMiobtApiResponse(response.data)
-
-        if (!data) {
-          continue
-        }
-
-        const remoteId = data.infoHash
-        const remoteUrl = data.infoHash ? buildMiobtRemoteUrl(siteBaseUrl, data.infoHash) : undefined
-        const raw = {
-          fieldName,
-          response: data,
-          responseText: response.data,
-          remoteUrl,
-        }
-
-        if (data.status === 'success' && data.infoHash) {
-          return {
-            result: {
-              siteId: profile.id,
-              status: 'published',
-              remoteId,
-              remoteUrl,
-              message: remoteUrl ? `Published through MioBT adapter: ${remoteUrl}` : 'Published through MioBT adapter',
-              rawResponse: raw,
-              timestamp: new Date().toISOString(),
-            },
-            raw,
-          }
-        }
-
-        if (data.code === 103 && data.infoHash) {
-          return {
-            result: {
-              siteId: profile.id,
-              status: 'published',
-              remoteId,
-              remoteUrl,
-              message: 'MioBT reports that the torrent already exists',
-              rawResponse: raw,
-              timestamp: new Date().toISOString(),
-            },
-            raw,
-          }
-        }
-
-        if (data.code === 114 || data.message === 'auth failed') {
-          throw new Error(data.message || 'MioBT API credentials were rejected')
-        }
-
-        if (data.code === 116) {
-          throw new Error(data.message || 'MioBT API quota exceeded, please try later')
-        }
-
-        throw new Error(data.message || `MioBT publish failed with code ${data.code ?? response.status}`)
+      const response = await client.post(endpoint, formData, { responseType: 'text' })
+      const data = parseMiobtApiResponse(response.data)
+      if (!data) {
+        throw new Error(readResponseMessage(response.data) || 'MioBT publish did not return a recognized API response')
       }
 
-      throw new Error(readResponseMessage(fallbackPayload) || 'MioBT publish did not return a recognized API response')
+      const remoteId = data.infoHash
+      const remoteUrl = data.infoHash ? buildMiobtRemoteUrl(siteBaseUrl, data.infoHash) : undefined
+      const raw = {
+        response: data,
+        responseText: response.data,
+        remoteUrl,
+      }
+
+      if (data.status === 'success' && data.infoHash) {
+        return {
+          result: {
+            siteId: profile.id,
+            status: 'published',
+            remoteId,
+            remoteUrl,
+            message: remoteUrl ? `Published through MioBT adapter: ${remoteUrl}` : 'Published through MioBT adapter',
+            rawResponse: raw,
+            timestamp: new Date().toISOString(),
+          },
+          raw,
+        }
+      }
+
+      if (data.code === 103 && data.infoHash) {
+        return {
+          result: {
+            siteId: profile.id,
+            status: 'published',
+            remoteId,
+            remoteUrl,
+            message: 'MioBT reports that the torrent already exists',
+            rawResponse: raw,
+            timestamp: new Date().toISOString(),
+          },
+          raw,
+        }
+      }
+
+      if (data.code === 114 || data.message === 'auth failed') {
+        throw new Error(data.message || 'MioBT API credentials were rejected')
+      }
+
+      if (data.code === 116) {
+        throw new Error(data.message || 'MioBT API quota exceeded, please try later')
+      }
+
+      throw new Error(data.message || `MioBT publish failed with code ${data.code ?? response.status}`)
     },
   }
 }
