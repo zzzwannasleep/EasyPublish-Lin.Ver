@@ -5,7 +5,7 @@ import StageWorkspace from '../../components/base/StageWorkspace.vue'
 import { useI18n } from '../../i18n'
 import ProjectStageAside from '../project-detail/ProjectStageAside.vue'
 import { useProjectContext } from '../project-detail/project-context'
-import SeriesProjectWorkspaceSimple from './SeriesProjectWorkspaceSimple.vue'
+import SeriesProjectWorkspace from './SeriesProjectWorkspace.vue'
 
 const props = defineProps<{
   id: number
@@ -34,7 +34,7 @@ const notes = computed(() => {
 </script>
 
 <template>
-  <SeriesProjectWorkspaceSimple v-if="project?.projectMode === 'episode'" :id="id" :project="project" />
+  <SeriesProjectWorkspace v-if="project?.projectMode === 'episode'" :id="id" :project="project" />
 
   <StageWorkspace
     v-else

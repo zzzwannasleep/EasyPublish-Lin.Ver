@@ -194,7 +194,8 @@ onClickOutside(topbarRef, () => {
 <style scoped>
 .topbar {
   position: relative;
-  z-index: 120;
+  z-index: 240;
+  isolation: isolate;
   display: grid;
   gap: 10px;
   padding: 10px 14px 12px;
@@ -242,8 +243,17 @@ onClickOutside(topbarRef, () => {
 }
 
 .topbar__tray {
+  position: absolute;
+  inset-inline: 14px;
+  top: calc(100% + 6px);
+  z-index: 1;
   display: flex;
   justify-content: flex-end;
+  pointer-events: none;
+}
+
+.topbar__tray > * {
+  pointer-events: auto;
 }
 
 .toolbar-panel {
