@@ -2,14 +2,7 @@
 import { computed, onMounted, reactive, ref, useTemplateRef } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import { useDark } from '@vueuse/core'
-import {
-  Compass,
-  Document,
-  DocumentAdd,
-  FolderOpened,
-  House,
-  Key,
-} from '@element-plus/icons-vue'
+import { Compass, Document, DocumentAdd, FolderOpened, House, Key } from '@element-plus/icons-vue'
 import { type LocaleCode, useI18n } from './i18n'
 import { provideAppChrome } from './services/app-chrome'
 import {
@@ -18,7 +11,7 @@ import {
   isThemePaletteId,
   persistThemePalette,
   readStoredThemePalette,
-  type ThemePaletteId,
+  type ThemePaletteId
 } from './theme/palette'
 
 const route = useRoute()
@@ -77,11 +70,21 @@ const navItems = computed(() => [
 
 const pageTitle = computed(() => t((route.meta.titleKey as string) ?? 'app.defaultTitle'))
 const pageSubtitle = computed(() => t((route.meta.subtitleKey as string) ?? 'app.defaultSubtitle'))
+const topLevelRouteKey = computed(() => {
+  const topLevelMatch = route.matched[0]
+
+  if (topLevelMatch?.name) {
+    return String(topLevelMatch.name)
+  }
+
+  return topLevelMatch?.path ?? route.path
+})
+
 const themePaletteOptions = computed(() =>
-  THEME_PALETTE_DEFINITIONS.map(option => ({
+  THEME_PALETTE_DEFINITIONS.map((option) => ({
     ...option,
-    label: t(option.labelKey),
-  })),
+    label: t(option.labelKey)
+  }))
 )
 
 function toggleSidebar() {
@@ -180,7 +183,7 @@ async function setValidation(message: string) {
 
 window.BTAPI.loadValidation(setValidation)
 
-window.addEventListener('message', event => {
+window.addEventListener('message', (event) => {
   reCaptcha = event.data
 })
 
@@ -247,7 +250,7 @@ provideAppChrome({
   changeLocale,
   winClose,
   winMini,
-  winMax,
+  winMax
 })
 </script>
 
@@ -262,11 +265,15 @@ provideAppChrome({
     >
       <div class="flex items-center gap-3">
         <img :src="imgSrc" alt="captcha" class="w-[120px] rounded-2xl" />
-        <el-button link type="primary" size="small" @click="refreshImage">{{ t('app.captcha.refresh') }}</el-button>
+        <el-button link type="primary" size="small" @click="refreshImage">{{
+          t('app.captcha.refresh')
+        }}</el-button>
       </div>
       <div class="mt-[18px] flex gap-3">
         <el-input v-model="imgCaptcha" />
-        <el-button type="primary" @click="submitCaptcha('dmhy')">{{ t('app.captcha.submit') }}</el-button>
+        <el-button type="primary" @click="submitCaptcha('dmhy')">{{
+          t('app.captcha.submit')
+        }}</el-button>
       </div>
     </el-dialog>
 
@@ -279,7 +286,9 @@ provideAppChrome({
     >
       <iframe class="h-[500px] w-full rounded-[14px] border-0" src="https://nyaa.si/grecaptcha" />
       <div class="mt-[18px] flex justify-end">
-        <el-button type="primary" @click="confirmNyaaCaptcha">{{ t('app.captcha.confirm') }}</el-button>
+        <el-button type="primary" @click="confirmNyaaCaptcha">{{
+          t('app.captcha.confirm')
+        }}</el-button>
       </div>
     </el-dialog>
 
@@ -313,11 +322,13 @@ provideAppChrome({
       </div>
     </el-dialog>
 
-    <RouterView v-slot="{ Component, route: viewRoute }">
-      <transition name="app-route" mode="out-in">
-        <component :is="Component" :key="viewRoute.fullPath" />
-      </transition>
-    </RouterView>
+    <div class="app-route-stage">
+      <RouterView v-slot="{ Component }">
+        <transition name="app-route">
+          <component :is="Component" :key="topLevelRouteKey" />
+        </transition>
+      </RouterView>
+    </div>
   </div>
 </template>
 
@@ -336,16 +347,43 @@ provideAppChrome({
   margin-bottom: 0;
 }
 
+.app-route-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
 :deep(.app-route-enter-active),
 :deep(.app-route-leave-active) {
   transition:
-    opacity 180ms ease,
-    transform 180ms ease;
+    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+:deep(.app-route-leave-active) {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+}
+
+:deep(.app-route-enter-active) {
+  position: relative;
+  z-index: 1;
 }
 
 :deep(.app-route-enter-from),
 :deep(.app-route-leave-to) {
   opacity: 0;
-  transform: translateY(6px);
+}
+
+:deep(.app-route-enter-from) {
+  transform: translate3d(0, 12px, 0);
+}
+
+:deep(.app-route-leave-to) {
+  transform: translate3d(0, -8px, 0);
 }
 </style>

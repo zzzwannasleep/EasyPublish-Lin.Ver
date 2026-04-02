@@ -198,9 +198,9 @@ watch(
         </article>
       </section>
 
-      <section class="min-h-0">
+      <section class="relative min-h-0">
         <RouterView v-slot="{ Component, route: childRoute }">
-          <transition name="workflow-stage" mode="out-in">
+          <transition name="workflow-stage">
             <component :is="Component" :key="childRoute.fullPath" />
           </transition>
         </RouterView>
@@ -213,13 +213,33 @@ watch(
 :deep(.workflow-stage-enter-active),
 :deep(.workflow-stage-leave-active) {
   transition:
-    opacity 220ms ease,
-    transform 220ms ease;
+    opacity 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+:deep(.workflow-stage-leave-active) {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+}
+
+:deep(.workflow-stage-enter-active) {
+  position: relative;
+  z-index: 1;
 }
 
 :deep(.workflow-stage-enter-from),
 :deep(.workflow-stage-leave-to) {
   opacity: 0;
-  transform: translateY(8px);
+}
+
+:deep(.workflow-stage-enter-from) {
+  transform: translate3d(0, 10px, 0);
+}
+
+:deep(.workflow-stage-leave-to) {
+  transform: translate3d(0, -6px, 0);
 }
 </style>
