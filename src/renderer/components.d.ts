@@ -63,6 +63,7 @@ declare module 'vue' {
     StatusChip: typeof import('./src/components/feedback/StatusChip.vue')['default']
     TaskList: typeof import('./src/components/TaskList.vue')['default']
     TopBar: typeof import('./src/components/layout/TopBar.vue')['default']
+    WindowToolbar: typeof import('./src/components/layout/WindowToolbar.vue')['default']
   }
   export interface ComponentCustomProperties {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

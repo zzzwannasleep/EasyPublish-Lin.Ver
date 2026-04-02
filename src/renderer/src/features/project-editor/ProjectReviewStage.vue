@@ -34,6 +34,7 @@ const notes = computed(() => [
 
 <template>
   <StageWorkspace
+    v-if="isSeriesProject"
     :eyebrow="t('stage.review.eyebrow')"
     :title="t('stage.review.title')"
     :description="t('stage.review.description', { project: projectName })"
@@ -46,8 +47,7 @@ const notes = computed(() => [
     :aside-title="t('stage.shared.asideTitle')"
     :aside-description="t('stage.review.asideDescription')"
   >
-    <EpisodePublishConfirmStage v-if="isSeriesProject" :id="id" />
-    <Check v-else :id="id" />
+    <EpisodePublishConfirmStage :id="id" />
 
     <template #aside>
       <ProjectStageAside
@@ -58,4 +58,6 @@ const notes = computed(() => [
       />
     </template>
   </StageWorkspace>
+
+  <Check v-else :id="id" />
 </template>

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import AppPanel from '../../components/base/AppPanel.vue'
+import WindowToolbar from '../../components/layout/WindowToolbar.vue'
 import StatusChip from '../../components/feedback/StatusChip.vue'
 import { useI18n } from '../../i18n'
+import { useAppChrome } from '../../services/app-chrome'
 import { logBridge } from '../../services/bridge/log'
 import { projectBridge } from '../../services/bridge/project'
 import {
@@ -25,8 +27,10 @@ interface FailureEntry {
   result: PublishResult
 }
 
+const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+const chrome = useAppChrome()
 const isLoading = ref(false)
 const isExportingDiagnostics = ref(false)
 const errorMessage = ref('')
@@ -212,27 +216,86 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex min-h-full flex-col gap-4">
-    <section
-      class="surface-panel flex flex-col gap-3 px-4 py-4 lg:px-5 lg:py-5 xl:flex-row xl:items-end xl:justify-between"
+  <div class="logs-page">
+    <WindowToolbar
+      :current-path="route.path"
+      :dark="chrome.isDark"
+      :active-toolbar-menu="chrome.activeToolbarMenu"
+      :theme-palette="chrome.activeThemePalette"
+      :theme-palette-options="chrome.themePaletteOptions"
+      :locale="chrome.locale"
+      :locale-options="chrome.localeOptions"
+      @close="chrome.winClose"
+      @maximize="chrome.winMax"
+      @minimize="chrome.winMini"
+      @toggle-toolbar-menu="chrome.toggleToolbarMenu"
+      @close-toolbar-menu="chrome.closeToolbarMenu"
+      @set-theme-mode="chrome.setThemeMode"
+      @select-theme-palette="chrome.setThemePalette"
+      @change-locale="chrome.changeLocale"
     >
-      <div class="max-w-3xl">
-        <div class="eyebrow-text">{{ t('logs.hero.eyebrow') }}</div>
-        <h1 class="mt-2 font-display text-[clamp(1.2rem,1.6vw,1.55rem)] leading-tight tracking-[-0.03em] text-copy-primary">
-          {{ t('logs.hero.title') }}
-        </h1>
-        <p class="mt-2 text-[13px] leading-5 text-copy-secondary">{{ t('logs.hero.summary') }}</p>
-      </div>
+      <template #utility>
+        <button
+          :class="[
+            'soft-pill inline-flex h-9 items-center gap-2 px-3 text-[13px] transition duration-200 hover:border-border-strong hover:text-copy-primary',
+            chrome.activeToolbarMenu === 'proxy' ? 'logs-page__utility-button is-active' : 'text-copy-secondary',
+          ]"
+          type="button"
+          @click="chrome.toggleToolbarMenu('proxy')"
+        >
+          <el-icon><Operation /></el-icon>
+          <span>{{ t('common.proxy') }}</span>
+        </button>
+      </template>
 
-      <div class="flex flex-wrap gap-2">
-        <StatusChip tone="success">{{ t('logs.hero.fileCount', { count: fileCount }) }}</StatusChip>
-        <StatusChip :tone="latestFailures.length > 0 ? 'warning' : 'info'">
-          {{ t('logs.hero.failureCount', { count: latestFailures.length }) }}
-        </StatusChip>
-      </div>
-    </section>
+      <template #utility-panel>
+        <el-form :model="chrome.proxyForm" label-position="top" class="logs-page__proxy-form">
+          <el-form-item :label="t('app.proxy.enabled')">
+            <el-switch v-model="chrome.proxyForm.status" />
+          </el-form-item>
+          <el-form-item :label="t('app.proxy.type')">
+            <el-select v-model="chrome.proxyForm.type" :placeholder="t('common.selectProtocol')">
+              <el-option label="HTTP" value="http" />
+              <el-option label="HTTPS" value="https" />
+              <el-option label="SOCKS5" value="socks" />
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="t('app.proxy.host')">
+            <el-input v-model="chrome.proxyForm.host" />
+          </el-form-item>
+          <el-form-item :label="t('app.proxy.port')">
+            <el-input-number v-model="chrome.proxyForm.port" />
+          </el-form-item>
+          <el-form-item class="logs-page__proxy-actions">
+            <el-button type="primary" @click="chrome.setProxyConfig">{{ t('common.save') }}</el-button>
+            <el-button @click="chrome.closeToolbarMenu">{{ t('common.cancel') }}</el-button>
+          </el-form-item>
+        </el-form>
+      </template>
+    </WindowToolbar>
 
-    <section class="grid gap-4 xl:grid-cols-12">
+    <main class="logs-page__main">
+      <div class="flex min-h-full flex-col gap-4">
+        <section
+          class="surface-panel flex flex-col gap-3 px-4 py-4 lg:px-5 lg:py-5 xl:flex-row xl:items-end xl:justify-between"
+        >
+          <div class="max-w-3xl">
+            <div class="eyebrow-text">{{ t('logs.hero.eyebrow') }}</div>
+            <h1 class="mt-2 font-display text-[clamp(1.2rem,1.6vw,1.55rem)] leading-tight tracking-[-0.03em] text-copy-primary">
+              {{ t('logs.hero.title') }}
+            </h1>
+            <p class="mt-2 text-[13px] leading-5 text-copy-secondary">{{ t('logs.hero.summary') }}</p>
+          </div>
+
+          <div class="flex flex-wrap gap-2">
+            <StatusChip tone="success">{{ t('logs.hero.fileCount', { count: fileCount }) }}</StatusChip>
+            <StatusChip :tone="latestFailures.length > 0 ? 'warning' : 'info'">
+              {{ t('logs.hero.failureCount', { count: latestFailures.length }) }}
+            </StatusChip>
+          </div>
+        </section>
+
+        <section class="grid gap-4 xl:grid-cols-12">
       <div class="xl:col-span-4">
         <AppPanel
           :eyebrow="t('logs.panel.files.eyebrow')"
@@ -323,11 +386,11 @@ onMounted(() => {
       </div>
     </section>
 
-    <AppPanel
-      :eyebrow="t('logs.panel.failures.eyebrow')"
-      :title="t('logs.panel.failures.title')"
-      :description="t('logs.panel.failures.description')"
-    >
+        <AppPanel
+          :eyebrow="t('logs.panel.failures.eyebrow')"
+          :title="t('logs.panel.failures.title')"
+          :description="t('logs.panel.failures.description')"
+        >
       <div
         v-if="latestFailures.length === 0"
         class="surface-subtle px-4 py-8 text-center text-sm leading-6 text-copy-secondary"
@@ -393,11 +456,43 @@ onMounted(() => {
           </details>
         </article>
       </div>
-    </AppPanel>
+        </AppPanel>
+      </div>
+    </main>
   </div>
 </template>
 
 <style scoped>
+.logs-page {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-base);
+}
+
+.logs-page__main {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 16px 16px;
+}
+
+.logs-page__utility-button.is-active {
+  border-color: var(--border-strong);
+  background: var(--surface-brand-fill);
+  color: var(--text-primary);
+}
+
+.logs-page__proxy-form :deep(.el-form-item) {
+  margin-bottom: 14px;
+}
+
+.logs-page__proxy-actions {
+  margin-bottom: 0;
+}
+
 .logs-file-button--active {
   border-color: var(--border-strong);
   background: var(--surface-brand-fill);

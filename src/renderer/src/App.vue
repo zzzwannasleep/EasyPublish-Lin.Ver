@@ -10,8 +10,8 @@ import {
   House,
   Key,
 } from '@element-plus/icons-vue'
-import AppShell from './components/layout/AppShell.vue'
 import { type LocaleCode, useI18n } from './i18n'
+import { provideAppChrome } from './services/app-chrome'
 import {
   THEME_PALETTE_DEFINITIONS,
   applyThemePalette,
@@ -220,6 +220,35 @@ async function setTurnstilePosition(type: 'acgnx_g' | 'acgnx_a') {
 async function removeValidation() {
   window.BTAPI.removeValidation()
 }
+
+function changeLocale(value: string) {
+  setLocale(value as LocaleCode)
+  closeToolbarMenu()
+}
+
+provideAppChrome({
+  navItems,
+  pageTitle,
+  pageSubtitle,
+  isDark,
+  activeToolbarMenu,
+  activeThemePalette,
+  themePaletteOptions,
+  sidebarExpanded,
+  locale,
+  localeOptions,
+  proxyForm,
+  toggleSidebar,
+  toggleToolbarMenu,
+  closeToolbarMenu,
+  setThemeMode,
+  setThemePalette,
+  setProxyConfig,
+  changeLocale,
+  winClose,
+  winMini,
+  winMax,
+})
 </script>
 
 <template>
@@ -284,78 +313,11 @@ async function removeValidation() {
       </div>
     </el-dialog>
 
-    <AppShell
-      :nav-items="navItems"
-      :current-path="route.path"
-      :title="pageTitle"
-      :subtitle="pageSubtitle"
-      :dark="isDark"
-      :active-toolbar-menu="activeToolbarMenu"
-      :theme-palette="activeThemePalette"
-      :theme-palette-options="themePaletteOptions"
-      :sidebar-expanded="sidebarExpanded"
-      :locale="locale"
-      :locale-options="localeOptions"
-      @close="winClose"
-      @maximize="winMax"
-      @minimize="winMini"
-      @toggle-toolbar-menu="toggleToolbarMenu"
-      @close-toolbar-menu="closeToolbarMenu"
-      @set-theme-mode="setThemeMode"
-      @select-theme-palette="setThemePalette"
-      @toggle-sidebar="toggleSidebar"
-      @change-locale="
-        (value) => {
-          setLocale(value as LocaleCode)
-          closeToolbarMenu()
-        }
-      "
-    >
-      <template #utility>
-        <button
-          :class="[
-            'soft-pill inline-flex h-9 items-center gap-2 px-3 text-[13px] transition duration-200 hover:border-border-strong hover:text-copy-primary',
-            activeToolbarMenu === 'proxy' ? 'topbar-utility-button is-active' : 'text-copy-secondary',
-          ]"
-          type="button"
-          @click="toggleToolbarMenu('proxy')"
-        >
-          <el-icon><Operation /></el-icon>
-          <span>{{ t('common.proxy') }}</span>
-        </button>
-      </template>
-
-      <template #utility-panel>
-        <el-form :model="proxyForm" label-position="top" class="proxy-form">
-          <el-form-item :label="t('app.proxy.enabled')">
-            <el-switch v-model="proxyForm.status" />
-          </el-form-item>
-          <el-form-item :label="t('app.proxy.type')">
-            <el-select v-model="proxyForm.type" :placeholder="t('common.selectProtocol')">
-              <el-option label="HTTP" value="http" />
-              <el-option label="HTTPS" value="https" />
-              <el-option label="SOCKS5" value="socks" />
-            </el-select>
-          </el-form-item>
-          <el-form-item :label="t('app.proxy.host')">
-            <el-input v-model="proxyForm.host" />
-          </el-form-item>
-          <el-form-item :label="t('app.proxy.port')">
-            <el-input-number v-model="proxyForm.port" />
-          </el-form-item>
-          <el-form-item class="proxy-form__actions">
-            <el-button type="primary" @click="setProxyConfig">{{ t('common.save') }}</el-button>
-            <el-button @click="closeToolbarMenu">{{ t('common.cancel') }}</el-button>
-          </el-form-item>
-        </el-form>
-      </template>
-
-      <RouterView v-slot="{ Component, route: viewRoute }">
-        <transition name="app-route" mode="out-in">
-          <component :is="Component" :key="viewRoute.fullPath" />
-        </transition>
-      </RouterView>
-    </AppShell>
+    <RouterView v-slot="{ Component, route: viewRoute }">
+      <transition name="app-route" mode="out-in">
+        <component :is="Component" :key="viewRoute.fullPath" />
+      </transition>
+    </RouterView>
   </div>
 </template>
 
