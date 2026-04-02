@@ -19,6 +19,7 @@ const workflow = {
   'project.publishState.failed': '失败',
   'project.site.bangumi': '萌番组',
   'project.site.mikan': 'Mikan',
+  'project.site.anibt': 'Anibt',
   'project.site.miobt': 'MioBT',
   'project.site.nyaa': 'Nyaa',
   'project.site.acgrip': 'AcgRip',
@@ -472,6 +473,10 @@ const workflow = {
     '为 Mikan 预填 trackers，每行一条；超过 10 条时，实际只会发送前 10 条。',
   'seriesWorkspace.profileEditor.siteFields.mikanBangumiIdHelp':
     '为 Mikan 预填 Bangumi ID。这个字段必须和字幕组 ID 一起填写。',
+  'seriesWorkspace.profileEditor.siteFields.anibtBangumiIdHelp':
+    '为 Anibt 预填 Bangumi ID。发布时会映射到接口里的 bgmId 字段。',
+  'seriesWorkspace.profileEditor.siteFields.anibtTrackersHelp':
+    '为 Anibt 预填 tracker 列表。若留空，适配器会优先尝试从 torrent 文件里提取 announce / announce-list。',
   'seriesWorkspace.profileEditor.siteFields.mikanSubtitleGroupIdHelp':
     '为 Mikan 预填字幕组 ID。这个字段必须和 Bangumi ID 一起填写。',
   'seriesWorkspace.profileEditor.siteFields.mikanPublishGroupIdHelp':

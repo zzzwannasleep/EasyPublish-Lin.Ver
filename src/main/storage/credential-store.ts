@@ -14,6 +14,7 @@ interface CreateCredentialStoreOptions {
 const legacyTorrentSiteIds = [
   'bangumi',
   'mikan',
+  'anibt',
   'miobt',
   'nyaa',
   'acgrip',
@@ -77,6 +78,24 @@ function toCustomPtSiteId(seed: string) {
 export function createCredentialStore(options: CreateCredentialStoreOptions) {
   const { getUserDB } = options
 
+  function createDefaultLoginInfo(name: (typeof legacyTorrentSiteIds)[number]): Config.LoginInfo {
+    return {
+      name,
+      time: '--',
+      status:
+        name === 'miobt'
+          ? 'API credentials missing'
+          : name === 'mikan' || name === 'anibt'
+            ? 'API token missing'
+            : '账号未登录',
+      username: '',
+      password: '',
+      apiToken: '',
+      enable: false,
+      cookies: [],
+    }
+  }
+
   function getUserDBOrThrow() {
     const userDB = getUserDB()
     if (!userDB) {
@@ -86,7 +105,13 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
   }
 
   function getSiteLoginInfo(siteId: (typeof legacyTorrentSiteIds)[number]) {
-    return getUserDBOrThrow().data.info.find(item => item.name === siteId)!
+    const userDB = getUserDBOrThrow()
+    let info = userDB.data.info.find(item => item.name === siteId)
+    if (!info) {
+      info = createDefaultLoginInfo(siteId)
+      userDB.data.info.push(info)
+    }
+    return info
   }
 
   function getCustomPtSites() {
@@ -110,7 +135,7 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
       return getCustomPtSite(siteId)?.apiToken || undefined
     }
 
-    if (siteId === 'mikan' || siteId === 'miobt') {
+    if (siteId === 'mikan' || siteId === 'anibt' || siteId === 'miobt') {
       return getSiteLoginInfo(siteId).apiToken || undefined
     }
 
@@ -163,7 +188,7 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
     const apiToken = getSiteApiToken(siteId)
     return {
       siteId,
-      authMode: siteId === 'mikan' || siteId === 'miobt' || apiToken ? 'api_token' : 'username_password',
+      authMode: siteId === 'mikan' || siteId === 'anibt' || siteId === 'miobt' || apiToken ? 'api_token' : 'username_password',
       username: info.username,
       enabled: info.enable,
       lastCheckAt: info.time,

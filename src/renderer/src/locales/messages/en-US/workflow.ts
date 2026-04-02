@@ -19,6 +19,7 @@ const workflow = {
   'project.publishState.failed': 'Failed',
   'project.site.bangumi': 'Bangumi',
   'project.site.mikan': 'Mikan',
+  'project.site.anibt': 'Anibt',
   'project.site.miobt': 'MioBT',
   'project.site.nyaa': 'Nyaa',
   'project.site.acgrip': 'AcgRip',
@@ -492,6 +493,10 @@ const workflow = {
     'Prefill Mikan trackers here. Enter one tracker per line; if you add more than 10, only the first 10 will be sent.',
   'seriesWorkspace.profileEditor.siteFields.mikanBangumiIdHelp':
     'Prefill the Mikan Bangumi ID. It must be provided together with the subtitle group ID.',
+  'seriesWorkspace.profileEditor.siteFields.anibtBangumiIdHelp':
+    'Prefill the Anibt Bangumi ID here. It is sent as bgmId in the release API payload.',
+  'seriesWorkspace.profileEditor.siteFields.anibtTrackersHelp':
+    'Prefill Anibt trackers here. If left empty, the adapter will try to derive announce and announce-list trackers from the torrent file.',
   'seriesWorkspace.profileEditor.siteFields.mikanSubtitleGroupIdHelp':
     'Prefill the Mikan subtitle group ID. It must be provided together with the Bangumi ID.',
   'seriesWorkspace.profileEditor.siteFields.mikanPublishGroupIdHelp':

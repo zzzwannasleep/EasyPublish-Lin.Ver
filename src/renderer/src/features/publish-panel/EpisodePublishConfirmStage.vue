@@ -698,6 +698,15 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
     }
   }
 
+  if (site?.adapter === 'anibt') {
+    const trackers = parseTrackerText(draft.trackersText)
+    return {
+      ...baseInput,
+      trackers: trackers.length > 0 ? trackers : undefined,
+      bangumiId: draft.bangumiId,
+    }
+  }
+
   return {
     ...baseInput,
     smallDescription: draft.smallDescription.trim() || undefined,

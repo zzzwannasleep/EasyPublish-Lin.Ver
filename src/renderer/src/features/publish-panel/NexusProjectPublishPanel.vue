@@ -197,6 +197,10 @@ function isMikanSite(site: SiteCatalogEntry) {
   return site.adapter === 'mikan'
 }
 
+function isAnibtSite(site: SiteCatalogEntry) {
+  return site.adapter === 'anibt'
+}
+
 function isMiobtSite(site: SiteCatalogEntry) {
   return site.adapter === 'miobt'
 }
@@ -214,7 +218,7 @@ function hasSiteSpecificRequiredFields(site: SiteCatalogEntry) {
 }
 
 function hasOptionalSiteFields(site: SiteCatalogEntry) {
-  return supportsMetadata(site) || isUnit3dSite(site) || isMikanSite(site)
+  return supportsMetadata(site) || isUnit3dSite(site) || isMikanSite(site) || isAnibtSite(site)
 }
 
 function isSiteSelected(siteId: SiteId) {
@@ -279,6 +283,10 @@ function getAccountStatusLabel(siteId: SiteId) {
 }
 
 function getSharedFieldText(site: SiteCatalogEntry) {
+  if (isAnibtSite(site)) {
+    return t('nexus.site.sharedFieldsAnibt')
+  }
+
   if (isMikanSite(site)) {
     return t('nexus.site.sharedFieldsMikan')
   }
@@ -731,6 +739,15 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
     }
   }
 
+  if (site?.adapter === 'anibt') {
+    const trackers = parseTrackerText(draft.trackersText)
+    return {
+      ...baseInput,
+      trackers: trackers.length > 0 ? trackers : undefined,
+      bangumiId: draft.bangumiId,
+    }
+  }
+
   if (site?.adapter === 'dmhy') {
     const trackers = parseTrackerText(draft.trackersText)
     return {
@@ -910,6 +927,7 @@ async function bootstrap() {
     sites.value = siteResult.data.sites.filter(
       site =>
         site.adapter === 'mikan' ||
+        site.adapter === 'anibt' ||
         site.adapter === 'miobt' ||
         site.adapter === 'nexusphp' ||
         site.adapter === 'unit3d',
@@ -1195,6 +1213,13 @@ onMounted(() => {
             <div />
           </div>
 
+          <div v-else-if="isAnibtSite(site)" class="nexus-form__grid">
+            <el-form-item :label="t('sites.form.bangumiId')">
+              <el-input-number v-model="ensureDraft(site.id).bangumiId" :controls="false" :min="1" />
+            </el-form-item>
+            <div />
+          </div>
+
           <div v-else-if="site.adapter === 'nexusphp'" class="nexus-site-card__manual">
             <div class="nexus-site-card__hint">
               {{ getMetadataError(site.id) || t('nexus.site.manualTypeHint') }}
@@ -1374,6 +1399,21 @@ onMounted(() => {
                     <el-input-number v-model="ensureDraft(site.id).publishGroupId" :controls="false" :min="1" />
                   </el-form-item>
                   <div />
+                </div>
+
+                <el-form-item :label="t('sites.form.trackers')">
+                  <el-input
+                    v-model="ensureDraft(site.id).trackersText"
+                    type="textarea"
+                    :rows="4"
+                    :placeholder="t('sites.form.trackersPlaceholder')"
+                  />
+                </el-form-item>
+              </div>
+
+              <div v-if="isAnibtSite(site)" class="nexus-site-card__optional-stack">
+                <div class="nexus-site-card__hint">
+                  {{ t('nexus.site.anibtOptionalHint') }}
                 </div>
 
                 <el-form-item :label="t('sites.form.trackers')">

@@ -1,12 +1,12 @@
 import type { AccountAuthMode, AccountHealthStatus } from './account'
 
-export const builtinSiteIds = ['bangumi', 'mikan', 'miobt', 'nyaa', 'acgrip', 'dmhy', 'acgnx_a', 'acgnx_g', 'forum'] as const
+export const builtinSiteIds = ['bangumi', 'mikan', 'anibt', 'miobt', 'nyaa', 'acgrip', 'dmhy', 'acgnx_a', 'acgnx_g', 'forum'] as const
 
 export type BuiltInSiteId = (typeof builtinSiteIds)[number]
 
 export type SiteId = string
 
-export type SiteAdapterKind = 'bangumi' | 'mikan' | 'miobt' | 'nyaa' | 'dmhy' | 'nexusphp' | 'unit3d' | 'wordpress'
+export type SiteAdapterKind = 'bangumi' | 'mikan' | 'anibt' | 'miobt' | 'nyaa' | 'dmhy' | 'nexusphp' | 'unit3d' | 'wordpress'
 
 export type SiteCapability =
   | 'torrent_publish'
@@ -261,6 +261,13 @@ export const defaultSiteProfiles: SiteProfile[] = [
     adapter: 'mikan',
     baseUrl: 'https://mikanani.me',
     capabilities: ['torrent_publish', 'token_auth', 'browser_login', 'content_preview', 'raw_response'],
+  },
+  {
+    id: 'anibt',
+    name: 'Anibt',
+    adapter: 'anibt',
+    baseUrl: 'https://anibt.net',
+    capabilities: ['torrent_publish', 'token_auth', 'content_preview', 'raw_response'],
   },
   {
     id: 'miobt',

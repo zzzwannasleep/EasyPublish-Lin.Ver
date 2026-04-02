@@ -53,8 +53,32 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
     return session.fromPartition(`persist:${userDB.data.name}`)
   }
 
+  function createDefaultLoginInfo(type: string): Config.LoginInfo {
+    return {
+      name: type,
+      time: '--',
+      status:
+        type === 'miobt'
+          ? legacyApiStatusText.credentialsMissing
+          : type === 'mikan' || type === 'anibt'
+            ? legacyApiStatusText.tokenMissing
+            : legacyAccountStatusText.loggedOut,
+      username: '',
+      password: '',
+      apiToken: '',
+      enable: false,
+      cookies: [],
+    }
+  }
+
   function getLoginInfo(type: string) {
-    return getUserDBOrThrow().data.info.find(item => item.name === type)!
+    const userDB = getUserDBOrThrow()
+    let info = userDB.data.info.find(item => item.name === type)
+    if (!info) {
+      info = createDefaultLoginInfo(type)
+      userDB.data.info.push(info)
+    }
+    return info
   }
 
   function setStatus(info: Config.LoginInfo, status: string) {
@@ -907,7 +931,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
   async function saveAccountInfo(msg: string) {
     const userDB = getUserDBOrThrow()
     const result: Message.BT.AccountInfo = JSON.parse(msg)
-    const info = userDB.data.info.find(item => item.name == result.type)!
+    const info = getLoginInfo(result.type)
     const previousUsername = info.username
     const previousPassword = info.password
     const previousApiToken = info.apiToken?.trim() ?? ''
@@ -937,7 +961,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
 
       if (!result.enable) {
         info.status = legacyAccountStatusText.disabled
-      } else if (result.type == 'mikan') {
+      } else if (result.type == 'mikan' || result.type == 'anibt') {
         info.status = nextApiToken ? legacyApiStatusText.tokenConfigured : legacyApiStatusText.tokenMissing
       } else if (result.type == 'miobt') {
         info.status =
@@ -1009,7 +1033,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
     })
     if (canceled) return
     const { type }: Message.BT.AccountInfo = JSON.parse(msg)
-    userDB.data.info.find(item => item.name == type)!.cookies = JSON.parse(
+    getLoginInfo(type).cookies = JSON.parse(
       fs.readFileSync(filePaths[0], { encoding: 'utf-8' }),
     )
     await userDB.write()
@@ -1093,6 +1117,70 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
       const errorCode = getRequestErrorCode(err)
       const message = getRequestErrorMessage(err)
       log.error('[BTAccount][mikan] token validation request failed', {
+        errorCode,
+        message,
+        error: err,
+      })
+      setStatus(info, `${legacyAccountStatusText.failed} (${errorCode})`)
+      return {
+        errorCode,
+        message,
+      }
+    }
+  }
+
+  async function checkAnibtLoginStatusClean(info: Config.LoginInfo): Promise<Omit<Message.BT.LoginStatus, 'status'>> {
+    const apiToken = info.apiToken?.trim()
+    if (!apiToken) {
+      setStatus(info, legacyApiStatusText.tokenMissing)
+      return {}
+    }
+
+    try {
+      const response = await axios.post(
+        'https://site.anibt.net/api/releases/publish',
+        {},
+        {
+          responseType: 'text',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiToken}`,
+          },
+        },
+      )
+
+      if ([200, 400, 422].includes(response.status)) {
+        setStatus(info, legacyApiStatusText.tokenConfigured)
+        return {}
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        const errorCode = String(response.status)
+        log.error('[BTAccount][anibt] token validation rejected', {
+          status: response.status,
+          data: response.data,
+        })
+        setStatus(info, `${legacyApiStatusText.tokenRejected} (${errorCode})`)
+        return {
+          errorCode,
+          message: 'Anibt API token rejected',
+        }
+      }
+
+      const errorCode = String(response.status)
+      log.error('[BTAccount][anibt] token validation unexpected response', {
+        status: response.status,
+        data: response.data,
+      })
+      setStatus(info, `${legacyAccountStatusText.failed} (${errorCode})`)
+      return {
+        errorCode,
+        message: `Anibt validation returned unexpected status ${errorCode}`,
+      }
+    } catch (err) {
+      const errorCode = getRequestErrorCode(err)
+      const message = getRequestErrorMessage(err)
+      log.error('[BTAccount][anibt] token validation request failed', {
         errorCode,
         message,
         error: err,
@@ -1530,7 +1618,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
       const { type }: Message.BT.AccountType = JSON.parse(msg)
       if (type == 'all') {
         await Promise.all(
-          ['bangumi', 'mikan', 'miobt', 'nyaa', 'dmhy', 'acgrip', 'acgnx_a', 'acgnx_g'].map(accountType =>
+          ['bangumi', 'mikan', 'anibt', 'miobt', 'nyaa', 'dmhy', 'acgrip', 'acgnx_a', 'acgnx_g'].map(accountType =>
             checkLoginStatusClean(JSON.stringify({ type: accountType })),
           ),
         )
@@ -1562,6 +1650,11 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
 
       if (type == 'mikan') {
         resultDetails = await checkMikanLoginStatusClean(info)
+        await persistUserData()
+      }
+
+      if (type == 'anibt') {
+        resultDetails = await checkAnibtLoginStatusClean(info)
         await persistUserData()
       }
 

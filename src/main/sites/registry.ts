@@ -1,6 +1,7 @@
 import { buildSiteCapabilitySet, defaultSiteProfiles } from '../../shared/types/site'
 import type { SiteAdapterKind, SiteCatalogEntry, SiteFieldSchemaEntry, SiteId, SiteProfile } from '../../shared/types/site'
 import type { SiteAdapter } from './adapter'
+import { createAnibtAdapter } from './anibt/adapter'
 import { createDmhyAdapter } from './dmhy/adapter'
 import { createMikanAdapter } from './mikan/adapter'
 import { createMiobtAdapter } from './miobt/adapter'
@@ -69,7 +70,7 @@ function cloneSiteFieldSchemas(fieldSchemas: SiteFieldSchemaEntry[] = []): SiteF
 }
 
 function createStaticAdapter(
-  id: Exclude<SiteAdapterKind, 'mikan' | 'miobt' | 'dmhy' | 'nexusphp' | 'unit3d'>,
+  id: Exclude<SiteAdapterKind, 'mikan' | 'anibt' | 'miobt' | 'dmhy' | 'nexusphp' | 'unit3d'>,
   displayName: string,
   note: string,
   fieldSchemas: SiteFieldSchemaEntry[] = [],
@@ -109,6 +110,7 @@ export function createSiteRegistry(options: CreateSiteRegistryOptions = {}) {
       BANGUMI_FIELD_SCHEMAS,
     ),
     createMikanAdapter(),
+    createAnibtAdapter(),
     createMiobtAdapter(),
     createDmhyAdapter(),
     createStaticAdapter(

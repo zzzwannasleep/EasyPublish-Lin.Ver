@@ -73,6 +73,17 @@ const siteAccounts = reactive<SiteAccount[]>([
     index: 2,
   },
   {
+    siteId: 'anibt',
+    type: 'anibt',
+    time: '',
+    status: '',
+    username: '',
+    password: '',
+    apiToken: '',
+    enable: true,
+    index: 3,
+  },
+  {
     siteId: 'miobt',
     type: 'miobt',
     time: '',
@@ -81,7 +92,7 @@ const siteAccounts = reactive<SiteAccount[]>([
     password: '',
     apiToken: '',
     enable: true,
-    index: 3,
+    index: 4,
   },
   {
     siteId: 'nyaa',
@@ -92,7 +103,7 @@ const siteAccounts = reactive<SiteAccount[]>([
     password: '',
     apiToken: '',
     enable: true,
-    index: 4,
+    index: 5,
   },
   {
     siteId: 'acgrip',
@@ -103,7 +114,7 @@ const siteAccounts = reactive<SiteAccount[]>([
     password: '',
     apiToken: '',
     enable: true,
-    index: 5,
+    index: 6,
   },
   {
     siteId: 'dmhy',
@@ -114,7 +125,7 @@ const siteAccounts = reactive<SiteAccount[]>([
     password: '',
     apiToken: '',
     enable: true,
-    index: 6,
+    index: 7,
   },
   {
     siteId: 'acgnx_g',
@@ -125,7 +136,7 @@ const siteAccounts = reactive<SiteAccount[]>([
     password: '',
     apiToken: '',
     enable: true,
-    index: 7,
+    index: 8,
   },
   {
     siteId: 'acgnx_a',
@@ -136,7 +147,7 @@ const siteAccounts = reactive<SiteAccount[]>([
     password: '',
     apiToken: '',
     enable: true,
-    index: 8,
+    index: 9,
   },
 ])
 
@@ -157,7 +168,7 @@ const password = ref('')
 const configName = ref('')
 
 function usesApiToken(siteId: LegacyAccountType) {
-  return siteId === 'mikan' || siteId === 'miobt'
+  return siteId === 'mikan' || siteId === 'anibt' || siteId === 'miobt'
 }
 
 function supportsBrowserLogin(siteId: LegacyAccountType) {

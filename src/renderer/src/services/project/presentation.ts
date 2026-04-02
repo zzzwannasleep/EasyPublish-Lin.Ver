@@ -62,6 +62,7 @@ export const publishStateTones: Record<PublishState, 'neutral' | 'info' | 'succe
 export const siteLabelKeys: Record<string, string> = {
   bangumi: 'project.site.bangumi',
   mikan: 'project.site.mikan',
+  anibt: 'project.site.anibt',
   miobt: 'project.site.miobt',
   nyaa: 'project.site.nyaa',
   acgrip: 'project.site.acgrip',

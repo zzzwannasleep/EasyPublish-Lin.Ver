@@ -95,12 +95,16 @@ const sites = {
   'nexus.site.noSitesSelected': 'Choose at least one publish site before filling site-specific fields.',
   'nexus.site.sharedFields': 'This site uses the shared title, description, torrent, NFO, and anonymous settings above.',
   'nexus.site.sharedFieldsMikan': 'This adapter uses the shared title, description, and torrent file above.',
+  'nexus.site.sharedFieldsAnibt':
+    'This adapter uses the shared title and torrent above, then converts the shared description to Markdown and sends it as Anibt notes.',
   'nexus.site.sharedFieldsDmhy':
     'This adapter uses the shared title, description, and torrent file above. Category, publish team, and DMHY-specific options are configured below.',
   'nexus.site.requiredSection': 'Required Fields',
   'nexus.site.optionalSection': 'Fields to Fill',
   'nexus.site.noRequiredFields': 'This adapter does not require any site-specific fields yet.',
   'nexus.site.mikanOptionalHint': 'bangumiId and subtitleGroupId must be filled together. If you enter more than 10 trackers, only the first 10 will be sent.',
+  'nexus.site.anibtOptionalHint':
+    'Bangumi ID is required. If trackers are left empty, the adapter will derive them from the torrent file and convert the torrent into a magnet URI automatically before calling the Anibt API.',
   'nexus.site.dmhyOptionalHint':
     'If poster URL is empty, the adapter will try to use the first image from the description. Team ID 0 means personal publishing.',
   'nexus.site.manualTypeId': 'Type ID',

@@ -44,6 +44,10 @@ export const defaultUserData: Config.UserData = {
       status: legacyApiStatusText.tokenMissing,
     },
     {
+      ...createDefaultLoginInfo('anibt'),
+      status: legacyApiStatusText.tokenMissing,
+    },
+    {
       ...createDefaultLoginInfo('miobt'),
       status: legacyApiStatusText.credentialsMissing,
     },
