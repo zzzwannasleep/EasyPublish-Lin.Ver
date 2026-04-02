@@ -1,18 +1,29 @@
 <script setup lang="ts">
 import { onClickOutside } from '@vueuse/core'
+import { Check as CheckIcon } from '@element-plus/icons-vue'
 import { computed, ref } from 'vue'
 import { useI18n } from '../../i18n'
 
-const props = defineProps<{
-  title: string
-  subtitle: string
-  dark: boolean
-  activeToolbarMenu: 'proxy' | 'theme' | 'language' | null
-  themePalette: string
-  themePaletteOptions: readonly { value: string; label: string; swatches: readonly string[] }[]
-  locale: string
-  localeOptions: readonly { value: string; label: string }[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    title: string
+    subtitle: string
+    dark: boolean
+    activeToolbarMenu: 'proxy' | 'theme' | 'language' | null
+    themePalette: string
+    themePaletteOptions: readonly { value: string; label: string; swatches: readonly string[] }[]
+    locale: string
+    localeOptions: readonly { value: string; label: string }[]
+    showTheme?: boolean
+    showProxy?: boolean
+    showLanguage?: boolean
+  }>(),
+  {
+    showTheme: true,
+    showProxy: true,
+    showLanguage: true
+  }
+)
 
 const emit = defineEmits<{
   minimize: []
@@ -29,11 +40,11 @@ const { t } = useI18n()
 const topbarRef = ref<HTMLElement | null>(null)
 
 const currentLocaleLabel = computed(
-  () => props.localeOptions.find(option => option.value === props.locale)?.label ?? props.locale,
+  () => props.localeOptions.find((option) => option.value === props.locale)?.label ?? props.locale
 )
 
 const localeBadge = computed(() => {
-  const currentOption = props.localeOptions.find(option => option.value === props.locale)
+  const currentOption = props.localeOptions.find((option) => option.value === props.locale)
   if (!currentOption) {
     return props.locale
   }
@@ -45,8 +56,24 @@ const localeBadge = computed(() => {
   return currentOption.value
 })
 
+const visibleActiveToolbarMenu = computed(() => {
+  if (props.activeToolbarMenu === 'theme' && props.showTheme) {
+    return 'theme'
+  }
+
+  if (props.activeToolbarMenu === 'proxy' && props.showProxy) {
+    return 'proxy'
+  }
+
+  if (props.activeToolbarMenu === 'language' && props.showLanguage) {
+    return 'language'
+  }
+
+  return null
+})
+
 onClickOutside(topbarRef, () => {
-  if (props.activeToolbarMenu) {
+  if (visibleActiveToolbarMenu.value) {
     emit('closeToolbarMenu')
   }
 })
@@ -86,9 +113,12 @@ onClickOutside(topbarRef, () => {
 
         <div class="topbar__toolbar">
           <button
+            v-if="showTheme"
             :class="[
               'soft-pill inline-flex h-9 items-center gap-2 px-3 text-[13px] transition duration-200 hover:border-border-strong hover:text-copy-primary',
-              activeToolbarMenu === 'theme' ? 'topbar__toolbar-button is-active' : 'text-copy-secondary',
+              visibleActiveToolbarMenu === 'theme'
+                ? 'topbar__toolbar-button is-active'
+                : 'text-copy-secondary'
             ]"
             type="button"
             @click="$emit('toggleToolbarMenu', 'theme')"
@@ -97,12 +127,15 @@ onClickOutside(topbarRef, () => {
             <span>{{ t('common.theme.label') }}</span>
           </button>
 
-          <slot name="utility" />
+          <slot v-if="showProxy" name="utility" />
 
           <button
+            v-if="showLanguage"
             :class="[
               'soft-pill inline-flex h-9 items-center gap-2 px-3 text-[13px] transition duration-200 hover:border-border-strong hover:text-copy-primary',
-              activeToolbarMenu === 'language' ? 'topbar__toolbar-button is-active' : 'text-copy-secondary',
+              visibleActiveToolbarMenu === 'language'
+                ? 'topbar__toolbar-button is-active'
+                : 'text-copy-secondary'
             ]"
             type="button"
             :title="`${t('common.language')}: ${currentLocaleLabel}`"
@@ -116,12 +149,12 @@ onClickOutside(topbarRef, () => {
     </div>
 
     <div
-      v-if="activeToolbarMenu"
+      v-if="visibleActiveToolbarMenu"
       class="topbar__tray [-webkit-app-region:no-drag]"
       @wheel.prevent
       @touchmove.prevent
     >
-      <div v-if="activeToolbarMenu === 'theme'" class="toolbar-panel">
+      <div v-if="visibleActiveToolbarMenu === 'theme'" class="toolbar-panel">
         <section class="toolbar-panel__section">
           <div class="toolbar-panel__label">{{ t('common.theme.mode') }}</div>
           <div class="toolbar-panel__mode-grid">
@@ -168,7 +201,10 @@ onClickOutside(topbarRef, () => {
         </section>
       </div>
 
-      <div v-else-if="activeToolbarMenu === 'language'" class="toolbar-panel toolbar-panel--narrow">
+      <div
+        v-else-if="visibleActiveToolbarMenu === 'language'"
+        class="toolbar-panel toolbar-panel--narrow"
+      >
         <section class="toolbar-panel__section">
           <div class="toolbar-panel__label">{{ t('common.language') }}</div>
           <div class="toolbar-panel__list">
@@ -177,13 +213,13 @@ onClickOutside(topbarRef, () => {
               :key="option.value"
               :class="[
                 'toolbar-panel__choice toolbar-panel__choice--wide',
-                option.value === locale ? 'is-active' : '',
+                option.value === locale ? 'is-active' : ''
               ]"
               type="button"
               @click="$emit('changeLocale', option.value)"
             >
               <span>{{ option.label }}</span>
-              <el-icon v-if="option.value === locale"><Check /></el-icon>
+              <el-icon v-if="option.value === locale"><CheckIcon /></el-icon>
             </button>
           </div>
         </section>

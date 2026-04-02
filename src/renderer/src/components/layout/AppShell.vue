@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Component } from 'vue'
+import { computed, type Component } from 'vue'
 import SidebarNav from './SidebarNav.vue'
 import TopBar from './TopBar.vue'
 
@@ -11,19 +11,29 @@ type NavItem = {
   matchPrefixes?: string[]
 }
 
-defineProps<{
-  navItems: NavItem[]
-  currentPath: string
-  title: string
-  subtitle: string
-  dark: boolean
-  activeToolbarMenu: 'proxy' | 'theme' | 'language' | null
-  themePalette: string
-  themePaletteOptions: readonly { value: string; label: string; swatches: readonly string[] }[]
-  sidebarExpanded: boolean
-  locale: string
-  localeOptions: readonly { value: string; label: string }[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    navItems: NavItem[]
+    currentPath: string
+    title: string
+    subtitle: string
+    dark: boolean
+    activeToolbarMenu: 'proxy' | 'theme' | 'language' | null
+    themePalette: string
+    themePaletteOptions: readonly { value: string; label: string; swatches: readonly string[] }[]
+    sidebarExpanded: boolean
+    locale: string
+    localeOptions: readonly { value: string; label: string }[]
+    showTheme?: boolean
+    showProxy?: boolean
+    showLanguage?: boolean
+  }>(),
+  {
+    showTheme: true,
+    showProxy: true,
+    showLanguage: true
+  }
+)
 
 defineEmits<{
   minimize: []
@@ -36,6 +46,22 @@ defineEmits<{
   toggleSidebar: []
   changeLocale: [locale: string]
 }>()
+
+const visibleActiveToolbarMenu = computed(() => {
+  if (props.activeToolbarMenu === 'theme' && props.showTheme) {
+    return 'theme'
+  }
+
+  if (props.activeToolbarMenu === 'proxy' && props.showProxy) {
+    return 'proxy'
+  }
+
+  if (props.activeToolbarMenu === 'language' && props.showLanguage) {
+    return 'language'
+  }
+
+  return null
+})
 </script>
 
 <template>
@@ -43,7 +69,9 @@ defineEmits<{
     class="app-shell relative grid h-full w-full overflow-hidden"
     :class="{ 'app-shell--sidebar-collapsed': !sidebarExpanded }"
   >
-    <aside class="app-shell__sidebar relative z-10 min-h-0 overflow-visible px-2.5 py-3 lg:px-3 lg:py-4 xl:px-4 xl:py-4">
+    <aside
+      class="app-shell__sidebar relative z-10 min-h-0 overflow-visible px-2.5 py-3 lg:px-3 lg:py-4 xl:px-4 xl:py-4"
+    >
       <SidebarNav
         :items="navItems"
         :current-path="currentPath"
@@ -53,7 +81,7 @@ defineEmits<{
     </aside>
     <section class="app-shell__content relative z-10 flex min-h-0 min-w-0 flex-col overflow-hidden">
       <button
-        v-if="activeToolbarMenu"
+        v-if="visibleActiveToolbarMenu"
         class="app-shell__content-scrim"
         type="button"
         aria-label="Close toolbar menu"
@@ -70,6 +98,9 @@ defineEmits<{
         :theme-palette-options="themePaletteOptions"
         :locale="locale"
         :locale-options="localeOptions"
+        :show-theme="showTheme"
+        :show-proxy="showProxy"
+        :show-language="showLanguage"
         @minimize="$emit('minimize')"
         @maximize="$emit('maximize')"
         @close="$emit('close')"
@@ -89,9 +120,9 @@ defineEmits<{
       <main
         :class="[
           'relative z-0 min-h-0 flex-1 px-2.5 pb-2.5 sm:px-3 sm:pb-3 lg:px-4 lg:pb-4 xl:px-5 xl:pb-5',
-          activeToolbarMenu ? 'overflow-hidden' : 'overflow-auto',
+          visibleActiveToolbarMenu ? 'overflow-hidden' : 'overflow-auto'
         ]"
-        :inert="activeToolbarMenu ? true : undefined"
+        :inert="visibleActiveToolbarMenu ? true : undefined"
       >
         <slot />
       </main>

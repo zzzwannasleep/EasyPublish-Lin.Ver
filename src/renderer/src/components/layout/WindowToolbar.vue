@@ -1,18 +1,29 @@
 <script setup lang="ts">
 import { onClickOutside } from '@vueuse/core'
+import { Check as CheckIcon } from '@element-plus/icons-vue'
 import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from '../../i18n'
 
-const props = defineProps<{
-  currentPath: string
-  dark: boolean
-  activeToolbarMenu: 'proxy' | 'theme' | 'language' | null
-  themePalette: string
-  themePaletteOptions: readonly { value: string; label: string; swatches: readonly string[] }[]
-  locale: string
-  localeOptions: readonly { value: string; label: string }[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    currentPath: string
+    dark: boolean
+    activeToolbarMenu: 'proxy' | 'theme' | 'language' | null
+    themePalette: string
+    themePaletteOptions: readonly { value: string; label: string; swatches: readonly string[] }[]
+    locale: string
+    localeOptions: readonly { value: string; label: string }[]
+    showTheme?: boolean
+    showProxy?: boolean
+    showLanguage?: boolean
+  }>(),
+  {
+    showTheme: true,
+    showProxy: true,
+    showLanguage: true,
+  },
+)
 
 const emit = defineEmits<{
   minimize: []
@@ -49,8 +60,24 @@ const showProjectsLink = computed(
   () => props.currentPath.startsWith('/projects/') && props.currentPath !== '/projects',
 )
 
+const visibleActiveToolbarMenu = computed(() => {
+  if (props.activeToolbarMenu === 'theme' && props.showTheme) {
+    return 'theme'
+  }
+
+  if (props.activeToolbarMenu === 'proxy' && props.showProxy) {
+    return 'proxy'
+  }
+
+  if (props.activeToolbarMenu === 'language' && props.showLanguage) {
+    return 'language'
+  }
+
+  return null
+})
+
 onClickOutside(toolbarRef, () => {
-  if (props.activeToolbarMenu) {
+  if (visibleActiveToolbarMenu.value) {
     emit('closeToolbarMenu')
   }
 })
@@ -59,7 +86,7 @@ onClickOutside(toolbarRef, () => {
 <template>
   <div class="window-toolbar">
     <button
-      v-if="activeToolbarMenu"
+      v-if="visibleActiveToolbarMenu"
       class="window-toolbar__scrim"
       type="button"
       aria-label="Close toolbar menu"
@@ -82,9 +109,10 @@ onClickOutside(toolbarRef, () => {
         <div class="window-toolbar__actions [-webkit-app-region:no-drag]">
           <div class="window-toolbar__toolbar">
             <button
+              v-if="showTheme"
               :class="[
                 'soft-pill inline-flex h-9 items-center gap-2 px-3 text-[13px] transition duration-200 hover:border-border-strong hover:text-copy-primary',
-                activeToolbarMenu === 'theme' ? 'window-toolbar__toolbar-button is-active' : 'text-copy-secondary',
+                visibleActiveToolbarMenu === 'theme' ? 'window-toolbar__toolbar-button is-active' : 'text-copy-secondary',
               ]"
               type="button"
               @click="$emit('toggleToolbarMenu', 'theme')"
@@ -93,12 +121,13 @@ onClickOutside(toolbarRef, () => {
               <span>{{ t('common.theme.label') }}</span>
             </button>
 
-            <slot name="utility" />
+            <slot v-if="showProxy" name="utility" />
 
             <button
+              v-if="showLanguage"
               :class="[
                 'soft-pill inline-flex h-9 items-center gap-2 px-3 text-[13px] transition duration-200 hover:border-border-strong hover:text-copy-primary',
-                activeToolbarMenu === 'language' ? 'window-toolbar__toolbar-button is-active' : 'text-copy-secondary',
+                visibleActiveToolbarMenu === 'language' ? 'window-toolbar__toolbar-button is-active' : 'text-copy-secondary',
               ]"
               type="button"
               :title="`${t('common.language')}: ${currentLocaleLabel}`"
@@ -136,12 +165,12 @@ onClickOutside(toolbarRef, () => {
       </div>
 
       <div
-        v-if="activeToolbarMenu"
+        v-if="visibleActiveToolbarMenu"
         class="window-toolbar__tray [-webkit-app-region:no-drag]"
         @wheel.prevent
         @touchmove.prevent
       >
-        <div v-if="activeToolbarMenu === 'theme'" class="toolbar-panel">
+        <div v-if="visibleActiveToolbarMenu === 'theme'" class="toolbar-panel">
           <section class="toolbar-panel__section">
             <div class="toolbar-panel__label">{{ t('common.theme.mode') }}</div>
             <div class="toolbar-panel__mode-grid">
@@ -188,7 +217,7 @@ onClickOutside(toolbarRef, () => {
           </section>
         </div>
 
-        <div v-else-if="activeToolbarMenu === 'language'" class="toolbar-panel toolbar-panel--narrow">
+        <div v-else-if="visibleActiveToolbarMenu === 'language'" class="toolbar-panel toolbar-panel--narrow">
           <section class="toolbar-panel__section">
             <div class="toolbar-panel__label">{{ t('common.language') }}</div>
             <div class="toolbar-panel__list">
@@ -203,7 +232,7 @@ onClickOutside(toolbarRef, () => {
                 @click="$emit('changeLocale', option.value)"
               >
                 <span>{{ option.label }}</span>
-                <el-icon v-if="option.value === locale"><Check /></el-icon>
+                <el-icon v-if="option.value === locale"><CheckIcon /></el-icon>
               </button>
             </div>
           </section>
