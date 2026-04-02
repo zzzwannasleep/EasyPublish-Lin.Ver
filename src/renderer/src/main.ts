@@ -5,6 +5,7 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import 'element-plus/theme-chalk/dark/css-vars.css'
 import './styles/tokens.css'
 import './styles/theme.css'
+import './styles/tailwind.css'
 import './styles/layout.css'
 import router from './router'
 

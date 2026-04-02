@@ -77,6 +77,30 @@ const project = ref<PublishProject | null>(null)
 const isLoading = ref(false)
 const errorMessage = ref<string | null>(null)
 
+function getStepClasses(index: number) {
+  if (index === activeStep.value) {
+    return 'border-[rgba(198,90,46,0.24)] bg-[linear-gradient(135deg,rgba(247,219,206,0.72),rgba(255,255,255,0.44))] shadow-panel -translate-y-0.5'
+  }
+
+  if (index < activeStep.value) {
+    return 'border-[rgba(29,124,85,0.22)] bg-[linear-gradient(135deg,rgba(214,239,229,0.72),rgba(255,255,255,0.4))]'
+  }
+
+  return 'border-border-soft bg-[linear-gradient(180deg,rgba(255,255,255,0.52),transparent_44%)]'
+}
+
+function getStepBarClasses(index: number) {
+  if (index === activeStep.value) {
+    return 'bg-[linear-gradient(90deg,var(--accent),rgba(198,90,46,0.25))]'
+  }
+
+  if (index < activeStep.value) {
+    return 'bg-[linear-gradient(90deg,rgba(29,124,85,0.82),rgba(29,124,85,0.2))]'
+  }
+
+  return 'bg-transparent'
+}
+
 async function loadProject() {
   if (!Number.isFinite(workflowId.value) || workflowId.value <= 0) {
     project.value = null
@@ -138,26 +162,30 @@ watch(
 </script>
 
 <template>
-  <div class="workflow-shell">
-    <section v-if="!hideWorkflowRail" class="workflow-rail">
+  <div class="flex min-h-full flex-col gap-4">
+    <section v-if="!hideWorkflowRail" class="flex gap-3 overflow-x-auto pb-1">
       <article
         v-for="(item, index) in steps"
         :key="item.routeName"
-        class="workflow-step"
-        :class="{
-          'is-active': index === activeStep,
-          'is-complete': index < activeStep
-        }"
+        :class="[
+          'relative grid min-w-[220px] grid-cols-[auto_minmax(0,1fr)] items-start gap-3 overflow-hidden rounded-[22px] border px-4 py-4 transition duration-200',
+          getStepClasses(index),
+        ]"
       >
-        <div class="workflow-step__index">0{{ index + 1 }}</div>
-        <div class="workflow-step__body">
-          <div class="workflow-step__title">{{ item.title }}</div>
-          <div class="workflow-step__text">{{ item.description }}</div>
+        <span :class="['absolute inset-x-0 bottom-0 h-[3px]', getStepBarClasses(index)]" />
+        <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-copy-muted">
+          0{{ index + 1 }}
+        </div>
+        <div class="grid gap-1.5">
+          <div class="font-display text-[1.2rem] leading-tight tracking-[-0.04em] text-copy-primary">
+            {{ item.title }}
+          </div>
+          <div class="text-[13px] leading-6 text-copy-secondary">{{ item.description }}</div>
         </div>
       </article>
     </section>
 
-    <section class="workflow-stage">
+    <section class="min-h-0">
       <RouterView v-slot="{ Component, route: childRoute }">
         <transition name="workflow-stage" mode="out-in">
           <component :is="Component" :key="childRoute.fullPath" />
@@ -168,100 +196,6 @@ watch(
 </template>
 
 <style scoped>
-.workflow-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-height: 100%;
-}
-
-.workflow-rail {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  scrollbar-width: thin;
-}
-
-.workflow-step {
-  position: relative;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 12px;
-  align-items: start;
-  min-width: 220px;
-  padding: 14px 16px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.52), transparent 44%),
-    rgba(255, 255, 255, 0.32);
-  box-shadow: var(--shadow-sm);
-  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
-}
-
-.workflow-step::after {
-  content: '';
-  position: absolute;
-  inset: auto 0 0;
-  height: 3px;
-  background: transparent;
-}
-
-.workflow-step.is-active {
-  border-color: rgba(198, 90, 46, 0.24);
-  background:
-    linear-gradient(135deg, rgba(247, 219, 206, 0.72), rgba(255, 255, 255, 0.44)),
-    rgba(255, 255, 255, 0.36);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
-}
-
-.workflow-step.is-active::after {
-  background: linear-gradient(90deg, var(--accent), rgba(198, 90, 46, 0.25));
-}
-
-.workflow-step.is-complete {
-  border-color: rgba(29, 124, 85, 0.22);
-  background:
-    linear-gradient(135deg, rgba(214, 239, 229, 0.72), rgba(255, 255, 255, 0.38)),
-    rgba(255, 255, 255, 0.32);
-}
-
-.workflow-step.is-complete::after {
-  background: linear-gradient(90deg, rgba(29, 124, 85, 0.82), rgba(29, 124, 85, 0.2));
-}
-
-.workflow-step__index {
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.workflow-step__body {
-  display: grid;
-  gap: 6px;
-}
-
-.workflow-step__title {
-  font-family: var(--font-display);
-  font-size: clamp(18px, 1.6vw, 20px);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-}
-
-.workflow-step__text {
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.55;
-}
-
-.workflow-stage {
-  min-height: 0;
-}
-
 :deep(.workflow-stage-enter-active),
 :deep(.workflow-stage-leave-active) {
   transition:
@@ -273,16 +207,5 @@ watch(
 :deep(.workflow-stage-leave-to) {
   opacity: 0;
   transform: translateY(8px);
-}
-
-@media (max-width: 720px) {
-  .workflow-rail {
-    gap: 10px;
-  }
-
-  .workflow-step {
-    min-width: 200px;
-    padding: 13px 14px;
-  }
 }
 </style>

@@ -61,29 +61,31 @@ function openProjectFolder(path: string) {
 </script>
 
 <template>
-  <article class="stack-list__item">
-    <div class="stack-list__title">{{ t('projectAside.snapshot') }}</div>
-    <div v-if="isLoading" class="stack-list__text">{{ t('projectAside.loading') }}</div>
-    <div v-else-if="errorMessage" class="stack-list__text">{{ errorMessage }}</div>
-    <div v-else-if="project" class="project-stage-aside__group">
-      <div class="project-stage-aside__headline">{{ project.name }}</div>
-      <div class="project-stage-aside__chips">
+  <article class="surface-subtle grid gap-3 px-4 py-4">
+    <div class="text-sm font-semibold text-copy-primary">{{ t('projectAside.snapshot') }}</div>
+    <div v-if="isLoading" class="text-sm leading-6 text-copy-secondary">{{ t('projectAside.loading') }}</div>
+    <div v-else-if="errorMessage" class="text-sm leading-6 text-danger">{{ errorMessage }}</div>
+    <div v-else-if="project" class="grid gap-3">
+      <div class="font-display text-[1.15rem] leading-tight tracking-[-0.04em] text-copy-primary">
+        {{ project.name }}
+      </div>
+      <div class="flex flex-wrap gap-2">
         <StatusChip tone="info">{{ getProjectModeLabel(project.projectMode) }}</StatusChip>
         <StatusChip v-if="project.sourceKind" tone="neutral">{{ getProjectSourceLabel(project.sourceKind) }}</StatusChip>
         <StatusChip :tone="projectStatusTones[project.status]">
           {{ getProjectStatusLabel(project.status) }}
         </StatusChip>
       </div>
-      <div class="stack-list__text">
+      <div class="text-sm leading-6 text-copy-secondary">
         {{ t('projectAside.currentStage', { stage: getProjectStageLabel(project.stage) }) }}
       </div>
     </div>
-    <div v-else class="stack-list__text">{{ t('projectAside.unavailable') }}</div>
+    <div v-else class="text-sm leading-6 text-copy-secondary">{{ t('projectAside.unavailable') }}</div>
   </article>
 
-  <article v-if="project" class="stack-list__item">
-    <div class="stack-list__title">{{ t('projectAside.recordedResults') }}</div>
-    <div class="stack-list__text">
+  <article v-if="project" class="surface-subtle grid gap-3 px-4 py-4">
+    <div class="text-sm font-semibold text-copy-primary">{{ t('projectAside.recordedResults') }}</div>
+    <div class="text-sm leading-6 text-copy-secondary">
       <template v-if="recordedSites">
         {{ recordedSites }}
       </template>
@@ -91,12 +93,12 @@ function openProjectFolder(path: string) {
         {{ t('projectAside.noLinks') }}
       </template>
     </div>
-    <div v-if="missingTargetSites" class="stack-list__text">待发布：{{ missingTargetSites }}</div>
-    <div v-if="latestResult" class="project-stage-aside__latest">
+    <div v-if="missingTargetSites" class="text-sm leading-6 text-warning">待发布：{{ missingTargetSites }}</div>
+    <div v-if="latestResult" class="flex flex-wrap items-center gap-2.5">
       <StatusChip :tone="publishStateTones[latestResult.status]">
         {{ getPublishStateLabel(latestResult.status) }}
       </StatusChip>
-      <span class="stack-list__text">
+      <span class="text-sm leading-6 text-copy-secondary">
         {{
           t('projectAside.latestResult', {
             site: getSiteLabel(latestResult.siteId),
@@ -107,57 +109,22 @@ function openProjectFolder(path: string) {
     </div>
   </article>
 
-  <article v-if="project" class="stack-list__item">
-    <div class="stack-list__title">{{ t('projectAside.workingDirectory') }}</div>
-    <button class="project-stage-aside__path" type="button" @click="openProjectFolder(project.workingDirectory)">
+  <article v-if="project" class="surface-subtle grid gap-3 px-4 py-4">
+    <div class="text-sm font-semibold text-copy-primary">{{ t('projectAside.workingDirectory') }}</div>
+    <button
+      class="break-all text-left text-sm leading-6 text-accent transition hover:text-brand"
+      type="button"
+      @click="openProjectFolder(project.workingDirectory)"
+    >
       {{ project.workingDirectory }}
     </button>
-    <div class="stack-list__text">
+    <div class="text-sm leading-6 text-copy-secondary">
       {{ t('projectAside.updatedAt', { time: formatProjectTimestamp(project.updatedAt) }) }}
     </div>
   </article>
 
-  <article v-for="item in notes" :key="item.title" class="stack-list__item">
-    <div class="stack-list__title">{{ item.title }}</div>
-    <div class="stack-list__text">{{ item.text }}</div>
+  <article v-for="item in notes" :key="item.title" class="surface-subtle grid gap-2.5 px-4 py-4">
+    <div class="text-sm font-semibold text-copy-primary">{{ item.title }}</div>
+    <div class="text-sm leading-6 text-copy-secondary">{{ item.text }}</div>
   </article>
 </template>
-
-<style scoped>
-.project-stage-aside__group {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.project-stage-aside__headline {
-  font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-}
-
-.project-stage-aside__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.project-stage-aside__path {
-  border: 0;
-  padding: 0;
-  background: none;
-  color: var(--accent);
-  text-align: left;
-  cursor: pointer;
-  word-break: break-all;
-}
-
-.project-stage-aside__latest {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
-}
-</style>

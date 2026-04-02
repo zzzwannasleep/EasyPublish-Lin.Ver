@@ -91,11 +91,9 @@ function selectMode(mode: ProjectMode) {
   display: grid;
   gap: 14px;
   padding: 22px 20px;
-  border: 1px solid rgba(198, 90, 46, 0.12);
+  border: 1px solid var(--border-soft);
   border-radius: 24px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.7), transparent 100%),
-    rgba(255, 255, 255, 0.5);
+  background: var(--surface-soft-fill);
   text-align: left;
   cursor: pointer;
   transition:
@@ -108,15 +106,15 @@ function selectMode(mode: ProjectMode) {
 .mode-selector__card:hover,
 .mode-selector__card.is-active {
   transform: translateY(-2px);
-  border-color: rgba(198, 90, 46, 0.24);
+  border-color: var(--border-strong);
   box-shadow: var(--shadow-md);
-  background: linear-gradient(135deg, var(--brand-soft), rgba(255, 255, 255, 0.72));
+  background: var(--surface-brand-fill);
 }
 
 .mode-selector__card.is-active {
   box-shadow:
     var(--shadow-md),
-    0 0 0 1px rgba(198, 90, 46, 0.08) inset;
+    0 0 0 1px var(--brand-soft) inset;
 }
 
 .mode-selector__icon {
@@ -126,7 +124,7 @@ function selectMode(mode: ProjectMode) {
   width: 46px;
   height: 46px;
   border-radius: 16px;
-  background: linear-gradient(135deg, var(--brand-soft), rgba(255, 255, 255, 0.82));
+  background: var(--surface-brand-fill-strong);
   color: var(--brand);
   font-size: 18px;
 }

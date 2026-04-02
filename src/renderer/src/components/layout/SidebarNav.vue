@@ -37,10 +37,13 @@ function handleNavigate(navigate: () => void) {
 </script>
 
 <template>
-  <nav class="sidebar-nav" :class="{ 'sidebar-nav--collapsed': !expanded }">
-    <div class="sidebar-nav__header">
-      <div class="sidebar-nav__brand">
-        <span class="sidebar-nav__brand-icon" aria-hidden="true">
+  <nav class="flex h-full flex-col gap-4 overflow-auto">
+    <div v-if="expanded" class="flex items-start justify-between gap-2 py-1 pl-0.5 pr-0.5">
+      <div class="flex min-h-9 min-w-0 flex-1 items-center gap-2.5">
+        <span
+          class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-brand-soft text-brand shadow-[0_4px_12px_rgba(193,96,55,0.14)]"
+          aria-hidden="true"
+        >
           <svg viewBox="0 0 1024 1024" focusable="false">
             <path
               d="M341.333333 277.333333l115.2-115.2c8.533333-8.533333 17.066667-12.8 29.866667-17.066666v473.6c0 17.066667 12.8 29.866667 25.6 29.866666s25.6-12.8 25.6-29.866666V140.8c8.533333 4.266667 21.333333 8.533333 29.866667 17.066667L682.666667 277.333333c4.266667 4.266667 12.8 8.533333 21.333333 8.533334s12.8-4.266667 21.333333-8.533334c12.8-12.8 12.8-29.866667 0-38.4l-115.2-115.2C554.666667 68.266667 469.333333 68.266667 418.133333 119.466667L302.933333 234.666667c-12.8 12.8-12.8 29.866667 0 38.4s25.6 12.8 38.4 4.266666z"
@@ -52,16 +55,22 @@ function handleNavigate(navigate: () => void) {
             />
           </svg>
         </span>
-        <h2 v-if="expanded" class="sidebar-nav__title">{{ t('nav.title') }}</h2>
+
+        <div class="min-w-0">
+          <h2 class="font-display text-[22px] leading-none tracking-[-0.03em] text-copy-primary">
+            {{ t('nav.title') }}
+          </h2>
+        </div>
       </div>
+
       <button
-        class="sidebar-nav__toggle"
+        class="soft-pill inline-flex h-9 w-9 shrink-0 items-center justify-center text-copy-secondary transition duration-200 hover:border-border-strong hover:text-copy-primary"
         type="button"
         :aria-label="expanded ? 'Collapse sidebar' : 'Expand sidebar'"
         :title="expanded ? 'Collapse sidebar' : 'Expand sidebar'"
         @click="emit('toggleSidebar')"
       >
-        <svg v-if="expanded" viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
           <path
             d="M14.25 5.25L7.5 12l6.75 6.75"
             fill="none"
@@ -71,7 +80,18 @@ function handleNavigate(navigate: () => void) {
             stroke-width="1.8"
           />
         </svg>
-        <svg v-else viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+      </button>
+    </div>
+
+    <div v-else class="flex justify-center py-1">
+      <button
+        class="soft-pill inline-flex h-10 w-10 items-center justify-center text-copy-secondary transition duration-200 hover:border-border-strong hover:text-copy-primary"
+        type="button"
+        aria-label="Expand sidebar"
+        title="Expand sidebar"
+        @click="emit('toggleSidebar')"
+      >
+        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
           <path
             d="M9.75 5.25L16.5 12l-6.75 6.75"
             fill="none"
@@ -83,7 +103,8 @@ function handleNavigate(navigate: () => void) {
         </svg>
       </button>
     </div>
-    <div class="sidebar-nav__list">
+
+    <div class="flex flex-col gap-2">
       <RouterLink
         v-for="item in items"
         :key="item.to"
@@ -92,200 +113,29 @@ function handleNavigate(navigate: () => void) {
         v-slot="{ navigate }"
       >
         <button
-          class="sidebar-nav__item"
-          :class="{ 'is-active': isActive(item) }"
+          :class="[
+            'group flex w-full items-center rounded-[16px] border text-left transition duration-200',
+            expanded ? 'gap-3 px-2.5 py-2.5' : 'mx-auto w-[56px] justify-center px-0 py-2.5',
+            isActive(item)
+              ? 'border-[rgba(193,96,55,0.18)] bg-brand-soft shadow-sm'
+              : 'border-transparent bg-transparent hover:border-border-soft hover:bg-black/[0.02] dark:hover:bg-white/[0.04]',
+          ]"
           type="button"
           :aria-label="item.label"
           :title="expanded ? undefined : item.label"
           @click="handleNavigate(navigate)"
         >
-          <span class="sidebar-nav__icon">
+          <span
+            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] bg-black/[0.03] text-brand transition duration-200 group-hover:bg-black/[0.05] dark:bg-white/[0.04] dark:group-hover:bg-white/[0.08]"
+          >
             <el-icon><component :is="item.icon" /></el-icon>
           </span>
-          <span v-if="expanded" class="sidebar-nav__meta">
-            <span class="sidebar-nav__label">{{ item.label }}</span>
-            <span class="sidebar-nav__caption">{{ item.caption }}</span>
+
+          <span v-if="expanded" class="block min-w-0 truncate text-[14px] font-semibold text-copy-primary">
+            {{ item.label }}
           </span>
         </button>
       </RouterLink>
     </div>
   </nav>
 </template>
-
-<style scoped>
-.sidebar-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-  height: 100%;
-  overflow: auto;
-}
-
-.sidebar-nav__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 4px 8px;
-}
-
-.sidebar-nav__brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  flex: 1;
-  min-height: 32px;
-}
-
-.sidebar-nav__brand-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  color: var(--brand);
-}
-
-.sidebar-nav__brand-icon svg {
-  width: 100%;
-  height: 100%;
-}
-
-.sidebar-nav__title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 26px;
-  line-height: 1.02;
-  letter-spacing: -0.04em;
-}
-
-.sidebar-nav__toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  flex: 0 0 auto;
-  border: 1px solid var(--border-soft);
-  border-radius: 999px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.55), transparent 100%),
-    var(--bg-panel);
-  color: var(--text-secondary);
-  cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  transition:
-    transform 160ms ease,
-    border-color 160ms ease,
-    color 160ms ease,
-    background 160ms ease;
-}
-
-.sidebar-nav__toggle:hover {
-  transform: translateY(-1px);
-  border-color: var(--border-strong);
-  color: var(--text-primary);
-}
-
-.sidebar-nav__toggle svg {
-  width: 18px;
-  height: 18px;
-}
-
-.sidebar-nav__list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.sidebar-nav__item {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 14px 14px 14px 12px;
-  border: 1px solid transparent;
-  border-radius: 18px;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
-}
-
-.sidebar-nav__item:hover {
-  transform: translateX(3px);
-  background: rgba(255, 255, 255, 0.26);
-  border-color: var(--border-soft);
-}
-
-.sidebar-nav__item.is-active {
-  background: linear-gradient(135deg, var(--brand-soft), rgba(255, 255, 255, 0.42));
-  border-color: rgba(198, 90, 46, 0.22);
-}
-
-.sidebar-nav__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.5);
-  color: var(--brand);
-}
-
-.sidebar-nav__meta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.sidebar-nav__label {
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.sidebar-nav__caption {
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.sidebar-nav--collapsed {
-  gap: 18px;
-}
-
-.sidebar-nav--collapsed .sidebar-nav__header,
-.sidebar-nav--collapsed .sidebar-nav__list {
-  width: 100%;
-}
-
-.sidebar-nav--collapsed .sidebar-nav__header {
-  align-items: center;
-  padding-inline: 0;
-}
-
-.sidebar-nav--collapsed .sidebar-nav__item {
-  justify-content: center;
-  width: 72px;
-  padding: 12px 0;
-  margin: 0 auto;
-}
-
-.sidebar-nav--collapsed .sidebar-nav__item:hover {
-  transform: translateY(-1px);
-}
-
-.sidebar-nav--collapsed .sidebar-nav__icon {
-  width: 46px;
-  height: 46px;
-}
-
-.sidebar-nav--collapsed .sidebar-nav__toggle {
-  width: 34px;
-  height: 34px;
-}
-</style>

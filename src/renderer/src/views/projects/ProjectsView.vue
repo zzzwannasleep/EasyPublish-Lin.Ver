@@ -7,7 +7,7 @@ const { t } = useI18n()
 </script>
 
 <template>
-  <div class="page-shell project-workspace">
+  <div class="flex min-h-full flex-col gap-5">
     <AppPanel
       :eyebrow="t('projects.panel.eyebrow')"
       :title="t('projects.panel.title')"
@@ -17,9 +17,3 @@ const { t } = useI18n()
     </AppPanel>
   </div>
 </template>
-
-<style scoped>
-.project-workspace {
-  min-height: 100%;
-}
-</style>

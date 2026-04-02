@@ -1,5 +1,7 @@
 <script setup lang="ts">
-withDefaults(
+import { computed } from 'vue'
+
+const props = withDefaults(
   defineProps<{
     tone?: 'neutral' | 'info' | 'success' | 'warning' | 'danger'
   }>(),
@@ -7,46 +9,30 @@ withDefaults(
     tone: 'neutral'
   }
 )
+
+const toneClass = computed(() => {
+  switch (props.tone) {
+    case 'info':
+      return 'bg-accent-soft text-accent'
+    case 'success':
+      return 'bg-success-soft text-success'
+    case 'warning':
+      return 'bg-warning-soft text-warning'
+    case 'danger':
+      return 'bg-danger-soft text-danger'
+    default:
+      return 'bg-[rgba(102,91,82,0.12)] text-copy-secondary'
+  }
+})
 </script>
 
 <template>
-  <span class="status-chip" :data-tone="tone">
+  <span
+    :class="[
+      'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-semibold leading-none whitespace-nowrap',
+      toneClass,
+    ]"
+  >
     <slot />
   </span>
 </template>
-
-<style scoped>
-.status-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(102, 91, 82, 0.12);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.status-chip[data-tone='info'] {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-.status-chip[data-tone='success'] {
-  background: var(--success-soft);
-  color: var(--success);
-}
-
-.status-chip[data-tone='warning'] {
-  background: var(--warning-soft);
-  color: var(--warning);
-}
-
-.status-chip[data-tone='danger'] {
-  background: var(--danger-soft);
-  color: var(--danger);
-}
-</style>

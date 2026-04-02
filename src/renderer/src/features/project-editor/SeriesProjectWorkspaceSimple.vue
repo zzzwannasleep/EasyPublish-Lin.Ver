@@ -1661,10 +1661,13 @@ onBeforeUnmount(() => {
       </template>
     </el-dialog>
   </div>
-</template><style scoped>
+</template>
+
+<style scoped>
 .series-editor {
   display: grid;
-  gap: 18px;
+  gap: 20px;
+  min-height: 100%;
 }
 
 .series-editor__overview,
@@ -1675,26 +1678,35 @@ onBeforeUnmount(() => {
 .series-editor__profile-card,
 .series-editor__empty-card {
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  background: var(--bg-panel);
+  border-radius: 1.75rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.46), transparent 38%),
+    var(--bg-panel);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(16px);
 }
 
 .series-editor__overview,
 .series-editor__section {
-  padding: 18px;
+  padding: 22px;
 }
 
 .series-editor__overview {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 18px;
+  gap: 20px;
   align-items: start;
+  background:
+    radial-gradient(circle at top right, rgba(255, 190, 92, 0.14), transparent 26%),
+    radial-gradient(circle at left bottom, rgba(31, 111, 120, 0.12), transparent 30%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.44), transparent 52%),
+    var(--bg-panel);
 }
 
 .series-editor__overview-main {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
 }
 
 .series-editor__overview-item,
@@ -1709,15 +1721,23 @@ onBeforeUnmount(() => {
 }
 
 .series-editor__overview-item {
-  padding: 14px;
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-panel) 92%, #eff3f8);
+  padding: 18px;
+  border: 1px solid var(--border-soft);
+  border-radius: 1.4rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32), transparent 42%),
+    color-mix(in srgb, var(--bg-panel) 92%, white 8%);
+  box-shadow: 0 14px 30px rgba(39, 26, 13, 0.06);
 }
 
 .series-editor__overview-side {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   min-width: 220px;
+  padding: 18px;
+  border: 1px solid var(--border-soft);
+  border-radius: 1.4rem;
+  background: color-mix(in srgb, var(--bg-panel) 94%, white 6%);
 }
 
 .series-editor__meta-line,
@@ -1729,28 +1749,31 @@ onBeforeUnmount(() => {
 .series-editor__field-help {
   color: var(--text-secondary);
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.7;
 }
 
 .series-editor__title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 22px;
-  letter-spacing: -0.03em;
+  font-size: clamp(1.45rem, 1.8vw, 1.8rem);
+  line-height: 1.05;
+  letter-spacing: -0.05em;
 }
 
 .series-editor__label {
   color: var(--accent);
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
 }
 
 .series-editor__value {
-  font-size: 22px;
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 2vw, 1.85rem);
   font-weight: 700;
-  letter-spacing: -0.03em;
+  line-height: 1.08;
+  letter-spacing: -0.05em;
 }
 
 .series-editor__link {
@@ -1761,6 +1784,7 @@ onBeforeUnmount(() => {
   border: 0;
   background: transparent;
   color: var(--accent);
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -1795,18 +1819,19 @@ onBeforeUnmount(() => {
 
 .series-editor__section {
   display: grid;
-  gap: 16px;
+  gap: 18px;
 }
 
 .series-editor__section-head {
   justify-content: space-between;
   align-items: flex-start;
+  gap: 16px;
 }
 
 .series-editor__profile-strip {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
 }
 
 .series-editor__profile-card {
@@ -1830,19 +1855,29 @@ onBeforeUnmount(() => {
 .series-editor__profile-option {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
-  padding: 4px;
-  border: 1px solid var(--border-soft);
+  padding: 5px;
+  border: 1px solid color-mix(in srgb, var(--border-soft) 85%, white 15%);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-panel) 92%, #eef2f7);
-  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.3), transparent 100%),
+    color-mix(in srgb, var(--bg-panel) 92%, white 8%);
+  box-shadow: 0 10px 24px rgba(39, 26, 13, 0.06);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .series-editor__profile-option.is-active {
-  border-color: color-mix(in srgb, var(--accent) 54%, white);
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg-panel));
-  transform: translateY(-1px);
+  border-color: rgba(198, 90, 46, 0.24);
+  background:
+    linear-gradient(135deg, var(--brand-soft), rgba(255, 255, 255, 0.44)),
+    color-mix(in srgb, var(--bg-panel) 88%, white 12%);
+  box-shadow: 0 14px 28px rgba(198, 90, 46, 0.12);
+  transform: translateY(-2px);
 }
 
 .series-editor__profile-option-main {
@@ -1874,9 +1909,9 @@ onBeforeUnmount(() => {
 }
 
 .series-editor__profile-option-badge {
-  padding: 2px 8px;
+  padding: 3px 9px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 16%, var(--bg-panel));
+  background: var(--accent-soft);
   color: var(--accent);
   font-size: 12px;
   font-weight: 700;
@@ -1897,7 +1932,7 @@ onBeforeUnmount(() => {
 }
 
 .series-editor__profile-option-icon:hover {
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg-panel));
+  background: var(--accent-soft);
   color: var(--accent);
 }
 
@@ -1909,9 +1944,12 @@ onBeforeUnmount(() => {
 
 .series-editor__profile-footer {
   justify-content: space-between;
-  padding: 12px 14px;
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-panel) 92%, #eef2f7);
+  padding: 16px 18px;
+  border: 1px solid var(--border-soft);
+  border-radius: 1.35rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 100%),
+    color-mix(in srgb, var(--bg-panel) 92%, white 8%);
 }
 
 .series-editor__profile-selection {
@@ -1942,7 +1980,7 @@ onBeforeUnmount(() => {
 .series-editor__site-card,
 .series-editor__site-preview,
 .series-editor__empty-card {
-  padding: 16px;
+  padding: 18px;
 }
 
 .series-editor__template-panel,
@@ -1957,6 +1995,7 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
+  justify-content: space-between;
 }
 
 .series-editor__editor-hint {
@@ -1967,32 +2006,39 @@ onBeforeUnmount(() => {
 
 .series-editor__torrent-strip {
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .series-editor__torrent-chip {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
-  gap: 8px;
+  gap: 10px;
   align-items: start;
-  padding: 10px 12px;
+  padding: 14px 14px;
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-panel) 94%, #eef2f7);
+  border-radius: 1.2rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 100%),
+    color-mix(in srgb, var(--bg-panel) 94%, white 6%);
   cursor: pointer;
+  box-shadow: 0 12px 24px rgba(39, 26, 13, 0.05);
   transition:
     border-color 160ms ease,
     background 160ms ease,
-    transform 160ms ease;
+    transform 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .series-editor__torrent-chip:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
 }
 
 .series-editor__torrent-chip.is-active {
-  border-color: color-mix(in srgb, var(--accent) 54%, white);
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+  border-color: rgba(198, 90, 46, 0.24);
+  background:
+    linear-gradient(135deg, var(--brand-soft), rgba(255, 255, 255, 0.42)),
+    color-mix(in srgb, var(--bg-panel) 90%, white 10%);
+  box-shadow: 0 16px 28px rgba(198, 90, 46, 0.12);
 }
 
 .series-editor__torrent-chip.has-override {
@@ -2033,10 +2079,11 @@ onBeforeUnmount(() => {
 }
 
 .series-editor__empty-inline {
-  padding: 14px;
+  padding: 16px;
   border: 1px dashed var(--border-soft);
-  border-radius: var(--radius-md);
+  border-radius: 1.25rem;
   color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-panel) 94%, white 6%);
 }
 
 .series-editor__wysiwyg-host {
@@ -2045,12 +2092,15 @@ onBeforeUnmount(() => {
 
 .series-editor__template-body :deep(.toastui-editor-defaultUI) {
   border-color: var(--border-soft);
-  border-radius: var(--radius-md);
+  border-radius: 1.25rem;
+  box-shadow: 0 14px 30px rgba(39, 26, 13, 0.06);
   overflow: hidden;
 }
 
 .series-editor__template-body :deep(.toastui-editor-defaultUI-toolbar) {
-  background: color-mix(in srgb, var(--bg-panel) 94%, #eef2f7);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 100%),
+    color-mix(in srgb, var(--bg-panel) 94%, white 6%);
   border-bottom-color: var(--border-soft);
 }
 
@@ -2087,9 +2137,12 @@ onBeforeUnmount(() => {
 .series-editor__html-preview {
   min-height: 320px;
   max-height: 320px;
-  padding: 14px;
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-panel) 90%, #eef2f7);
+  padding: 18px;
+  border: 1px solid var(--border-soft);
+  border-radius: 1.25rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 100%),
+    color-mix(in srgb, var(--bg-panel) 92%, white 8%);
   overflow: auto;
 }
 
@@ -2105,8 +2158,8 @@ onBeforeUnmount(() => {
 .series-editor__site-code {
   margin: 0;
   padding: 12px;
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-panel) 88%, #eef2f7);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--bg-panel) 90%, white 10%);
   font-size: 12px;
   line-height: 1.6;
   white-space: pre-wrap;
@@ -2132,22 +2185,29 @@ onBeforeUnmount(() => {
   min-height: 88px;
   padding: 14px 12px;
   border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-panel) 94%, #eef2f7);
+  border-radius: 1.25rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 100%),
+    color-mix(in srgb, var(--bg-panel) 94%, white 6%);
   cursor: pointer;
+  box-shadow: 0 12px 24px rgba(39, 26, 13, 0.05);
   transition:
     border-color 160ms ease,
     background 160ms ease,
-    transform 160ms ease;
+    transform 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .series-editor__site-button:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
 }
 
 .series-editor__site-button.is-active {
-  border-color: color-mix(in srgb, var(--accent) 54%, white);
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+  border-color: rgba(198, 90, 46, 0.24);
+  background:
+    linear-gradient(135deg, var(--brand-soft), rgba(255, 255, 255, 0.42)),
+    color-mix(in srgb, var(--bg-panel) 92%, white 8%);
+  box-shadow: 0 16px 28px rgba(198, 90, 46, 0.1);
 }
 
 .series-editor__site-button-name {
@@ -2201,6 +2261,9 @@ onBeforeUnmount(() => {
 
 .series-editor__empty-card {
   color: var(--text-secondary);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 100%),
+    color-mix(in srgb, var(--bg-panel) 94%, white 6%);
 }
 
 @media (max-width: 1120px) {

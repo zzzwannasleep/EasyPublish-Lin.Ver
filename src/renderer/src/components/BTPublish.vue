@@ -473,7 +473,7 @@ onMounted(async () => {
 
 <template>
   <div class="legacy-bt">
-    <header class="legacy-bt__header">
+    <header class="surface-hero legacy-bt__header">
       <div class="legacy-bt__copy">
         <div class="legacy-bt__eyebrow">兼容 BT 发布</div>
         <h3 class="legacy-bt__title">旧发布面板已改为读取项目结果模型。</h3>
@@ -490,7 +490,7 @@ onMounted(async () => {
       </div>
     </header>
 
-    <div class="legacy-bt__toolbar">
+    <div class="surface-panel legacy-bt__toolbar">
       <div class="legacy-bt__toolbar-actions">
         <el-button plain @click="publishPendingTargets" :disabled="missingTargetSites.length === 0">发布剩余目标站点</el-button>
         <el-button plain @click="loadData">刷新项目结果</el-button>
@@ -510,6 +510,7 @@ onMounted(async () => {
       </div>
     </div>
 
+    <section class="surface-panel legacy-bt__table-wrap">
     <el-table
       ref="publishtable"
       v-loading="isLoading"
@@ -574,6 +575,7 @@ onMounted(async () => {
         </template>
       </el-table-column>
     </el-table>
+    </section>
 
     <footer class="legacy-bt__footer">
       <el-button class="legacy-bt__footer-button" type="primary" plain @click="back">上一步</el-button>
@@ -587,6 +589,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  min-height: 0;
 }
 
 .legacy-bt__header,
@@ -613,6 +616,10 @@ onMounted(async () => {
   gap: 10px;
 }
 
+.legacy-bt__header {
+  align-items: flex-end;
+}
+
 .legacy-bt__copy {
   max-width: 720px;
 }
@@ -628,8 +635,8 @@ onMounted(async () => {
 .legacy-bt__title {
   margin: 10px 0 0;
   font-family: var(--font-display);
-  font-size: 24px;
-  letter-spacing: -0.04em;
+  font-size: 18px;
+  letter-spacing: -0.03em;
 }
 
 .legacy-bt__description,
@@ -639,7 +646,7 @@ onMounted(async () => {
 .legacy-bt__link-empty {
   color: var(--text-secondary);
   font-size: 13px;
-  line-height: 1.7;
+  line-height: 1.6;
 }
 
 .legacy-bt__description {
@@ -647,15 +654,18 @@ onMounted(async () => {
 }
 
 .legacy-bt__toolbar {
-  padding: 16px 18px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.34);
+  padding: 14px 16px;
 }
 
 .legacy-bt__toolbar-text {
   min-height: 32px;
   text-align: right;
+  max-width: 420px;
+}
+
+.legacy-bt__table-wrap {
+  overflow: hidden;
+  padding: 8px;
 }
 
 .legacy-bt__table {
@@ -692,7 +702,29 @@ onMounted(async () => {
 }
 
 .legacy-bt__footer-button {
-  width: 180px;
+  width: 160px;
+}
+
+:deep(.legacy-bt__table .el-table__inner-wrapper::before) {
+  display: none;
+}
+
+:deep(.legacy-bt__table th.el-table__cell) {
+  background: rgba(245, 247, 255, 0.92);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:deep(.legacy-bt__table td.el-table__cell) {
+  padding-block: 14px;
+}
+
+:deep(.legacy-bt__table .el-table__row td:first-child .cell) {
+  display: flex;
+  align-items: center;
 }
 
 :deep(.el-table .warning-row) {
@@ -719,6 +751,7 @@ onMounted(async () => {
 
   .legacy-bt__toolbar-text {
     text-align: left;
+    max-width: none;
   }
 }
 </style>

@@ -41,18 +41,26 @@ const panelCopy = computed(() =>
 </script>
 
 <template>
-  <div class="page-shell account-classified">
-    <section class="account-switcher">
+  <div class="flex min-h-full flex-col gap-4">
+    <section class="grid gap-3 lg:grid-cols-2">
       <article
         v-for="card in categoryCards"
         :key="card.id"
-        class="account-switcher__card"
-        :class="{ 'account-switcher__card--active': activeCategory === card.id }"
+        :class="[
+          'surface-tile grid gap-2 px-4 py-4',
+          activeCategory === card.id
+            ? 'border-[rgba(230,156,28,0.34)] shadow-[0_8px_18px_rgba(230,156,28,0.1)]'
+            : '',
+        ]"
         @click="activeCategory = card.id"
       >
-        <div class="account-switcher__label">{{ card.label }}</div>
-        <h2 class="account-switcher__title">{{ card.title }}</h2>
-        <p class="account-switcher__text">{{ card.description }}</p>
+        <div class="text-[10px] font-semibold uppercase tracking-[0.14em] text-copy-muted">
+          {{ card.label }}
+        </div>
+        <h2 class="font-display text-[clamp(1.1rem,1.5vw,1.35rem)] leading-tight tracking-[-0.03em] text-copy-primary">
+          {{ card.title }}
+        </h2>
+        <p class="text-[13px] leading-5 text-copy-secondary">{{ card.description }}</p>
       </article>
     </section>
 
@@ -71,77 +79,3 @@ const panelCopy = computed(() =>
     </AppPanel>
   </div>
 </template>
-
-<style scoped>
-.account-classified {
-  display: grid;
-  gap: 18px;
-  min-height: 100%;
-}
-
-.account-switcher {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.account-switcher__card {
-  position: relative;
-  display: grid;
-  gap: 10px;
-  padding: 20px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  background:
-    radial-gradient(circle at top right, rgba(255, 190, 92, 0.1), transparent 40%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.44), transparent 38%),
-    var(--bg-panel);
-  transition:
-    transform 160ms ease,
-    border-color 160ms ease,
-    box-shadow 160ms ease;
-}
-
-.account-switcher__card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.account-switcher__card--active {
-  border-color: rgba(230, 156, 28, 0.48);
-  box-shadow: 0 18px 38px rgba(230, 156, 28, 0.12);
-}
-
-.account-switcher__label {
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.account-switcher__title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 28px;
-  letter-spacing: -0.04em;
-}
-
-.account-switcher__text {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.7;
-}
-
-@media (max-width: 720px) {
-  .account-switcher {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .account-switcher__card {
-    padding: 16px;
-  }
-}
-</style>

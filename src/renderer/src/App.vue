@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, useTemplateRef } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
-import { useDark, useToggle } from '@vueuse/core'
+import { useDark } from '@vueuse/core'
 import {
   Compass,
   Document,
@@ -12,12 +12,23 @@ import {
 } from '@element-plus/icons-vue'
 import AppShell from './components/layout/AppShell.vue'
 import { type LocaleCode, useI18n } from './i18n'
+import {
+  THEME_PALETTE_DEFINITIONS,
+  applyThemePalette,
+  isThemePaletteId,
+  persistThemePalette,
+  readStoredThemePalette,
+  type ThemePaletteId,
+} from './theme/palette'
 
 const route = useRoute()
 const isDark = useDark()
-const toggleDark = useToggle(isDark)
 const sidebarExpanded = ref(true)
 const { locale, localeOptions, setLocale, t } = useI18n()
+const activeThemePalette = ref<ThemePaletteId>(readStoredThemePalette())
+const activeToolbarMenu = ref<'proxy' | 'theme' | 'language' | null>(null)
+
+applyThemePalette(activeThemePalette.value)
 
 document.body.style.overflow = 'hidden'
 
@@ -66,9 +77,39 @@ const navItems = computed(() => [
 
 const pageTitle = computed(() => t((route.meta.titleKey as string) ?? 'app.defaultTitle'))
 const pageSubtitle = computed(() => t((route.meta.subtitleKey as string) ?? 'app.defaultSubtitle'))
+const themePaletteOptions = computed(() =>
+  THEME_PALETTE_DEFINITIONS.map(option => ({
+    ...option,
+    label: t(option.labelKey),
+  })),
+)
 
 function toggleSidebar() {
   sidebarExpanded.value = !sidebarExpanded.value
+}
+
+function toggleToolbarMenu(menu: 'proxy' | 'theme' | 'language') {
+  activeToolbarMenu.value = activeToolbarMenu.value === menu ? null : menu
+}
+
+function closeToolbarMenu() {
+  activeToolbarMenu.value = null
+}
+
+function setThemeMode(mode: 'light' | 'dark') {
+  isDark.value = mode === 'dark'
+  closeToolbarMenu()
+}
+
+function setThemePalette(value: string) {
+  if (!isThemePaletteId(value)) {
+    return
+  }
+
+  activeThemePalette.value = value
+  persistThemePalette(value)
+  applyThemePalette(value)
+  closeToolbarMenu()
 }
 
 function winClose() {
@@ -86,7 +127,6 @@ function winMax() {
   window.globalAPI.winHandle(JSON.stringify(command))
 }
 
-const proxyVisible = ref(false)
 const proxyForm = reactive({
   status: false,
   type: '',
@@ -97,7 +137,7 @@ const proxyForm = reactive({
 function setProxyConfig() {
   const message: Message.Global.ProxyConfig = proxyForm
   window.globalAPI.setProxyConfig(JSON.stringify(message))
-  proxyVisible.value = false
+  closeToolbarMenu()
   ElMessage.success(t('app.proxy.saved'))
 }
 
@@ -183,7 +223,7 @@ async function removeValidation() {
 </script>
 
 <template>
-  <div class="app-root">
+  <div class="h-full w-full">
     <el-dialog
       v-model="imageDialogVisible"
       align-center
@@ -191,11 +231,11 @@ async function removeValidation() {
       :title="t('app.captcha.dmhyTitle')"
       width="260"
     >
-      <div class="captcha-row">
-        <img :src="imgSrc" alt="captcha" class="captcha-image" />
+      <div class="flex items-center gap-3">
+        <img :src="imgSrc" alt="captcha" class="w-[120px] rounded-2xl" />
         <el-button link type="primary" size="small" @click="refreshImage">{{ t('app.captcha.refresh') }}</el-button>
       </div>
-      <div class="captcha-input">
+      <div class="mt-[18px] flex gap-3">
         <el-input v-model="imgCaptcha" />
         <el-button type="primary" @click="submitCaptcha('dmhy')">{{ t('app.captcha.submit') }}</el-button>
       </div>
@@ -208,8 +248,8 @@ async function removeValidation() {
       :title="t('app.captcha.nyaaTitle')"
       width="390"
     >
-      <iframe class="validation-frame" src="https://nyaa.si/grecaptcha" />
-      <div class="dialog-actions">
+      <iframe class="h-[500px] w-full rounded-[14px] border-0" src="https://nyaa.si/grecaptcha" />
+      <div class="mt-[18px] flex justify-end">
         <el-button type="primary" @click="confirmNyaaCaptcha">{{ t('app.captcha.confirm') }}</el-button>
       </div>
     </el-dialog>
@@ -224,8 +264,8 @@ async function removeValidation() {
       @opened="setTurnstilePosition('acgnx_g')"
       @close="removeValidation"
     >
-      <div class="turnstile-box">
-        <div ref="turnstileValidationAcgnxG" class="turnstile-anchor">cloudflare-turnstile</div>
+      <div class="flex items-center justify-center">
+        <div ref="turnstileValidationAcgnxG" class="h-[65px] w-[300px]">cloudflare-turnstile</div>
       </div>
     </el-dialog>
 
@@ -239,8 +279,8 @@ async function removeValidation() {
       @opened="setTurnstilePosition('acgnx_a')"
       @close="removeValidation"
     >
-      <div class="turnstile-box">
-        <div ref="turnstileValidationAcgnxA" class="turnstile-anchor">cloudflare-turnstile</div>
+      <div class="flex items-center justify-center">
+        <div ref="turnstileValidationAcgnxA" class="h-[65px] w-[300px]">cloudflare-turnstile</div>
       </div>
     </el-dialog>
 
@@ -250,47 +290,64 @@ async function removeValidation() {
       :title="pageTitle"
       :subtitle="pageSubtitle"
       :dark="isDark"
+      :active-toolbar-menu="activeToolbarMenu"
+      :theme-palette="activeThemePalette"
+      :theme-palette-options="themePaletteOptions"
       :sidebar-expanded="sidebarExpanded"
       :locale="locale"
       :locale-options="localeOptions"
       @close="winClose"
       @maximize="winMax"
       @minimize="winMini"
-      @toggle-theme="toggleDark()"
+      @toggle-toolbar-menu="toggleToolbarMenu"
+      @close-toolbar-menu="closeToolbarMenu"
+      @set-theme-mode="setThemeMode"
+      @select-theme-palette="setThemePalette"
       @toggle-sidebar="toggleSidebar"
-      @change-locale="(value) => setLocale(value as LocaleCode)"
+      @change-locale="
+        (value) => {
+          setLocale(value as LocaleCode)
+          closeToolbarMenu()
+        }
+      "
     >
       <template #utility>
-        <el-popover :visible="proxyVisible" :width="320" placement="bottom-end">
-          <el-form :model="proxyForm" label-position="top" class="proxy-form">
-            <el-form-item :label="t('app.proxy.enabled')">
-              <el-switch v-model="proxyForm.status" />
-            </el-form-item>
-            <el-form-item :label="t('app.proxy.type')">
-              <el-select v-model="proxyForm.type" :placeholder="t('common.selectProtocol')">
-                <el-option label="HTTP" value="http" />
-                <el-option label="HTTPS" value="https" />
-                <el-option label="SOCKS5" value="socks" />
-              </el-select>
-            </el-form-item>
-            <el-form-item :label="t('app.proxy.host')">
-              <el-input v-model="proxyForm.host" />
-            </el-form-item>
-            <el-form-item :label="t('app.proxy.port')">
-              <el-input-number v-model="proxyForm.port" />
-            </el-form-item>
-            <el-form-item class="proxy-form__actions">
-              <el-button type="primary" @click="setProxyConfig">{{ t('common.save') }}</el-button>
-              <el-button @click="proxyVisible = false">{{ t('common.cancel') }}</el-button>
-            </el-form-item>
-          </el-form>
-          <template #reference>
-            <button class="proxy-button" type="button" @click="proxyVisible = !proxyVisible">
-              <el-icon><Operation /></el-icon>
-              <span>{{ t('common.proxy') }}</span>
-            </button>
-          </template>
-        </el-popover>
+        <button
+          :class="[
+            'soft-pill inline-flex h-9 items-center gap-2 px-3 text-[13px] transition duration-200 hover:border-border-strong hover:text-copy-primary',
+            activeToolbarMenu === 'proxy' ? 'topbar-utility-button is-active' : 'text-copy-secondary',
+          ]"
+          type="button"
+          @click="toggleToolbarMenu('proxy')"
+        >
+          <el-icon><Operation /></el-icon>
+          <span>{{ t('common.proxy') }}</span>
+        </button>
+      </template>
+
+      <template #utility-panel>
+        <el-form :model="proxyForm" label-position="top" class="proxy-form">
+          <el-form-item :label="t('app.proxy.enabled')">
+            <el-switch v-model="proxyForm.status" />
+          </el-form-item>
+          <el-form-item :label="t('app.proxy.type')">
+            <el-select v-model="proxyForm.type" :placeholder="t('common.selectProtocol')">
+              <el-option label="HTTP" value="http" />
+              <el-option label="HTTPS" value="https" />
+              <el-option label="SOCKS5" value="socks" />
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="t('app.proxy.host')">
+            <el-input v-model="proxyForm.host" />
+          </el-form-item>
+          <el-form-item :label="t('app.proxy.port')">
+            <el-input-number v-model="proxyForm.port" />
+          </el-form-item>
+          <el-form-item class="proxy-form__actions">
+            <el-button type="primary" @click="setProxyConfig">{{ t('common.save') }}</el-button>
+            <el-button @click="closeToolbarMenu">{{ t('common.cancel') }}</el-button>
+          </el-form-item>
+        </el-form>
       </template>
 
       <RouterView v-slot="{ Component, route: viewRoute }">
@@ -303,72 +360,10 @@ async function removeValidation() {
 </template>
 
 <style scoped>
-.app-root {
-  width: 100%;
-  height: 100%;
-}
-
-.captcha-row,
-.captcha-input,
-.dialog-actions,
-.turnstile-box {
-  display: flex;
-}
-
-.captcha-row {
-  align-items: center;
-  gap: 12px;
-}
-
-.captcha-image {
-  width: 120px;
-  border-radius: 12px;
-}
-
-.captcha-input {
-  gap: 12px;
-  margin-top: 18px;
-}
-
-.dialog-actions {
-  justify-content: flex-end;
-  margin-top: 18px;
-}
-
-.validation-frame {
-  width: 100%;
-  height: 500px;
-  border: 0;
-  border-radius: 14px;
-}
-
-.turnstile-box {
-  align-items: center;
-  justify-content: center;
-}
-
-.turnstile-anchor {
-  width: 300px;
-  height: 65px;
-}
-
-.proxy-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 0 14px;
-  border: 1px solid var(--border-soft);
-  border-radius: 999px;
-  background: var(--bg-panel);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: transform 160ms ease, border-color 160ms ease;
-}
-
-.proxy-button:hover {
-  transform: translateY(-1px);
+.topbar-utility-button.is-active {
   border-color: var(--border-strong);
+  background: var(--surface-brand-fill);
+  color: var(--text-primary);
 }
 
 .proxy-form :deep(.el-form-item) {
@@ -382,15 +377,13 @@ async function removeValidation() {
 :deep(.app-route-enter-active),
 :deep(.app-route-leave-active) {
   transition:
-    opacity 240ms ease,
-    transform 240ms ease,
-    filter 240ms ease;
+    opacity 180ms ease,
+    transform 180ms ease;
 }
 
 :deep(.app-route-enter-from),
 :deep(.app-route-leave-to) {
   opacity: 0;
-  transform: translateY(10px) scale(0.992);
-  filter: blur(4px);
+  transform: translateY(6px);
 }
 </style>

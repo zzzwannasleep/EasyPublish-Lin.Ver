@@ -157,10 +157,7 @@ async function loadData() {
   errorMessage.value = ''
 
   try {
-    const [logsResult, projectsResult] = await Promise.all([
-      logBridge.listLogs(),
-      projectBridge.listProjects(),
-    ])
+    const [logsResult, projectsResult] = await Promise.all([logBridge.listLogs(), projectBridge.listProjects()])
 
     if (!logsResult.ok) {
       errorMessage.value = logsResult.error.message
@@ -170,7 +167,9 @@ async function loadData() {
       files.value = logsResult.data.files
       logDirectory.value = logsResult.data.directory
 
-      const currentSelectionStillExists = logsResult.data.files.some(file => file.path === selectedFilePath.value)
+      const currentSelectionStillExists = logsResult.data.files.some(
+        file => file.path === selectedFilePath.value,
+      )
       if (!currentSelectionStillExists) {
         selectedFilePath.value = logsResult.data.files[0]?.path ?? ''
       }
@@ -213,14 +212,19 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page-shell">
-    <section class="page-hero">
-      <div class="page-hero__content">
-        <div class="page-eyebrow">{{ t('logs.hero.eyebrow') }}</div>
-        <h1 class="page-title">{{ t('logs.hero.title') }}</h1>
-        <p class="page-summary">{{ t('logs.hero.summary') }}</p>
+  <div class="flex min-h-full flex-col gap-4">
+    <section
+      class="surface-panel flex flex-col gap-3 px-4 py-4 lg:px-5 lg:py-5 xl:flex-row xl:items-end xl:justify-between"
+    >
+      <div class="max-w-3xl">
+        <div class="eyebrow-text">{{ t('logs.hero.eyebrow') }}</div>
+        <h1 class="mt-2 font-display text-[clamp(1.2rem,1.6vw,1.55rem)] leading-tight tracking-[-0.03em] text-copy-primary">
+          {{ t('logs.hero.title') }}
+        </h1>
+        <p class="mt-2 text-[13px] leading-5 text-copy-secondary">{{ t('logs.hero.summary') }}</p>
       </div>
-      <div class="stack-list">
+
+      <div class="flex flex-wrap gap-2">
         <StatusChip tone="success">{{ t('logs.hero.fileCount', { count: fileCount }) }}</StatusChip>
         <StatusChip :tone="latestFailures.length > 0 ? 'warning' : 'info'">
           {{ t('logs.hero.failureCount', { count: latestFailures.length }) }}
@@ -228,61 +232,93 @@ onMounted(() => {
       </div>
     </section>
 
-    <section class="page-grid">
-      <div class="span-4">
+    <section class="grid gap-4 xl:grid-cols-12">
+      <div class="xl:col-span-4">
         <AppPanel
           :eyebrow="t('logs.panel.files.eyebrow')"
           :title="t('logs.panel.files.title')"
           :description="t('logs.panel.files.description')"
         >
-          <div class="logs-toolbar">
+          <div class="mb-4 flex flex-wrap gap-3">
             <el-button plain @click="loadData">{{ t('common.refresh') }}</el-button>
             <el-button plain :loading="isExportingDiagnostics" @click="exportDiagnostics">
               {{ t('logs.actions.export') }}
             </el-button>
-            <el-button plain :disabled="!logDirectory" @click="openLogsFolder">{{ t('logs.actions.openFolder') }}</el-button>
+            <el-button plain :disabled="!logDirectory" @click="openLogsFolder">
+              {{ t('logs.actions.openFolder') }}
+            </el-button>
           </div>
 
-          <div v-if="errorMessage" class="logs-empty logs-empty--danger">{{ errorMessage }}</div>
-          <div v-else-if="isLoading && files.length === 0" class="logs-empty">{{ t('logs.empty.loadingFiles') }}</div>
-          <div v-else-if="files.length === 0" class="logs-empty">{{ t('logs.empty.noFiles') }}</div>
-          <div v-else class="log-file-list">
+          <div
+            v-if="errorMessage"
+            class="surface-subtle px-4 py-8 text-center text-sm leading-6 text-danger"
+          >
+            {{ errorMessage }}
+          </div>
+          <div
+            v-else-if="isLoading && files.length === 0"
+            class="surface-subtle px-4 py-8 text-center text-sm leading-6 text-copy-secondary"
+          >
+            {{ t('logs.empty.loadingFiles') }}
+          </div>
+          <div
+            v-else-if="files.length === 0"
+            class="surface-subtle px-4 py-8 text-center text-sm leading-6 text-copy-secondary"
+          >
+            {{ t('logs.empty.noFiles') }}
+          </div>
+          <div v-else class="grid gap-3">
             <button
               v-for="file in files"
               :key="file.path"
-              class="log-file"
-              :class="{ 'is-active': file.path === selectedFilePath }"
+              :class="[
+                'logs-file-button surface-tile w-full px-4 py-4 text-left',
+                file.path === selectedFilePath ? 'logs-file-button--active' : '',
+              ]"
               type="button"
               @click="readLog(file.path)"
             >
-              <div class="log-file__name">{{ file.name }}</div>
-              <div class="log-file__meta">
-                {{ formatProjectTimestamp(file.updatedAt) }} · {{ formatBytes(file.size) }}
+              <div class="font-semibold text-copy-primary">{{ file.name }}</div>
+              <div class="mt-1 text-xs leading-6 text-copy-secondary">
+                {{ formatProjectTimestamp(file.updatedAt) }} / {{ formatBytes(file.size) }}
               </div>
             </button>
           </div>
         </AppPanel>
       </div>
 
-      <div class="span-8">
+      <div class="xl:col-span-8">
         <AppPanel
           :eyebrow="t('logs.panel.viewer.eyebrow')"
           :title="t('logs.panel.viewer.title')"
           :description="t('logs.panel.viewer.description')"
         >
-          <div v-if="selectedFile" class="log-viewer__header">
+          <div
+            v-if="selectedFile"
+            class="flex flex-col gap-3 border-b border-border-soft pb-4 sm:flex-row sm:items-start sm:justify-between"
+          >
             <div>
-              <div class="log-viewer__title">{{ selectedFile.name }}</div>
-              <div class="log-viewer__meta">
-                {{ formatProjectTimestamp(selectedFile.updatedAt) }} · {{ formatBytes(selectedFile.size) }}
+              <div class="font-semibold text-copy-primary">{{ selectedFile.name }}</div>
+              <div class="mt-1 text-xs leading-6 text-copy-secondary">
+                {{ formatProjectTimestamp(selectedFile.updatedAt) }} / {{ formatBytes(selectedFile.size) }}
               </div>
             </div>
             <StatusChip :tone="selectedFileLoading ? 'warning' : 'info'">
               {{ selectedFileLoading ? t('logs.status.reading') : t('logs.status.loaded') }}
             </StatusChip>
           </div>
-          <div v-else class="logs-empty">{{ t('logs.empty.selectFile') }}</div>
-          <pre v-if="selectedFile" class="log-viewer__content">{{ selectedContent }}</pre>
+
+          <div
+            v-else
+            class="surface-subtle px-4 py-8 text-center text-sm leading-6 text-copy-secondary"
+          >
+            {{ t('logs.empty.selectFile') }}
+          </div>
+
+          <pre
+            v-if="selectedFile"
+            class="logs-code-block mt-4 min-h-[420px] max-h-[720px] overflow-auto rounded-[22px] border border-border-soft p-4 text-sm leading-6 whitespace-pre-wrap break-words text-copy-primary"
+          >{{ selectedContent }}</pre>
         </AppPanel>
       </div>
     </section>
@@ -292,19 +328,27 @@ onMounted(() => {
       :title="t('logs.panel.failures.title')"
       :description="t('logs.panel.failures.description')"
     >
-      <div v-if="latestFailures.length === 0" class="logs-empty">{{ t('logs.empty.noFailures') }}</div>
-      <div v-else class="failure-list">
+      <div
+        v-if="latestFailures.length === 0"
+        class="surface-subtle px-4 py-8 text-center text-sm leading-6 text-copy-secondary"
+      >
+        {{ t('logs.empty.noFailures') }}
+      </div>
+
+      <div v-else class="grid gap-3">
         <article
           v-for="failure in latestFailures"
           :key="`${failure.projectId}-${failure.result.siteId}-${failure.result.timestamp}`"
-          class="failure-item"
+          class="surface-subtle px-5 py-5"
         >
-          <div class="failure-item__header">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <div class="failure-item__title">{{ failure.projectName }}</div>
-              <div class="failure-item__meta">
-                {{ getSiteLabel(failure.result.siteId) }} ·
-                {{ getProjectStageLabel(failure.stage) }} ·
+              <div class="font-semibold text-copy-primary">{{ failure.projectName }}</div>
+              <div class="mt-1 text-xs leading-6 text-copy-secondary">
+                {{ getSiteLabel(failure.result.siteId) }}
+                /
+                {{ getProjectStageLabel(failure.stage) }}
+                /
                 {{ formatProjectTimestamp(failure.result.timestamp) }}
               </div>
             </div>
@@ -313,23 +357,25 @@ onMounted(() => {
             </StatusChip>
           </div>
 
-          <div class="failure-item__message">
+          <div class="mt-3 text-sm leading-6 text-copy-secondary">
             {{ failure.result.message || t('logs.messages.noFailureMessage') }}
           </div>
 
-          <div v-if="failure.result.remoteId" class="failure-item__meta">
+          <div v-if="failure.result.remoteId" class="mt-3 text-xs leading-6 text-copy-secondary">
             {{ t('common.remoteId') }}: {{ failure.result.remoteId }}
           </div>
 
-          <div class="failure-item__actions">
+          <div class="mt-4 flex flex-wrap items-center gap-3">
             <el-button link type="primary" @click="openProject(failure.projectId, failure.stage)">
               {{ t('logs.actions.openProject') }}
             </el-button>
-            <el-button link type="primary" @click="copyFailureSnapshot(failure)">{{ t('common.copyJson') }}</el-button>
+            <el-button link type="primary" @click="copyFailureSnapshot(failure)">
+              {{ t('common.copyJson') }}
+            </el-button>
             <a
               v-if="failure.result.remoteUrl"
               :href="failure.result.remoteUrl"
-              class="failure-item__link"
+              class="break-all text-sm leading-6 text-accent transition hover:text-brand"
               target="_blank"
               rel="noreferrer"
             >
@@ -337,9 +383,13 @@ onMounted(() => {
             </a>
           </div>
 
-          <details v-if="failure.result.rawResponse !== undefined" class="failure-item__raw">
-            <summary>{{ t('common.rawResponse') }}</summary>
-            <pre>{{ formatRawResponse(failure.result.rawResponse) }}</pre>
+          <details v-if="failure.result.rawResponse !== undefined" class="mt-4 text-sm text-copy-secondary">
+            <summary class="cursor-pointer font-semibold text-copy-primary">
+              {{ t('common.rawResponse') }}
+            </summary>
+            <pre
+              class="logs-code-block mt-3 overflow-auto rounded-[18px] border border-border-soft p-4 text-xs leading-6 whitespace-pre-wrap break-words text-copy-primary"
+            >{{ formatRawResponse(failure.result.rawResponse) }}</pre>
           </details>
         </article>
       </div>
@@ -348,154 +398,12 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.logs-toolbar,
-.log-viewer__header,
-.failure-item__header,
-.failure-item__actions {
-  display: flex;
-}
-
-.logs-toolbar,
-.log-viewer__header,
-.failure-item__header {
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.log-file-list,
-.failure-list {
-  display: grid;
-  gap: 12px;
-}
-
-.logs-toolbar {
-  margin-bottom: 14px;
-}
-
-.logs-empty {
-  padding: 28px 18px;
-  border: 1px dashed var(--border-soft);
-  border-radius: var(--radius-lg);
-  color: var(--text-secondary);
-  text-align: center;
-}
-
-.logs-empty--danger {
-  color: var(--danger);
-}
-
-.log-file {
-  width: 100%;
-  padding: 14px 16px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  background: var(--bg-strong);
-  text-align: left;
-  cursor: pointer;
-  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
-}
-
-.log-file:hover {
-  transform: translateY(-1px);
+.logs-file-button--active {
   border-color: var(--border-strong);
+  background: var(--surface-brand-fill);
 }
 
-.log-file.is-active {
-  border-color: rgba(198, 90, 46, 0.24);
-  background: linear-gradient(135deg, var(--brand-soft), rgba(255, 255, 255, 0.42));
-}
-
-.log-file__name,
-.log-viewer__title,
-.failure-item__title {
-  font-weight: 700;
-}
-
-.log-file__meta,
-.log-viewer__meta,
-.failure-item__meta,
-.failure-item__message,
-.failure-item__link,
-.failure-item__raw {
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.7;
-}
-
-.log-file__meta,
-.log-viewer__meta {
-  margin-top: 6px;
-}
-
-.log-viewer__content {
-  margin: 16px 0 0;
-  padding: 16px;
-  min-height: 420px;
-  max-height: 720px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  background: rgba(0, 0, 0, 0.06);
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.failure-item {
-  padding: 16px 18px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  background: var(--bg-strong);
-}
-
-.failure-item__message {
-  margin-top: 12px;
-}
-
-.failure-item__meta {
-  margin-top: 10px;
-}
-
-.failure-item__actions {
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.failure-item__link {
-  color: var(--accent);
-  word-break: break-all;
-}
-
-.failure-item__raw {
-  margin-top: 12px;
-}
-
-.failure-item__raw summary {
-  cursor: pointer;
-  color: var(--text-primary);
-  font-weight: 700;
-}
-
-.failure-item__raw pre {
-  margin: 10px 0 0;
-  padding: 14px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
-  background: rgba(0, 0, 0, 0.04);
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-@media (max-width: 1180px) {
-  .logs-toolbar,
-  .log-viewer__header,
-  .failure-item__header,
-  .failure-item__actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
+.logs-code-block {
+  background: var(--surface-code-fill);
 }
 </style>

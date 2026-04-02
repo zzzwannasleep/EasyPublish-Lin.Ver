@@ -190,7 +190,7 @@ async function submitCreate() {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.46), transparent 42%),
+    var(--surface-panel-wash),
     var(--bg-panel);
 }
 
@@ -217,7 +217,7 @@ async function submitCreate() {
   width: 42px;
   height: 42px;
   border-radius: 14px;
-  background: linear-gradient(135deg, var(--brand-soft), rgba(255, 255, 255, 0.82));
+  background: var(--surface-brand-fill-strong);
   color: var(--brand);
   font-size: 18px;
 }

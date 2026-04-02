@@ -1,18 +1,21 @@
 const dashboard = {
+  'dashboard.hero.eyebrow': 'Desktop Workspace',
+  'dashboard.hero.title': 'Put the publishing workflow into a faster, cleaner dashboard.',
+  'dashboard.hero.description':
+    'The home screen now focuses on project health, four core entry points, and recent work instead of a low-value stage distribution block.',
+  'dashboard.stats.total.text': 'All local projects currently tracked in the workspace.',
+  'dashboard.stats.active.text': 'Tasks that are still moving through edit, review, or publish.',
+  'dashboard.stats.published.text': 'Projects that already finished publishing and recorded results.',
+  'dashboard.stats.recent.label': 'Recent Adds',
+  'dashboard.stats.recent.text': 'Projects created recently and likely worth continuing next.',
   'dashboard.panel.links.eyebrow': 'Quick Access',
   'dashboard.panel.links.title': 'Workspace Entry Points',
   'dashboard.panel.links.description':
-    'Keep the common pages reachable without putting them back into the hero area.',
-  'dashboard.panel.stages.eyebrow': 'Stage Breakdown',
-  'dashboard.panel.stages.title': 'Workflow Distribution',
-  'dashboard.panel.stages.description':
-    'See how current projects are distributed across the publishing flow.',
-  'dashboard.panel.stages.workflowLabel': 'Workflow Stages',
-  'dashboard.panel.stages.modeLabel': 'Project Modes',
+    'The four highest-frequency work areas are now laid out in a single row for faster access.',
   'dashboard.panel.projects.eyebrow': 'Project Preview',
-  'dashboard.panel.projects.title': 'Project List Preview',
+  'dashboard.panel.projects.title': 'Recent Projects',
   'dashboard.panel.projects.description':
-    'Review recent projects directly from the dashboard instead of opening the list first.',
+    'Continue recent work directly from the dashboard without opening the full list first.',
   'dashboard.quickLinks.action': 'Open',
   'dashboard.quickLinks.create.title': 'New Project',
   'dashboard.quickLinks.create.text': 'Create a release task and continue into the edit flow.',

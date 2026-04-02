@@ -308,7 +308,7 @@ async function submitCreate(formEl: FormInstance | undefined) {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.44), transparent 40%),
+    var(--surface-panel-wash),
     var(--bg-panel);
 }
 
@@ -335,7 +335,7 @@ async function submitCreate(formEl: FormInstance | undefined) {
 .create-project__option {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.44);
+  background: var(--surface-soft-fill);
 }
 
 .create-project__source-mark {
@@ -355,7 +355,7 @@ async function submitCreate(formEl: FormInstance | undefined) {
   width: 42px;
   height: 42px;
   border-radius: 14px;
-  background: linear-gradient(135deg, var(--brand-soft), rgba(255, 255, 255, 0.8));
+  background: var(--surface-brand-fill-strong);
   color: var(--brand);
   font-size: 18px;
   flex: none;
@@ -465,7 +465,7 @@ async function submitCreate(formEl: FormInstance | undefined) {
 }
 
 .create-project__field-icon {
-  background: rgba(255, 255, 255, 0.76);
+  background: var(--surface-subtle-fill);
   color: var(--accent);
 }
 
@@ -529,13 +529,13 @@ async function submitCreate(formEl: FormInstance | undefined) {
 .create-project__option:hover,
 .create-project__option.is-active {
   transform: translateY(-2px);
-  border-color: rgba(198, 90, 46, 0.24);
-  background: linear-gradient(135deg, var(--brand-soft), rgba(255, 255, 255, 0.6));
+  border-color: var(--border-strong);
+  background: var(--surface-brand-fill);
   box-shadow: var(--shadow-md);
 }
 
 .create-project__option-icon {
-  background: rgba(255, 255, 255, 0.76);
+  background: var(--surface-subtle-fill);
 }
 
 .create-project__option :deep(.el-radio) {

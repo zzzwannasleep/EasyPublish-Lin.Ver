@@ -623,8 +623,7 @@ onMounted(() => {
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-lg);
   background:
-    radial-gradient(circle at top right, rgba(255, 190, 92, 0.12), transparent 38%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.32), transparent 40%),
+    var(--surface-panel-wash),
     var(--bg-panel);
 }
 
@@ -634,7 +633,7 @@ onMounted(() => {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: rgba(230, 156, 28, 0.14);
+  background: var(--surface-brand-fill);
   color: var(--accent-strong);
   font-size: 20px;
 }
@@ -664,8 +663,7 @@ onMounted(() => {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   background:
-    radial-gradient(circle at top right, rgba(255, 190, 92, 0.16), transparent 36%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.44), transparent 38%),
+    var(--surface-panel-wash),
     var(--bg-panel);
 }
 
@@ -811,7 +809,7 @@ onMounted(() => {
 .pt-note {
   padding: 8px 12px;
   border-radius: 999px;
-  background: rgba(12, 24, 45, 0.06);
+  background: var(--surface-inline-fill);
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.5;
@@ -820,7 +818,7 @@ onMounted(() => {
 .pt-api code {
   padding: 10px 12px;
   border-radius: 12px;
-  background: rgba(12, 24, 45, 0.06);
+  background: var(--surface-inline-fill);
   color: var(--text-primary);
   word-break: break-all;
 }

@@ -692,7 +692,7 @@ onMounted(() => {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.44), transparent 38%),
+    var(--surface-panel-wash),
     var(--bg-panel);
 }
 
@@ -855,7 +855,7 @@ onMounted(() => {
   width: 42px;
   height: 42px;
   border-radius: 14px;
-  background: linear-gradient(135deg, var(--brand-soft), rgba(255, 255, 255, 0.8));
+  background: var(--surface-brand-fill-strong);
   color: var(--brand);
   font-size: 18px;
   flex: none;

@@ -53,7 +53,12 @@ const notes = computed(() => {
     aside-placement="side"
   >
     <Edit v-if="project" :id="id" :project="project" />
-    <div v-else class="project-editor-stage__loading">Loading project editor...</div>
+    <div
+      v-else
+      class="surface-subtle px-4 py-6 text-sm leading-6 text-copy-secondary"
+    >
+      Loading project editor...
+    </div>
 
     <template #aside>
       <ProjectStageAside
@@ -65,12 +70,3 @@ const notes = computed(() => {
     </template>
   </StageWorkspace>
 </template>
-
-<style scoped>
-.project-editor-stage__loading {
-  padding: 18px;
-  border: 1px dashed var(--border-soft);
-  border-radius: var(--radius-lg);
-  color: var(--text-secondary);
-}
-</style>

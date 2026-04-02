@@ -1396,6 +1396,7 @@
 <style scoped>
 .edit-view {
   min-height: 0;
+  height: 100%;
 }
 
 .edit-view__scroll {
@@ -1412,26 +1413,27 @@
 }
 
 .edit-actions {
+  width: min(100%, 1080px);
+  margin: 0 auto;
   justify-content: center;
-  margin-top: 24px;
   text-align: center;
 }
 
 .btn {
-  min-width: 160px;
-  padding-inline: 28px;
+  min-width: 180px;
+  padding-inline: 30px;
 }
 
 .release-profile-tools {
   display: grid;
-  gap: 12px;
-  width: min(100%, 760px);
+  gap: 14px;
+  width: min(100%, 780px);
 }
 
 .release-profile-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
 }
 
 .release-profile-tip {
@@ -1440,7 +1442,17 @@
   line-height: 1.6;
 }
 
+:deep(.edit-view__scroll .el-scrollbar__view) {
+  display: grid;
+  gap: 24px;
+  padding: 4px 0 28px;
+}
+
 :deep(.edit-view__scroll .el-scrollbar__view > .el-row:nth-child(-n + 4)) {
+  display: none;
+}
+
+:deep(.edit-view__scroll .el-scrollbar__view > .el-row:last-child) {
   display: none;
 }
 
@@ -1449,31 +1461,50 @@
   display: none;
 }
 
-@media (max-width: 1080px) {
-  .release-profile-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
-
 :deep(.edit-form-row > .el-col:nth-child(2)) {
   flex: 0 0 min(100%, 1080px);
   max-width: min(100%, 1080px);
   margin: 0 auto;
+  padding: clamp(22px, 3vw, 34px);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-xl);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(245, 248, 255, 0.84)),
+    var(--surface-raised);
+  box-shadow: var(--shadow-sm);
 }
 
 :deep(.edit-form) {
   width: 100%;
   max-width: 100% !important;
+  display: grid;
+  gap: 0;
 }
 
 :deep(.edit-form .el-form-item) {
   align-items: flex-start;
+  margin-bottom: 0;
+  padding: 18px 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+:deep(.edit-form .el-form-item:first-child) {
+  padding-top: 0;
+  border-top: none;
+}
+
+:deep(.edit-form .el-form-item__label) {
+  color: var(--text-primary);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding-right: 18px;
+  line-height: 1.5;
 }
 
 :deep(.edit-form .el-form-item__content) {
   min-width: 0;
   max-width: 100%;
+  gap: 12px;
 }
 
 :deep(.edit-form .el-form-item__content > .el-input),
@@ -1486,8 +1517,29 @@
 
 :deep(.edit-form .el-form-item__content > .el-input .el-input__wrapper),
 :deep(.edit-form .el-form-item__content > .el-textarea .el-textarea__inner),
-:deep(.edit-form .el-form-item__content > .el-select-v2 .el-select-v2__wrapper) {
+:deep(.edit-form .el-form-item__content > .el-select-v2 .el-select-v2__wrapper),
+:deep(.edit-form .el-input-number),
+:deep(.edit-form .el-input-number .el-input__wrapper) {
   max-width: 100%;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.18);
+}
+
+:deep(.edit-form .el-input__wrapper),
+:deep(.edit-form .el-select-v2__wrapper),
+:deep(.edit-form .el-textarea__inner) {
+  min-height: 46px;
+}
+
+:deep(.edit-form .el-textarea__inner) {
+  padding-block: 12px;
+  line-height: 1.65;
+}
+
+:deep(.edit-form .el-select-v2__wrapper) {
+  align-items: flex-start;
+  padding-block: 8px;
 }
 
 :deep(.edit-form .el-row) {
@@ -1503,6 +1555,53 @@
 
 :deep(.edit-form .el-row > span .el-input) {
   width: 100% !important;
+}
+
+:deep(.edit-form .el-checkbox.is-bordered) {
+  min-height: 42px;
+  padding-inline: 16px;
+  border-radius: 999px;
+  border-color: var(--border-soft);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+:deep(.edit-form .cm-editor),
+:deep(.el-dialog .cm-editor) {
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: rgba(248, 250, 255, 0.92);
+}
+
+:deep(.edit-form .cm-scroller),
+:deep(.el-dialog .cm-scroller) {
+  font-family: var(--font-mono);
+}
+
+:deep(.edit-actions .el-col) {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-xl);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: var(--shadow-sm);
+}
+
+@media (max-width: 1080px) {
+  .release-profile-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  :deep(.edit-actions .el-col) {
+    flex-direction: column;
+  }
+
+  .btn {
+    width: 100%;
+  }
 }
 
 @media (max-width: 960px) {
@@ -1531,12 +1630,13 @@
 }
 
 @media (max-width: 720px) {
-  .edit-actions {
-    margin-top: 18px;
+  :deep(.edit-form-row > .el-col:nth-child(2)),
+  :deep(.edit-actions .el-col) {
+    padding: 18px;
   }
 
   .btn {
-    width: min(100%, 15rem);
+    min-width: 0;
   }
 }
 </style>

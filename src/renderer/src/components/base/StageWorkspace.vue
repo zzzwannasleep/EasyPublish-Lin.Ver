@@ -41,21 +41,26 @@ const isTopAside = computed(() => hasAside.value && props.asidePlacement === 'to
 </script>
 
 <template>
-  <div class="stage-workspace" :class="{ 'stage-workspace--compact': !showIntroBlock }">
-    <section v-if="showIntroBlock" class="stage-workspace__intro">
-      <div class="stage-workspace__copy">
-        <div v-if="eyebrow" class="page-eyebrow">{{ eyebrow }}</div>
-        <h2 class="stage-workspace__title">{{ title }}</h2>
-        <p class="stage-workspace__description">{{ description }}</p>
+  <div class="stage-workspace">
+    <section
+      v-if="showIntroBlock"
+      class="surface-panel flex flex-col gap-3 px-4 py-4 lg:px-5 lg:py-5 xl:flex-row xl:items-end xl:justify-between"
+    >
+      <div class="max-w-3xl">
+        <div v-if="eyebrow" class="eyebrow-text">{{ eyebrow }}</div>
+        <h2 class="mt-2 font-display text-[clamp(1.15rem,1.6vw,1.5rem)] leading-tight tracking-[-0.03em] text-copy-primary">
+          {{ title }}
+        </h2>
+        <p class="mt-2 text-[13px] leading-5 text-copy-secondary">{{ description }}</p>
       </div>
-      <StatusChip v-if="statusLabel" :tone="statusTone">{{ statusLabel }}</StatusChip>
+      <StatusChip v-if="statusLabel" :tone="statusTone" class="self-start xl:self-end">{{ statusLabel }}</StatusChip>
     </section>
 
     <section
-      class="stage-workspace__grid"
+      class="grid gap-5"
       :class="{
-        'stage-workspace__grid--single': !hasAside || isTopAside,
-        'stage-workspace__grid--aside-top': isTopAside,
+        'xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.9fr)]': hasAside && !isTopAside,
+        'grid-cols-1': !hasAside || isTopAside,
       }"
     >
       <AppPanel
@@ -65,7 +70,7 @@ const isTopAside = computed(() => hasAside.value && props.asidePlacement === 'to
         :title="asideTitle"
         :description="asideDescription"
       >
-        <div class="stack-list">
+        <div class="stage-workspace__aside-grid">
           <slot name="aside" />
         </div>
       </AppPanel>
@@ -76,7 +81,7 @@ const isTopAside = computed(() => hasAside.value && props.asidePlacement === 'to
         :title="panelTitle"
         :description="panelDescription"
       >
-        <div class="legacy-embed">
+        <div class="stage-workspace__main">
           <slot />
         </div>
       </AppPanel>
@@ -88,7 +93,7 @@ const isTopAside = computed(() => hasAside.value && props.asidePlacement === 'to
         :title="asideTitle"
         :description="asideDescription"
       >
-        <div class="stack-list">
+        <div class="stage-workspace__aside-stack">
           <slot name="aside" />
         </div>
       </AppPanel>
@@ -100,53 +105,26 @@ const isTopAside = computed(() => hasAside.value && props.asidePlacement === 'to
 .stage-workspace {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
   min-height: 100%;
-}
-
-.stage-workspace--compact {
-  gap: 16px;
-}
-
-.stage-workspace__intro {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0 4px;
-}
-
-.stage-workspace__copy {
-  max-width: 760px;
-}
-
-.stage-workspace__title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: clamp(24px, 2vw, 30px);
-  line-height: 1.08;
-  letter-spacing: -0.04em;
-}
-
-.stage-workspace__description {
-  margin: 12px 0 0;
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.7;
-}
-
-.stage-workspace__grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr);
-  gap: 18px;
-  align-items: start;
-}
-
-.stage-workspace__grid--single {
-  grid-template-columns: minmax(0, 1fr);
 }
 
 .stage-workspace__panel {
   min-width: 0;
+}
+
+.stage-workspace__main {
+  min-height: 320px;
+}
+
+.stage-workspace__aside-stack,
+.stage-workspace__aside-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.stage-workspace__aside-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
 .stage-workspace__panel--main :deep(.app-panel__content) {
@@ -154,60 +132,16 @@ const isTopAside = computed(() => hasAside.value && props.asidePlacement === 'to
 }
 
 .stage-workspace__panel--aside :deep(.app-panel__content) {
-  padding: 20px 24px 24px;
-}
-
-.stage-workspace__panel--aside-top :deep(.app-panel__header) {
-  display: grid;
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
-  gap: 14px 24px;
-  align-items: end;
+  padding: 20px;
 }
 
 .stage-workspace__panel--aside-top :deep(.app-panel__content) {
-  padding: 18px 24px 24px;
-}
-
-.stage-workspace__panel--aside-top :deep(.stack-list) {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
-}
-
-.stage-workspace__panel--aside-top :deep(.stack-list__item) {
-  gap: 8px;
-  padding: 14px 16px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 44%),
-    color-mix(in srgb, var(--bg-panel) 90%, #0a121d);
-}
-
-.stage-workspace__panel--aside-top :deep(.stack-list__item:first-child) {
-  padding-top: 14px;
-  border-top: 1px solid var(--border-soft);
-}
-
-@media (max-width: 1240px) {
-  .stage-workspace__grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 1180px) {
-  .stage-workspace__intro {
-    flex-direction: column;
-  }
+  padding: 18px 20px 20px;
 }
 
 @media (max-width: 720px) {
   .stage-workspace {
     gap: 14px;
-  }
-
-  .stage-workspace__panel--aside-top :deep(.app-panel__header) {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   .stage-workspace__panel--main :deep(.app-panel__content),

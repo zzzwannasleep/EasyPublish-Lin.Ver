@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+  --color-base: var(--bg-base);
+  --color-elevated: var(--bg-elevated);
+  --color-panel: var(--bg-panel);
+  --color-panel-strong: var(--bg-panel-strong);
+  --color-strong: var(--bg-strong);
+  --color-border-soft: var(--border-soft);
+  --color-border-strong: var(--border-strong);
+  --color-copy-primary: var(--text-primary);
+  --color-copy-secondary: var(--text-secondary);
+  --color-copy-muted: var(--text-muted);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --shadow-panel: var(--shadow-md);
+  --shadow-shell: var(--shadow-lg);
+}
+
+@layer base {
+  body {
+    @apply font-sans text-copy-primary;
+  }
+}
+
+@layer components {
+  .surface-panel {
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-lg);
+    background:
+      var(--surface-panel-wash),
+      var(--bg-panel);
+    box-shadow: var(--shadow-md);
+  }
+
+  .surface-panel-strong {
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-xl);
+    background:
+      var(--surface-panel-wash-strong),
+      var(--bg-elevated);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .surface-subtle {
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+    background: var(--surface-subtle-fill);
+  }
+
+  .surface-tile {
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+    background: var(--surface-soft-fill);
+    box-shadow: var(--shadow-sm);
+    transition:
+      border-color 160ms ease,
+      box-shadow 160ms ease,
+      background 160ms ease;
+  }
+
+  .surface-tile:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-md);
+  }
+
+  .surface-hero {
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-xl);
+    background:
+      var(--surface-panel-wash),
+      var(--bg-panel-strong);
+    box-shadow: var(--shadow-md);
+  }
+
+  .soft-pill {
+    border: 1px solid var(--border-soft);
+    border-radius: 999px;
+    background: var(--surface-soft-fill);
+  }
+
+  .eyebrow-text {
+    color: var(--accent);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+}

@@ -80,13 +80,20 @@ const notes = computed(() => [
     :aside-title="t('stage.shared.asideTitle')"
     :aside-description="t('stage.torrent.asideDescription')"
   >
-    <div class="publish-stage-stack">
+    <div class="flex flex-col gap-6">
       <NexusProjectPublishPanel v-if="shouldShowAdapterPanel" :id="id" />
 
-      <section v-if="shouldShowLegacyFallback" class="legacy-fallback">
-        <div class="legacy-fallback__eyebrow">{{ t('stage.torrent.legacyEyebrow') }}</div>
-        <h3 class="legacy-fallback__title">{{ t('stage.torrent.legacyTitle') }}</h3>
-        <p class="legacy-fallback__description">{{ t('stage.torrent.legacyDescription') }}</p>
+      <section
+        v-if="shouldShowLegacyFallback"
+        class="surface-subtle border-t-0 px-5 py-5"
+      >
+        <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-warning">
+          {{ t('stage.torrent.legacyEyebrow') }}
+        </div>
+        <h3 class="mt-3 font-display text-[1.4rem] leading-tight tracking-[-0.05em] text-copy-primary">
+          {{ t('stage.torrent.legacyTitle') }}
+        </h3>
+        <p class="mt-3 mb-5 text-sm leading-7 text-copy-secondary">{{ t('stage.torrent.legacyDescription') }}</p>
         <BTPublish :id="id" :site-types="legacySiteTypes" />
       </section>
     </div>
@@ -101,38 +108,3 @@ const notes = computed(() => [
     </template>
   </StageWorkspace>
 </template>
-
-<style scoped>
-.publish-stage-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-}
-
-.legacy-fallback {
-  padding-top: 20px;
-  border-top: 1px solid var(--border-soft);
-}
-
-.legacy-fallback__eyebrow {
-  color: var(--warning);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.legacy-fallback__title {
-  margin: 10px 0 0;
-  font-family: var(--font-display);
-  font-size: 22px;
-  letter-spacing: -0.04em;
-}
-
-.legacy-fallback__description {
-  margin: 12px 0 18px;
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.7;
-}
-</style>

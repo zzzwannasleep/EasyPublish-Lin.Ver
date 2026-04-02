@@ -328,176 +328,350 @@
 </script>
 
 <template>
-     <div :style="{height: slbHeight}">
-        <el-scrollbar style="height: 100%;">
-            <el-row>
-                <el-col :span="3" />
-                <el-col :span="18">
-                    <span style="float: left">
-                        <el-link :underline="false" @click="back" type="primary"><el-icon><ArrowLeft /></el-icon>上一步</el-link>
-                    </span>
-                    <span style="float: right">
-                        <el-link :underline="false" @click="next" type="primary">跳过<el-icon><ArrowRight /></el-icon></el-link>
-                    </span>
-                </el-col>
-                <el-col :span="3" />
-            </el-row>
-            <el-row style="height: 20px;" />
-            <el-row style="font-size: xx-large; height: 43px; ">
-                <el-col :span="3" />
-                <el-col :span="18">
-                    主站发布
-                </el-col>
-                <el-col :span="3" />
-            </el-row>
-            <el-row style="height: 20px;" />
-            <el-row justify="space-between">
-                <el-col :span="3" />
-                <el-col :span="18">
-                    <div>
-                        <el-form label-width="auto">
-                            <el-form-item label="标题">
-                                <el-input v-model="title" placeholder="请填写标题"/>
-                            </el-form-item>
-                            <el-form-item label="RS选项">
-                                <el-checkbox v-model="isRS" label="RS覆盖原帖" />
-                            </el-form-item>
-                            <el-form-item v-show="isRS" label="选择RS文章">
-                                <el-input placeholder="输入标题以进行搜索" v-model="rsTitle">
-                                    <template #append>
-                                        <el-button :icon="Search" @click="searchPosts()" />
+     <div class="forum-publish" :style="{height: slbHeight}">
+        <el-scrollbar class="forum-publish__scroll">
+            <section class="surface-hero forum-publish__hero">
+                <div class="forum-publish__copy">
+                    <div class="eyebrow-text">主站帖子</div>
+                    <h3 class="forum-publish__title">整理发布稿、BT 链接和 RS 信息，再统一提交到主站。</h3>
+                    <p class="forum-publish__description">
+                        这里保留旧发布逻辑，但把发帖表单、辅助信息和编辑器整理成更顺手的工作区。
+                    </p>
+                </div>
+                <div class="forum-publish__hero-actions">
+                    <el-button plain @click="back">上一步</el-button>
+                    <el-button plain @click="next">跳过</el-button>
+                    <el-button type="primary" @click="editContent = true">发布</el-button>
+                </div>
+            </section>
+
+            <section class="forum-publish__grid">
+                <section class="surface-panel forum-publish__panel">
+                    <el-form class="forum-publish__form" label-width="auto">
+                        <el-form-item label="标题">
+                            <el-input v-model="title" placeholder="请填写标题"/>
+                        </el-form-item>
+                        <el-form-item label="RS选项">
+                            <el-checkbox v-model="isRS" label="RS覆盖原帖" />
+                        </el-form-item>
+                        <el-form-item v-show="isRS" label="选择RS文章">
+                            <el-input placeholder="输入标题以进行搜索" v-model="rsTitle">
+                                <template #append>
+                                    <el-button :icon="Search" @click="searchPosts()" />
+                                </template>
+                            </el-input>
+                            <el-table :data="tableData" highlight-current-row @current-change="handleCurrentChange" style="margin-top: 10px;">
+                                <el-table-column prop="id" label="ID" width="70" />
+                                <el-table-column label="文章标题">
+                                    <template #default="scope">
+                                        <el-popover
+                                            placement="bottom"
+                                            title="文章内容"
+                                            :width="800"
+                                            trigger="hover"
+                                            raw-content
+                                        >
+                                            <template #reference>
+                                                {{ scope.row.title }}
+                                            </template>
+                                            <template #default>
+                                                <div v-html="scope.row.content" />
+                                            </template>
+                                        </el-popover>
                                     </template>
-                                </el-input>
-                                <el-table :data="tableData" highlight-current-row
-                                @current-change="handleCurrentChange" style="margin-top: 10px;">
-                                    <el-table-column prop="id" label="ID" width="70" />
-                                    <el-table-column label="文章标题">
-                                        <template #default="scope">
-                                            <el-popover
-                                                placement="bottom"
-                                                title="文章内容"
-                                                :width="800"
-                                                trigger="hover"
-                                                raw-content
-                                            >
-                                                <template #reference>
-                                                    {{ scope.row.title }}
-                                                </template>
-                                                <template #default>
-                                                    <div v-html="scope.row.content" />
-                                                </template>
-                                            </el-popover>
-                                        </template>
-                                    </el-table-column>
-                                </el-table>
-                            </el-form-item>
-                            <el-form-item v-if="!isRS" label="主站发布图">
-                                <el-input placeholder="选择一张图片，RS项目可留空" v-model="imagePath">
-                                    <template #append>
-                                        <el-button @click="loadImage" v-loading.fullscreen.lock="isLoading">
-                                            <el-icon><FolderOpened /></el-icon>
-                                        </el-button>
-                                    </template>
-                                </el-input>
-                            </el-form-item>
-                            <el-form-item v-if="!isRS" label="分类">
-                                <el-select-v2 v-model="category" :options="options"
-                                    multiple placeholder="选择类别" style="width: 250px" />
-                            </el-form-item>
-                            <el-form-item label="主站发布稿">
-                                <span><el-button @click="editContent = true" type="primary" link :icon="View">查看和编辑发布稿</el-button></span>
-                                <span style="margin-left: 10px;">
-                                    <el-button :icon="Upload" type="primary" @click="readFileContent()" link
-                                    v-loading.fullscreen.lock="isLoading">
-                                        选择一个文件
+                                </el-table-column>
+                            </el-table>
+                        </el-form-item>
+                        <el-form-item v-if="!isRS" label="主站发布图">
+                            <el-input placeholder="选择一张图片，RS项目可留空" v-model="imagePath">
+                                <template #append>
+                                    <el-button @click="loadImage" v-loading.fullscreen.lock="isLoading">
+                                        <el-icon><FolderOpened /></el-icon>
                                     </el-button>
-                                </span>
-                                <el-dialog v-model="editContent" width="900" title="查看和编辑发布稿">
-                                    <div v-loading="isPublishing">
-                                        <codemirror v-model="content" :style="{ minHeight: '400px' }" placeholder="主站发布稿" :extensions="extensions" />
-                                        <div class="title"><el-button size="large" style="margin-top: 20px;" type="primary" @click="submit">确认并继续发布</el-button></div>
+                                </template>
+                            </el-input>
+                        </el-form-item>
+                        <el-form-item v-if="!isRS" label="分类">
+                            <el-select-v2 v-model="category" :options="options"
+                                multiple placeholder="选择类别" style="width: 250px" />
+                        </el-form-item>
+                        <el-form-item label="主站发布稿">
+                            <div class="forum-publish__inline-actions">
+                                <el-button @click="editContent = true" type="primary" link :icon="View">查看和编辑发布稿</el-button>
+                                <el-button :icon="Upload" type="primary" @click="readFileContent()" link v-loading.fullscreen.lock="isLoading">
+                                    选择一个文件
+                                </el-button>
+                            </div>
+                            <el-dialog v-model="editContent" width="900" title="查看和编辑发布稿">
+                                <div v-loading="isPublishing">
+                                    <codemirror v-model="content" :style="{ minHeight: '400px' }" placeholder="主站发布稿" :extensions="extensions" />
+                                    <div class="forum-publish__dialog-actions">
+                                        <el-button size="large" type="primary" @click="submit">确认并继续发布</el-button>
                                     </div>
-                                </el-dialog>
-                            </el-form-item>
-                        </el-form>
-                    </div>
+                                </div>
+                            </el-dialog>
+                        </el-form-item>
+                    </el-form>
+                </section>
+
+                <aside class="surface-panel forum-publish__panel forum-publish__panel--aside">
                     <el-collapse>
                         <el-collapse-item title="BT链接">
-                            <div v-loading="loadingBT">
-                                <el-link :underline="false" @click="loadBT()" type="primary">刷新<el-icon><Refresh /></el-icon></el-link>
-                                <el-link :underline="false" @click="copyLinks()" type="primary" style="margin-left: 10px;">复制<el-icon><DocumentCopy /></el-icon></el-link>
-                                <p v-for="item in publishInfo" @contextmenu.prevent="handleRightClick(item.split('：')[1])">{{ item }}</p>
+                            <div v-loading="loadingBT" class="forum-publish__aside-block">
+                                <div class="forum-publish__inline-actions">
+                                    <el-button link type="primary" @click="loadBT()">刷新<el-icon><Refresh /></el-icon></el-button>
+                                    <el-button link type="primary" @click="copyLinks()">复制<el-icon><DocumentCopy /></el-icon></el-button>
+                                </div>
+                                <div class="forum-publish__link-list">
+                                    <p v-for="item in publishInfo" :key="item" class="forum-publish__link-item" @contextmenu.prevent="handleRightClick(item.split('：')[1])">
+                                        {{ item }}
+                                    </p>
+                                </div>
                             </div>
                         </el-collapse-item>
                         <el-collapse-item title="填写模板（仅从模版创建时有效）">
-                            <el-row>
-                                <h3>Credit信息：</h3>
-                                <el-button link style="margin-left: 10px;" @click="addCredit()" :icon="Edit" >添加Credit信息</el-button>
-                            </el-row>
-                            <el-row>
-                                <span>署名：</span>
-                                <el-input style="width: 150px;" v-model="credit_name" />
-                                <span style="margin-left: 20px;">链接：</span>
-                                <el-input style="width: 420px;" v-model="credit_link" />
-                            </el-row>
-                            <el-row style="margin-top: 20px;">
-                                <h3>MediaInfo:</h3>
-                                <el-button style="margin-left: 10px;" @click="editMediaInfo = true" 
-                                type="primary" link :icon="View">查看MediaInfo</el-button>
-                                <el-button link @click="addMediaInfo()" :icon="Edit" >添加MediaInfo</el-button>
-                            </el-row>
-                            <el-dialog v-model="editMediaInfo" width="900" title="查看和编辑MediaInfo">
-                                <codemirror v-model="mediaInfo" :style="{ minHeight: '400px' }" placeholder="请填写MediaInfo" :extensions="extensions" />
-                            </el-dialog>
-                            <el-row v-if="isRS">
-                                <h3>RS旧链：</h3>
-                                <el-button style="margin-left: 10px;" @click="editOldLinks = true" 
-                                type="primary" link :icon="View">查看Reseed旧链接</el-button>
-                                <el-button link @click="addLinks()" :icon="Edit" >添加旧链</el-button>
-                            </el-row>
-                            <el-dialog v-model="editOldLinks" width="900" title="查看和编辑Reseed旧链接">
-                                <el-input v-model="oldLinks" :autosize="{minRows:10}" type="textarea" placeholder="请填写旧链" />
-                            </el-dialog>
-                            <el-row v-if="isRS">
-                                <h3 >过往修正：</h3>
-                                <el-button style="margin-left: 10px;" @click="editComments = true" 
-                                type="primary" link :icon="View">查看过往修正</el-button>
-                                <el-button link @click="addComments()" :icon="Edit" >添加过往修正</el-button>
-                            </el-row>
-                            <el-dialog v-model="editComments" width="900" title="查看和编辑过往修正">
-                                <el-input v-model="oldComment" :autosize="{minRows:10}" type="textarea" placeholder="填写过往修正" />
-                            </el-dialog>
+                            <div class="forum-publish__aside-block">
+                                <div class="forum-publish__helper-head">
+                                    <h3>Credit信息</h3>
+                                    <el-button link @click="addCredit()" :icon="Edit" >添加Credit信息</el-button>
+                                </div>
+                                <div class="forum-publish__helper-grid">
+                                    <div>
+                                        <div class="forum-publish__helper-label">署名</div>
+                                        <el-input v-model="credit_name" />
+                                    </div>
+                                    <div>
+                                        <div class="forum-publish__helper-label">链接</div>
+                                        <el-input v-model="credit_link" />
+                                    </div>
+                                </div>
+
+                                <div class="forum-publish__helper-head">
+                                    <h3>MediaInfo</h3>
+                                    <div class="forum-publish__inline-actions">
+                                        <el-button @click="editMediaInfo = true" type="primary" link :icon="View">查看MediaInfo</el-button>
+                                        <el-button link @click="addMediaInfo()" :icon="Edit" >添加MediaInfo</el-button>
+                                    </div>
+                                </div>
+                                <el-dialog v-model="editMediaInfo" width="900" title="查看和编辑MediaInfo">
+                                    <codemirror v-model="mediaInfo" :style="{ minHeight: '400px' }" placeholder="请填写MediaInfo" :extensions="extensions" />
+                                </el-dialog>
+
+                                <template v-if="isRS">
+                                    <div class="forum-publish__helper-head">
+                                        <h3>RS旧链</h3>
+                                        <div class="forum-publish__inline-actions">
+                                            <el-button @click="editOldLinks = true" type="primary" link :icon="View">查看Reseed旧链接</el-button>
+                                            <el-button link @click="addLinks()" :icon="Edit" >添加旧链</el-button>
+                                        </div>
+                                    </div>
+                                    <el-dialog v-model="editOldLinks" width="900" title="查看和编辑Reseed旧链接">
+                                        <el-input v-model="oldLinks" :autosize="{minRows:10}" type="textarea" placeholder="请填写旧链" />
+                                    </el-dialog>
+
+                                    <div class="forum-publish__helper-head">
+                                        <h3>过往修正</h3>
+                                        <div class="forum-publish__inline-actions">
+                                            <el-button @click="editComments = true" type="primary" link :icon="View">查看过往修正</el-button>
+                                            <el-button link @click="addComments()" :icon="Edit" >添加过往修正</el-button>
+                                        </div>
+                                    </div>
+                                    <el-dialog v-model="editComments" width="900" title="查看和编辑过往修正">
+                                        <el-input v-model="oldComment" :autosize="{minRows:10}" type="textarea" placeholder="填写过往修正" />
+                                    </el-dialog>
+                                </template>
+                            </div>
                         </el-collapse-item>
                     </el-collapse>
-                </el-col>
-                <el-col :span="3" />
-            </el-row>
-            <el-row style="height: 20px;" />
-            <el-row class="title">
-                <el-col>
-                    <el-button class="btn" @click="back">
-                        上一步
-                    </el-button>
-                    <el-button class="btn" @click="next" type="primary" plain>
-                        跳过
-                    </el-button>  
-                    <el-button class="btn" @click="editContent = true" type="primary">
-                        发布
-                    </el-button>  
-                </el-col>  
-            </el-row>
-            <el-row style="height: 20px;" />
+                </aside>
+            </section>
+
+            <footer class="forum-publish__footer">
+                <el-button class="forum-publish__footer-button" @click="back">
+                    上一步
+                </el-button>
+                <el-button class="forum-publish__footer-button" @click="next" type="primary" plain>
+                    跳过
+                </el-button>
+                <el-button class="forum-publish__footer-button" @click="editContent = true" type="primary">
+                    发布
+                </el-button>
+            </footer>
         </el-scrollbar>
     </div>
 </template>
 
 <style scoped>
-.title {
-    text-align: center;
-    font-size: xx-large;
+.forum-publish {
+  min-height: 0;
 }
 
-.btn {
-    width: 180px;
+.forum-publish__scroll {
+  height: 100%;
+}
+
+.forum-publish :deep(.el-scrollbar__view) {
+  display: grid;
+  gap: 20px;
+}
+
+.forum-publish__hero,
+.forum-publish__grid,
+.forum-publish__footer {
+  width: min(100%, 1160px);
+  margin: 0 auto;
+}
+
+.forum-publish__hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+}
+
+.forum-publish__copy {
+  max-width: 760px;
+}
+
+.forum-publish__title {
+  margin: 10px 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.1rem, 1.8vw, 1.45rem);
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+}
+
+.forum-publish__description {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.forum-publish__hero-actions,
+.forum-publish__inline-actions,
+.forum-publish__helper-head,
+.forum-publish__footer {
+  display: flex;
+  gap: 12px;
+}
+
+.forum-publish__hero-actions {
+  align-items: flex-end;
+}
+
+.forum-publish__grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.85fr);
+}
+
+.forum-publish__panel {
+  padding: 16px;
+}
+
+.forum-publish__panel--aside {
+  align-self: start;
+}
+
+.forum-publish__form :deep(.el-form-item) {
+  align-items: flex-start;
+}
+
+.forum-publish__form :deep(.el-form-item__content) {
+  min-width: 0;
+}
+
+.forum-publish__aside-block {
+  display: grid;
+  gap: 14px;
+}
+
+.forum-publish__link-list {
+  display: grid;
+  gap: 8px;
+}
+
+.forum-publish__link-item {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--bg-panel) 94%, white 6%);
+  color: var(--text-secondary);
+  line-height: 1.7;
+  cursor: pointer;
+}
+
+.forum-publish__helper-head {
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.forum-publish__helper-head:first-child {
+  margin-top: 0;
+}
+
+.forum-publish__helper-head h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  letter-spacing: -0.04em;
+}
+
+.forum-publish__helper-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 160px minmax(0, 1fr);
+}
+
+.forum-publish__helper-label {
+  margin-bottom: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.forum-publish__dialog-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.forum-publish__footer {
+  justify-content: center;
+  padding-bottom: 6px;
+}
+
+.forum-publish__footer-button {
+  width: 160px;
+}
+
+@media (max-width: 1080px) {
+  .forum-publish__hero,
+  .forum-publish__grid,
+  .forum-publish__footer {
+    width: 100%;
+  }
+
+  .forum-publish__hero,
+  .forum-publish__footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .forum-publish__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .forum-publish__helper-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

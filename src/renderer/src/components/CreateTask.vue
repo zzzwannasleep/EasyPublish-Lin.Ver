@@ -78,7 +78,7 @@ function handleModeSelect(mode: ProjectMode) {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   background:
-    linear-gradient(135deg, rgba(247, 219, 206, 0.42), rgba(255, 255, 255, 0.54)),
+    var(--surface-panel-wash-strong),
     var(--bg-panel);
 }
 
@@ -119,7 +119,7 @@ function handleModeSelect(mode: ProjectMode) {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-xl);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.62), transparent 28%),
+    var(--surface-panel-wash-strong),
     var(--bg-panel);
   box-shadow: var(--shadow-sm);
 }

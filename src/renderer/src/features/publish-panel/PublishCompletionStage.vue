@@ -83,12 +83,18 @@ onMounted(async () => {
       type="warning"
       :closable="false"
       show-icon
-      class="completion-stage__alert"
+      class="mb-[18px]"
     />
 
-    <div class="completion-stage__actions">
+    <div class="mb-[18px] flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <el-button plain @click="goBack">{{ t('stage.finish.back') }}</el-button>
-      <a v-if="primaryLink" :href="primaryLink" class="completion-stage__primary-link" target="_blank" rel="noreferrer">
+      <a
+        v-if="primaryLink"
+        :href="primaryLink"
+        class="text-sm font-semibold text-accent transition hover:text-brand"
+        target="_blank"
+        rel="noreferrer"
+      >
         {{ t('stage.finish.openLatest') }}
       </a>
     </div>
@@ -105,30 +111,3 @@ onMounted(async () => {
     </template>
   </StageWorkspace>
 </template>
-
-<style scoped>
-.completion-stage__actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  margin-bottom: 18px;
-}
-
-.completion-stage__alert {
-  margin-bottom: 18px;
-}
-
-.completion-stage__primary-link {
-  color: var(--accent);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-@media (max-width: 1180px) {
-  .completion-stage__actions {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
-</style>
