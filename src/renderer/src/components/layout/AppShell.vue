@@ -52,6 +52,15 @@ defineEmits<{
       />
     </aside>
     <section class="app-shell__content relative z-10 flex min-h-0 min-w-0 flex-col overflow-hidden">
+      <button
+        v-if="activeToolbarMenu"
+        class="app-shell__content-scrim"
+        type="button"
+        aria-label="Close toolbar menu"
+        @wheel.prevent
+        @touchmove.prevent
+        @click="$emit('closeToolbarMenu')"
+      />
       <TopBar
         :title="title"
         :subtitle="subtitle"
@@ -77,7 +86,13 @@ defineEmits<{
           <slot name="utility-panel" />
         </template>
       </TopBar>
-      <main class="relative z-0 min-h-0 flex-1 overflow-auto px-2.5 pb-2.5 sm:px-3 sm:pb-3 lg:px-4 lg:pb-4 xl:px-5 xl:pb-5">
+      <main
+        :class="[
+          'relative z-0 min-h-0 flex-1 px-2.5 pb-2.5 sm:px-3 sm:pb-3 lg:px-4 lg:pb-4 xl:px-5 xl:pb-5',
+          activeToolbarMenu ? 'overflow-hidden' : 'overflow-auto',
+        ]"
+        :inert="activeToolbarMenu ? true : undefined"
+      >
         <slot />
       </main>
     </section>
@@ -104,6 +119,16 @@ defineEmits<{
 .app-shell__content {
   isolation: isolate;
   background: var(--bg-base);
+}
+
+.app-shell__content-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  border: 0;
+  padding: 0;
+  background: rgba(17, 12, 9, 0.18);
+  cursor: default;
 }
 
 @media (max-width: 1180px) {

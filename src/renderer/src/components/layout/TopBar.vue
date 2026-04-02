@@ -115,7 +115,12 @@ onClickOutside(topbarRef, () => {
       </div>
     </div>
 
-    <div v-if="activeToolbarMenu" class="topbar__tray [-webkit-app-region:no-drag]">
+    <div
+      v-if="activeToolbarMenu"
+      class="topbar__tray [-webkit-app-region:no-drag]"
+      @wheel.prevent
+      @touchmove.prevent
+    >
       <div v-if="activeToolbarMenu === 'theme'" class="toolbar-panel">
         <section class="toolbar-panel__section">
           <div class="toolbar-panel__label">{{ t('common.theme.mode') }}</div>
@@ -200,6 +205,10 @@ onClickOutside(topbarRef, () => {
   gap: 10px;
   padding: 10px 14px 12px;
   border-bottom: 1px solid var(--border-soft);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 100%),
+    color-mix(in srgb, var(--bg-base) 94%, #120d09);
+  backdrop-filter: blur(18px);
 }
 
 .topbar__row {
