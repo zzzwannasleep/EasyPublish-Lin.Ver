@@ -14,7 +14,8 @@ import {
 import StatusChip from './feedback/StatusChip.vue'
 import { useI18n } from '../i18n'
 import { getSiteLabel } from '../services/project/presentation'
-import type { SiteId } from '../types/site'
+import { siteBridge } from '../services/bridge/site'
+import type { SiteCatalogEntry, SiteId } from '../types/site'
 import { legacyApiStatusText, normalizeLegacyAccountStatus } from '../../../shared/utils/legacy-account-status'
 
 type LegacyAccountType = Exclude<SiteId, 'forum'>
@@ -48,6 +49,8 @@ type SiteAccount = {
 
 const { t } = useI18n()
 const isLoading = ref(false)
+const forumSite = ref<SiteCatalogEntry | null>(null)
+const forumAccountLoading = ref(false)
 
 const siteAccounts = reactive<SiteAccount[]>([
   {
@@ -389,18 +392,113 @@ function clearStorage() {
   window.BTAPI.clearStorage()
 }
 
-function saveForumAccountInfo() {
+async function loadForumSite() {
+  try {
+    const result = await siteBridge.getSite('forum')
+    forumSite.value = result.ok ? result.data.site : null
+  } catch {
+    forumSite.value = null
+  }
+}
+
+function getForumAccountTone(): 'neutral' | 'info' | 'success' | 'warning' | 'danger' {
+  switch (forumSite.value?.accountStatus) {
+    case 'authenticated':
+      return 'success'
+    case 'checking':
+      return 'info'
+    case 'unauthenticated':
+    case 'blocked':
+      return 'warning'
+    case 'error':
+      return 'danger'
+    default:
+      return 'neutral'
+  }
+}
+
+function getForumAccountLabel() {
+  switch (forumSite.value?.accountStatus) {
+    case 'authenticated':
+      return t('accounts.pt.account.authenticated')
+    case 'checking':
+      return t('accounts.pt.account.checking')
+    case 'unauthenticated':
+      return t('accounts.pt.account.unauthenticated')
+    case 'blocked':
+      return t('accounts.pt.account.blocked')
+    case 'error':
+      return t('accounts.pt.account.error')
+    default:
+      return t('accounts.pt.account.unknown')
+  }
+}
+
+function getForumAccountText() {
+  switch (forumSite.value?.accountStatus) {
+    case 'authenticated':
+      return forumSite.value.accountMessage || t('accounts.pt.account.authenticatedText')
+    case 'checking':
+      return forumSite.value.accountMessage || t('accounts.pt.account.checkingText')
+    case 'unauthenticated':
+      return forumSite.value.accountMessage || t('accounts.pt.account.unauthenticatedText')
+    case 'blocked':
+      return forumSite.value.accountMessage || t('accounts.pt.account.blockedText')
+    case 'error':
+      return forumSite.value.accountMessage || t('accounts.pt.account.errorText')
+    default:
+      return forumSite.value?.accountMessage || t('accounts.pt.account.unknownText')
+  }
+}
+
+function getForumLastCheckedLabel() {
+  return forumSite.value?.lastCheckAt || t('accounts.status.never')
+}
+
+async function saveForumAccountInfo(refreshStatus = true) {
   const msg: Message.Forum.AccountInfo = {
     username: username.value,
     password: password.value,
   }
-  window.forumAPI.saveAccountInfo(JSON.stringify(msg))
+  await window.forumAPI.saveAccountInfo(JSON.stringify(msg))
+  if (refreshStatus) {
+    await loadForumSite()
+  }
 }
 
 async function getForumAccountInfo() {
   const msg: Message.Forum.AccountInfo = JSON.parse(await window.forumAPI.getAccountInfo())
   username.value = msg.username
   password.value = msg.password
+}
+
+async function checkForumAccount() {
+  forumAccountLoading.value = true
+  try {
+    await saveForumAccountInfo(false)
+    const result = await siteBridge.validateAccount('forum')
+    if (!result.ok) {
+      ElMessage.error(result.error.message)
+      return
+    }
+
+    await loadForumSite()
+    if (result.data.status === 'authenticated') {
+      ElMessage.success(result.data.message || t('accounts.pt.account.authenticatedText'))
+      return
+    }
+
+    if (result.data.status === 'unauthenticated') {
+      ElMessage.warning(result.data.message || t('accounts.pt.account.unauthenticatedText'))
+      return
+    }
+
+    ElMessage.error(result.data.message || t('accounts.pt.account.errorText'))
+  } catch (error) {
+    ElMessage.error((error as Error).message)
+  } finally {
+    forumAccountLoading.value = false
+  }
 }
 
 async function getConfigName() {
@@ -422,7 +520,7 @@ function createConfig() {
 }
 
 onMounted(() => {
-  void Promise.all([loadData(), getForumAccountInfo(), getConfigName(), getAcgnXAPIConfig()])
+  void Promise.all([loadData(), getForumAccountInfo(), getConfigName(), getAcgnXAPIConfig(), loadForumSite()])
 })
 </script>
 
@@ -548,14 +646,36 @@ onMounted(() => {
     <section v-if="showSettings" class="account-settings">
       <article class="account-settings__card">
         <header class="account-settings__header">
-          <div class="account-settings__icon">
-            <el-icon><UserFilled /></el-icon>
+          <div class="account-settings__header-main">
+            <div class="account-settings__icon">
+              <el-icon><UserFilled /></el-icon>
+            </div>
+            <div>
+              <h3 class="account-settings__title">{{ t('accounts.mainSite.title') }}</h3>
+              <p class="account-settings__text">{{ t('accounts.mainSite.description') }}</p>
+            </div>
           </div>
-          <div>
-            <h3 class="account-settings__title">{{ t('accounts.mainSite.title') }}</h3>
-            <p class="account-settings__text">{{ t('accounts.mainSite.description') }}</p>
-          </div>
+          <StatusChip :tone="getForumAccountTone()">
+            {{ getForumAccountLabel() }}
+          </StatusChip>
         </header>
+
+        <div class="account-card__meta">
+          <article class="account-card__meta-card">
+            <div class="account-card__meta-label">
+              <el-icon><Timer /></el-icon>
+              <span>{{ t('accounts.fields.lastChecked') }}</span>
+            </div>
+            <div class="account-card__meta-value">{{ getForumLastCheckedLabel() }}</div>
+          </article>
+          <article class="account-card__meta-card">
+            <div class="account-card__meta-label">
+              <el-icon><Connection /></el-icon>
+              <span>{{ t('accounts.pt.fields.accountStatus') }}</span>
+            </div>
+            <div class="account-settings__text">{{ getForumAccountText() }}</div>
+          </article>
+        </div>
 
         <div class="account-settings__form">
           <label class="account-field">
@@ -578,6 +698,12 @@ onMounted(() => {
             />
           </label>
         </div>
+
+        <footer class="account-settings__actions">
+          <el-button type="primary" :loading="forumAccountLoading" @click="checkForumAccount">
+            {{ t('accounts.pt.actions.checkAccount') }}
+          </el-button>
+        </footer>
       </article>
 
       <article class="account-settings__card">
@@ -843,6 +969,12 @@ onMounted(() => {
 }
 
 .account-settings__header {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.account-settings__header-main {
   display: flex;
   gap: 14px;
   align-items: flex-start;

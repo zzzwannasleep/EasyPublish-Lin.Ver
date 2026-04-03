@@ -155,7 +155,7 @@ export interface SeriesTitleMatchConfig {
   videoCodecTemplate?: string
   audioCodecTemplate?: string
   subtitleTemplate?: string
-  informationTemplate?: string
+  customTemplate?: string
   targetSites?: SiteId[]
   createdAt?: string
   updatedAt?: string

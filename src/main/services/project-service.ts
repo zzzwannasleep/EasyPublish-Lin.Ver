@@ -33,6 +33,7 @@ import {
   normalizeMatchedSubtitleProfile,
   normalizeMatchedVideoProfile,
   normalizeSeriesTitleMatchConfig,
+  renderSeriesTitleCustomTags,
   renderSeriesTitleTemplate,
   stripTorrentExtension,
 } from '../../shared/utils/series-title-match'
@@ -964,7 +965,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       videoCodec,
       audioCodec,
       subtitle,
-      information: renderSeriesTitleTemplate(config.informationTemplate, matched),
+      customTags: renderSeriesTitleCustomTags(config.customTemplate, matched),
       videoProfile: normalizeMatchedVideoProfile(resolution),
       subtitleProfile: normalizeMatchedSubtitleProfile(subtitle),
     }
@@ -985,8 +986,11 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       nextConfig.title = values.title
     }
 
-    if (values.information) {
-      nextConfig.information = values.information
+    if (titleMatchConfig.customTemplate) {
+      nextConfig.tags = values.customTags.map(tag => ({
+        label: tag,
+        value: tag,
+      }))
     }
 
     if (targetSites.length > 0) {
@@ -1043,7 +1047,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
 
   function resolveCopiedVariantName(name: string, existingVariants: SeriesProjectVariant[]) {
     const trimmedName = name.trim() || 'variant'
-    const baseName = `${trimmedName} 副本`
+    const baseName = `${trimmedName} \u526f\u672c`
     const existingNames = new Set(existingVariants.map(variant => normalizeVariantName(variant.name)))
 
     if (!existingNames.has(normalizeVariantName(baseName))) {
@@ -1290,7 +1294,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     let { workingDirectory, name, projectMode, sourceKind } = input
 
     if (projectMode === 'feature' && !sourceKind) {
-      return fail('PROJECT_SOURCE_KIND_REQUIRED', '电影项目必须指定来源类型')
+      return fail('PROJECT_SOURCE_KIND_REQUIRED', '\u7535\u5f71\u9879\u76ee\u5fc5\u987b\u6307\u5b9a\u6765\u6e90\u7c7b\u578b')
     }
 
     if (workingDirectory === '') {
@@ -1301,7 +1305,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     }
 
     if (!fs.existsSync(workingDirectory)) {
-      return fail('PROJECT_DIRECTORY_NOT_FOUND', '项目工作目录不存在')
+      return fail('PROJECT_DIRECTORY_NOT_FOUND', '\u9879\u76ee\u5de5\u4f5c\u76ee\u5f55\u4e0d\u5b58\u5728')
     }
 
     if (name === '') {
@@ -1332,7 +1336,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
 
     const project = projectStore.getProjectById(id)
     if (!project) {
-      return fail('PROJECT_CREATE_FAILED', '项目记录写入失败')
+      return fail('PROJECT_CREATE_FAILED', '\u9879\u76ee\u8bb0\u5f55\u5199\u5165\u5931\u8d25')
     }
 
     return ok({ project })
@@ -1343,8 +1347,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const input: CreateProjectInput = JSON.parse(msg)
       return JSON.stringify(await createProjectRecord(input))
     } catch (err) {
-      dialog.showErrorBox('创建项目失败', (err as Error).message)
-      return JSON.stringify(fail('PROJECT_CREATE_FAILED', '无法创建项目', (err as Error).message))
+      dialog.showErrorBox('\u521b\u5efa\u9879\u76ee\u5931\u8d25', (err as Error).message)
+      return JSON.stringify(fail('PROJECT_CREATE_FAILED', '\u65e0\u6cd5\u521b\u5efa\u9879\u76ee', (err as Error).message))
     }
   }
 
@@ -1366,7 +1370,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const legacyResult: Message.Task.Result = { result: `success:${result.data.project.id}` }
       return JSON.stringify(legacyResult)
     } catch (err) {
-      dialog.showErrorBox('创建任务失败', (err as Error).message)
+      dialog.showErrorBox('\u521b\u5efa\u4efb\u52a1\u5931\u8d25', (err as Error).message)
       const result: Message.Task.Result = { result: 'failed' }
       return JSON.stringify(result)
     }
@@ -1380,7 +1384,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     const { id }: Message.Task.TaskID = JSON.parse(msg)
     const project = projectStore.getProjectById(id)
     if (!project) {
-      return JSON.stringify(fail('PROJECT_NOT_FOUND', `项目 ${id} 不存在`))
+      return JSON.stringify(fail('PROJECT_NOT_FOUND', `\u9879\u76ee ${id} \u4e0d\u5b58\u5728`))
     }
     return JSON.stringify(ok({ project }))
   }
@@ -1389,12 +1393,12 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     const { id }: Message.Task.TaskID = JSON.parse(msg)
     const task = projectStore.findLegacyTaskById(id)
     if (!task) {
-      return JSON.stringify(fail('PROJECT_NOT_FOUND', `项目 ${id} 不存在`))
+      return JSON.stringify(fail('PROJECT_NOT_FOUND', `\u9879\u76ee ${id} \u4e0d\u5b58\u5728`))
     }
 
     const project = projectStore.getProjectById(id)
     if (!project || project.projectMode !== 'episode') {
-      return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `项目 ${id} 不是剧集项目`))
+      return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `\u9879\u76ee ${id} \u4e0d\u662f\u5267\u96c6\u9879\u76ee`))
     }
 
     return JSON.stringify(ok({ workspace: readSeriesWorkspace(project.id, task.path) }))
@@ -1405,17 +1409,17 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const { projectId } = input
       const task = projectStore.findLegacyTaskById(projectId)
       if (!task) {
-        return JSON.stringify(fail('PROJECT_NOT_FOUND', `项目 ${projectId} 不存在`))
+        return JSON.stringify(fail('PROJECT_NOT_FOUND', `\u9879\u76ee ${projectId} \u4e0d\u5b58\u5728`))
       }
 
       const project = projectStore.getProjectById(projectId)
       if (!project || project.projectMode !== 'episode') {
-        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `项目 ${projectId} 不是剧集项目`))
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `\u9879\u76ee ${projectId} \u4e0d\u662f\u5267\u96c6\u9879\u76ee`))
       }
 
       const titleMatchConfig = cloneSeriesTitleMatchConfig(input.config)
       if (!titleMatchConfig?.fileNamePattern) {
-        return JSON.stringify(fail('SERIES_TITLE_MATCH_PATTERN_REQUIRED', '请先填写文件名匹配规则'))
+        return JSON.stringify(fail('SERIES_TITLE_MATCH_PATTERN_REQUIRED', '\u8bf7\u5148\u586b\u5199\u6587\u4ef6\u540d\u5339\u914d\u89c4\u5219'))
       }
 
       const workspace = readSeriesWorkspace(project.id, task.path)
@@ -1435,9 +1439,9 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       notifyProjectDataChanged()
       return JSON.stringify(ok({ config: nextConfig, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
     } catch (err) {
-      dialog.showErrorBox('保存标题匹配失败', (err as Error).message)
+      dialog.showErrorBox('\u4fdd\u5b58\u6807\u9898\u5339\u914d\u5931\u8d25', (err as Error).message)
       return JSON.stringify(
-        fail('SERIES_TITLE_MATCH_SAVE_FAILED', '无法保存标题匹配方案', (err as Error).message),
+        fail('SERIES_TITLE_MATCH_SAVE_FAILED', '\u65e0\u6cd5\u4fdd\u5b58\u6807\u9898\u5339\u914d\u65b9\u6848', (err as Error).message),
       )
     }
   }
@@ -1451,17 +1455,17 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         : []
 
       if (!filePaths.length) {
-        return JSON.stringify(fail('SERIES_MATCHED_TORRENTS_EMPTY', '没有选择任何 .torrent 文件'))
+        return JSON.stringify(fail('SERIES_MATCHED_TORRENTS_EMPTY', '\u6ca1\u6709\u9009\u62e9\u4efb\u4f55 .torrent \u6587\u4ef6'))
       }
 
       const task = projectStore.findLegacyTaskById(projectId)
       if (!task) {
-        return JSON.stringify(fail('PROJECT_NOT_FOUND', `项目 ${projectId} 不存在`))
+        return JSON.stringify(fail('PROJECT_NOT_FOUND', `\u9879\u76ee ${projectId} \u4e0d\u5b58\u5728`))
       }
 
       const project = projectStore.getProjectById(projectId)
       if (!project || project.projectMode !== 'episode') {
-        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `项目 ${projectId} 不是剧集项目`))
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `\u9879\u76ee ${projectId} \u4e0d\u662f\u5267\u96c6\u9879\u76ee`))
       }
 
       const timestamp = new Date().toISOString()
@@ -1469,7 +1473,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const titleMatchConfig = cloneSeriesTitleMatchConfig(syncedWorkspace.titleMatchConfig)
       if (!titleMatchConfig?.fileNamePattern) {
         return JSON.stringify(
-          fail('SERIES_TITLE_MATCH_NOT_CONFIGURED', '请先保存标题匹配方案，再导入 .torrent 文件'),
+          fail('SERIES_TITLE_MATCH_NOT_CONFIGURED', '\u8bf7\u5148\u4fdd\u5b58\u6807\u9898\u5339\u914d\u65b9\u6848\uff0c\u518d\u5bfc\u5165 .torrent \u6587\u4ef6'),
         )
       }
 
@@ -1510,7 +1514,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
           unmatchedFiles.push({
             path: filePath,
             fileName,
-            reason: 'Title match rule did not match this file name',
+            reason: '\u6807\u9898\u5339\u914d\u89c4\u5219\u6ca1\u6709\u547d\u4e2d\u8fd9\u4e2a\u6587\u4ef6\u540d',
           })
           continue
         }
@@ -1521,7 +1525,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
           unmatchedFiles.push({
             path: filePath,
             fileName,
-            reason: 'Could not resolve an episode label from this file name',
+            reason: '\u6ca1\u6709\u4ece\u6587\u4ef6\u540d\u91cc\u89e3\u6790\u51fa\u5267\u96c6\u6807\u8bc6',
           })
           continue
         }
@@ -1669,9 +1673,9 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         }),
       )
     } catch (err) {
-      dialog.showErrorBox('自动识别种子失败', (err as Error).message)
+      dialog.showErrorBox('\u81ea\u52a8\u8bc6\u522b\u79cd\u5b50\u5931\u8d25', (err as Error).message)
       return JSON.stringify(
-        fail('SERIES_MATCHED_TORRENT_IMPORT_FAILED', '自动识别 .torrent 文件失败', (err as Error).message),
+        fail('SERIES_MATCHED_TORRENT_IMPORT_FAILED', '\u81ea\u52a8\u8bc6\u522b .torrent \u6587\u4ef6\u5931\u8d25', (err as Error).message),
       )
     }
   }
@@ -1681,29 +1685,29 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const { projectId, episodeId, variantId } = input
       const task = projectStore.findLegacyTaskById(projectId)
       if (!task) {
-        return JSON.stringify(fail('PROJECT_NOT_FOUND', `项目 ${projectId} 不存在`))
+        return JSON.stringify(fail('PROJECT_NOT_FOUND', `\u9879\u76ee ${projectId} \u4e0d\u5b58\u5728`))
       }
 
       const project = projectStore.getProjectById(projectId)
       if (!project || project.projectMode !== 'episode') {
-        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `项目 ${projectId} 不是剧集项目`))
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `\u9879\u76ee ${projectId} \u4e0d\u662f\u5267\u96c6\u9879\u76ee`))
       }
 
       const workspace = readSeriesWorkspace(project.id, task.path)
       const episode = workspace.episodes.find(item => item.id === episodeId)
       if (!episode) {
-        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `第 ${episodeId} 集不存在`))
+        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `\u5267\u96c6 ${episodeId} \u4e0d\u5b58\u5728`))
       }
 
       const variant = episode.variants.find(item => item.id === variantId)
       if (!variant) {
-        return JSON.stringify(fail('SERIES_VARIANT_NOT_FOUND', `版本 ${variantId} 不存在`))
+        return JSON.stringify(fail('SERIES_VARIANT_NOT_FOUND', `\u7248\u672c ${variantId} \u4e0d\u5b58\u5728`))
       }
 
       const sourceConfigPath = getVariantConfigPath(task.path, episode, variant)
       if (!fs.existsSync(sourceConfigPath)) {
         return JSON.stringify(
-          fail('SERIES_VARIANT_CONFIG_NOT_FOUND', `版本 ${variant.name} 的配置文件不存在`),
+          fail('SERIES_VARIANT_CONFIG_NOT_FOUND', `\u7248\u672c ${variant.name} \u7684\u914d\u7f6e\u6587\u4ef6\u4e0d\u5b58\u5728`),
         )
       }
 
@@ -1756,9 +1760,9 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         }),
       )
     } catch (err) {
-      dialog.showErrorBox('复制版本失败', (err as Error).message)
+      dialog.showErrorBox('\u590d\u5236\u7248\u672c\u5931\u8d25', (err as Error).message)
       return JSON.stringify(
-        fail('SERIES_VARIANT_DUPLICATE_FAILED', '无法复制当前版本', (err as Error).message),
+        fail('SERIES_VARIANT_DUPLICATE_FAILED', '\u65e0\u6cd5\u590d\u5236\u5f53\u524d\u7248\u672c', (err as Error).message),
       )
     }
   }
@@ -1769,23 +1773,23 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const { projectId, episodeId, variantId } = input
       const task = projectStore.findLegacyTaskById(projectId)
       if (!task) {
-        return JSON.stringify(fail('PROJECT_NOT_FOUND', `项目 ${projectId} 不存在`))
+        return JSON.stringify(fail('PROJECT_NOT_FOUND', `\u9879\u76ee ${projectId} \u4e0d\u5b58\u5728`))
       }
 
       const project = projectStore.getProjectById(projectId)
       if (!project || project.projectMode !== 'episode') {
-        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `项目 ${projectId} 不是剧集项目`))
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `\u9879\u76ee ${projectId} \u4e0d\u662f\u5267\u96c6\u9879\u76ee`))
       }
 
       const workspace = readSeriesWorkspace(project.id, task.path)
       const episode = workspace.episodes.find(item => item.id === episodeId)
       if (!episode) {
-        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `第 ${episodeId} 集不存在`))
+        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `\u5267\u96c6 ${episodeId} \u4e0d\u5b58\u5728`))
       }
 
       const variant = episode.variants.find(item => item.id === variantId)
       if (!variant) {
-        return JSON.stringify(fail('SERIES_VARIANT_NOT_FOUND', `版本 ${variantId} 不存在`))
+        return JSON.stringify(fail('SERIES_VARIANT_NOT_FOUND', `\u7248\u672c ${variantId} \u4e0d\u5b58\u5728`))
       }
 
       const timestamp = new Date().toISOString()
@@ -1819,9 +1823,9 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       notifyProjectDataChanged()
       return JSON.stringify(ok({ episode: nextEpisode, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
     } catch (err) {
-      dialog.showErrorBox('删除版本失败', (err as Error).message)
+      dialog.showErrorBox('\u5220\u9664\u7248\u672c\u5931\u8d25', (err as Error).message)
       return JSON.stringify(
-        fail('SERIES_VARIANT_REMOVE_FAILED', '无法删除当前版本', (err as Error).message),
+        fail('SERIES_VARIANT_REMOVE_FAILED', '\u65e0\u6cd5\u5220\u9664\u5f53\u524d\u7248\u672c', (err as Error).message),
       )
     }
   }
@@ -1832,30 +1836,30 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const { projectId, episodeId, variantId } = input
       const task = projectStore.findLegacyTaskById(projectId)
       if (!task) {
-        return JSON.stringify(fail('PROJECT_NOT_FOUND', `项目 ${projectId} 不存在`))
+        return JSON.stringify(fail('PROJECT_NOT_FOUND', `\u9879\u76ee ${projectId} \u4e0d\u5b58\u5728`))
       }
 
       const project = projectStore.getProjectById(projectId)
       if (!project || project.projectMode !== 'episode') {
-        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `项目 ${projectId} 不是剧集项目`))
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `\u9879\u76ee ${projectId} \u4e0d\u662f\u5267\u96c6\u9879\u76ee`))
       }
 
       const timestamp = new Date().toISOString()
       const workspace = syncActiveVariantDraft(task.path, readSeriesWorkspace(project.id, task.path), timestamp)
       const episode = workspace.episodes.find(item => item.id === episodeId)
       if (!episode) {
-        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `第 ${episodeId} 集不存在`))
+        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `\u5267\u96c6 ${episodeId} \u4e0d\u5b58\u5728`))
       }
 
       const variant = episode.variants.find(item => item.id === variantId)
       if (!variant) {
-        return JSON.stringify(fail('SERIES_VARIANT_NOT_FOUND', `版本 ${variantId} 不存在`))
+        return JSON.stringify(fail('SERIES_VARIANT_NOT_FOUND', `\u7248\u672c ${variantId} \u4e0d\u5b58\u5728`))
       }
 
       const variantConfigPath = getVariantConfigPath(task.path, episode, variant)
       if (!fs.existsSync(variantConfigPath)) {
         return JSON.stringify(
-          fail('SERIES_VARIANT_CONFIG_NOT_FOUND', `版本 ${variant.name} 的配置文件不存在`),
+          fail('SERIES_VARIANT_CONFIG_NOT_FOUND', `\u7248\u672c ${variant.name} \u7684\u914d\u7f6e\u6587\u4ef6\u4e0d\u5b58\u5728`),
         )
       }
 
@@ -1883,9 +1887,9 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       notifyProjectDataChanged()
       return JSON.stringify(ok({ episode: nextEpisode, variant: nextVariant, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
     } catch (err) {
-      dialog.showErrorBox('切换版本失败', (err as Error).message)
+      dialog.showErrorBox('\u5207\u6362\u7248\u672c\u5931\u8d25', (err as Error).message)
       return JSON.stringify(
-        fail('SERIES_VARIANT_ACTIVATE_FAILED', '无法切换到当前版本', (err as Error).message),
+        fail('SERIES_VARIANT_ACTIVATE_FAILED', '\u65e0\u6cd5\u5207\u6362\u5230\u5f53\u524d\u7248\u672c', (err as Error).message),
       )
     }
   }
@@ -1896,23 +1900,23 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const { projectId, episodeId, variantId } = input
       const task = projectStore.findLegacyTaskById(projectId)
       if (!task) {
-        return JSON.stringify(fail('PROJECT_NOT_FOUND', `项目 ${projectId} 不存在`))
+        return JSON.stringify(fail('PROJECT_NOT_FOUND', `\u9879\u76ee ${projectId} \u4e0d\u5b58\u5728`))
       }
 
       const project = projectStore.getProjectById(projectId)
       if (!project || project.projectMode !== 'episode') {
-        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `项目 ${projectId} 不是剧集项目`))
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `\u9879\u76ee ${projectId} \u4e0d\u662f\u5267\u96c6\u9879\u76ee`))
       }
 
       const workspace = readSeriesWorkspace(project.id, task.path)
       const episode = workspace.episodes.find(item => item.id === episodeId)
       if (!episode) {
-        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `第 ${episodeId} 集不存在`))
+        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `\u5267\u96c6 ${episodeId} \u4e0d\u5b58\u5728`))
       }
 
       const variant = episode.variants.find(item => item.id === variantId)
       if (!variant) {
-        return JSON.stringify(fail('SERIES_VARIANT_NOT_FOUND', `版本 ${variantId} 不存在`))
+        return JSON.stringify(fail('SERIES_VARIANT_NOT_FOUND', `\u7248\u672c ${variantId} \u4e0d\u5b58\u5728`))
       }
 
       const variantDirectoryPath = getVariantDirectoryPath(task.path, episode, variant)
@@ -1940,11 +1944,11 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       notifyProjectDataChanged()
       return JSON.stringify(ok({ episode: nextEpisode, variant: nextVariant, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
     } catch (err) {
-      dialog.showErrorBox('同步草稿到版本失败', (err as Error).message)
+      dialog.showErrorBox('\u540c\u6b65\u8349\u7a3f\u5230\u7248\u672c\u5931\u8d25', (err as Error).message)
       return JSON.stringify(
         fail(
           'SERIES_VARIANT_SYNC_FAILED',
-          '无法把当前草稿同步到版本',
+          '\u65e0\u6cd5\u628a\u5f53\u524d\u8349\u7a3f\u540c\u6b65\u5230\u7248\u672c',
           (err as Error).message,
         ),
       )
@@ -1964,7 +1968,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     const { id }: Message.Task.TaskID = JSON.parse(msg)
     const task = projectStore.findLegacyTaskById(id)
     if (!task) {
-      return JSON.stringify(fail('PROJECT_NOT_FOUND', `项目 ${id} 不存在`))
+      return JSON.stringify(fail('PROJECT_NOT_FOUND', `\u9879\u76ee ${id} \u4e0d\u5b58\u5728`))
     }
     fs.rmSync(task.path, { recursive: true, force: true })
     projectStore.removeLegacyTask(id)
@@ -1996,11 +2000,11 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     const task = projectStore.findLegacyTaskById(id)!
     const result: Message.Task.PublishStatus = {}
     const isPublishedLink = (value?: string) => Boolean(value && /^https?:\/\//.test(value))
-    const publishedLabel = '已发布'
+    const publishedLabel = '\u5df2\u53d1\u5e03'
 
     if (isPublishedLink(task.bangumi)) {
       result.bangumi = publishedLabel
-      result.bangumi_all
+      result.bangumi_all = publishedLabel
     }
     if (isPublishedLink(task.mikan)) result.mikan = publishedLabel
     if (isPublishedLink(task.miobt)) result.miobt = publishedLabel
@@ -2021,7 +2025,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       )
       return JSON.stringify(config)
     } catch (err) {
-      dialog.showErrorBox('获取发布配置失败', (err as Error).message)
+      dialog.showErrorBox('\u83b7\u53d6\u53d1\u5e03\u914d\u7f6e\u5931\u8d25', (err as Error).message)
       return
     }
   }

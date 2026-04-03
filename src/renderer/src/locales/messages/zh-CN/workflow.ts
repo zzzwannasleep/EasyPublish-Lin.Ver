@@ -475,6 +475,20 @@ const workflow = {
     '为 Mikan 预填 Bangumi ID。这个字段必须和字幕组 ID 一起填写。',
   'seriesWorkspace.profileEditor.siteFields.anibtBangumiIdHelp':
     '为 Anibt 预填 Bangumi ID。发布时会映射到接口里的 bgmId 字段。',
+  'seriesWorkspace.profileEditor.siteFields.anibtEpisodeKeyHelp':
+    '为 Anibt 预填集数标识，会映射到接口里的 episodeKey，例如 01、01-13、合集、SP。',
+  'seriesWorkspace.profileEditor.siteFields.anibtResolutionHelp':
+    '为 Anibt 预填分辨率元数据；若留空，Anibt 会尽量根据标题自行推断。',
+  'seriesWorkspace.profileEditor.siteFields.anibtLanguageHelp':
+    '为 Anibt 预填语言代码。可用逗号或换行分隔，最多 4 项，例如 CHS、CHT、JP、EN。',
+  'seriesWorkspace.profileEditor.siteFields.anibtSubtitleHelp':
+    '为 Anibt 预填字幕类型元数据，例如 EXTERNAL、INTERNAL、EMBEDDED 或 NONE。',
+  'seriesWorkspace.profileEditor.siteFields.anibtFormatHelp':
+    '为 Anibt 预填封装格式元数据，例如 MKV、MP4、AVI、WEBM。',
+  'seriesWorkspace.profileEditor.siteFields.anibtVersionHelp':
+    '为 Anibt 预填版本号，例如 v2。',
+  'seriesWorkspace.profileEditor.siteFields.anibtFileSizeHelp':
+    '为 Anibt 预填资源文件大小（字节）；若留空，适配器会尽量从 torrent 元数据里自动提取。',
   'seriesWorkspace.profileEditor.siteFields.anibtTrackersHelp':
     '为 Anibt 预填 tracker 列表。若留空，适配器会优先尝试从 torrent 文件里提取 announce / announce-list。',
   'seriesWorkspace.profileEditor.siteFields.mikanSubtitleGroupIdHelp':

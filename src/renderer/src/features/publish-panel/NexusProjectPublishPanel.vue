@@ -29,6 +29,12 @@ interface SitePublishDraftForm {
   description: string
   torrentPath: string
   trackersText: string
+  episodeKey: string
+  resolution: string
+  languageText: string
+  subtitle: string
+  format: string
+  version: string
   posterUrl: string
   emuleResource: string
   smallDescription: string
@@ -58,6 +64,7 @@ interface SitePublishDraftForm {
   bangumiId?: number
   subtitleGroupId?: number
   publishGroupId?: number
+  fileSize?: number
   regionId?: number
   distributorId?: number
   seasonNumber?: number
@@ -298,7 +305,7 @@ function getSharedFieldText(site: SiteCatalogEntry) {
   return t('nexus.site.sharedFields')
 }
 
-function parseTrackerText(value: string) {
+function parseTextList(value: string) {
   return [
     ...new Set(
       value
@@ -307,6 +314,10 @@ function parseTrackerText(value: string) {
         .filter(Boolean),
     ),
   ]
+}
+
+function parseTrackerText(value: string) {
+  return parseTextList(value)
 }
 
 function joinProjectPath(basePath: string, fileName: string) {
@@ -378,6 +389,12 @@ function createEmptyDraft(): SitePublishDraftForm {
     description: '',
     torrentPath: '',
     trackersText: '',
+    episodeKey: '',
+    resolution: '',
+    languageText: '',
+    subtitle: '',
+    format: '',
+    version: '',
     posterUrl: '',
     emuleResource: '',
     smallDescription: '',
@@ -407,6 +424,7 @@ function createEmptyDraft(): SitePublishDraftForm {
     bangumiId: undefined,
     subtitleGroupId: undefined,
     publishGroupId: undefined,
+    fileSize: undefined,
     regionId: undefined,
     distributorId: undefined,
     seasonNumber: undefined,
@@ -514,6 +532,13 @@ function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefa
   draft.typeId = readStoredNumber(siteFieldDefaults.typeId)
   draft.teamId = readStoredNumber(siteFieldDefaults.teamId)
   draft.resolutionId = readStoredNumber(siteFieldDefaults.resolutionId)
+  draft.episodeKey = readStoredString(siteFieldDefaults.episodeKey)
+  draft.resolution = readStoredString(siteFieldDefaults.resolution)
+  draft.languageText = readStoredTrackersText(siteFieldDefaults.language ?? siteFieldDefaults.languageText)
+  draft.subtitle = readStoredString(siteFieldDefaults.subtitle)
+  draft.format = readStoredString(siteFieldDefaults.format)
+  draft.version = readStoredString(siteFieldDefaults.version)
+  draft.fileSize = readStoredNumber(siteFieldDefaults.fileSize)
   draft.trackersText = readStoredTrackersText(siteFieldDefaults.trackers ?? siteFieldDefaults.trackersText)
   draft.posterUrl = readStoredString(siteFieldDefaults.posterUrl)
   draft.emuleResource = readStoredString(siteFieldDefaults.emuleResource)
@@ -661,6 +686,15 @@ function getDmhyFallbackCategoryOptions(siteId: SiteId) {
   )
 }
 
+function getSiteFieldOptions(siteId: SiteId, fieldKey: string) {
+  return (
+    getSite(siteId)?.fieldSchemas?.find(field => field.key === fieldKey)?.options?.map(option => ({
+      label: option.labelKey ? t(option.labelKey) : option.label,
+      value: option.value,
+    })) ?? []
+  )
+}
+
 function onSectionChange(siteId: SiteId) {
   resetSectionDependentFields(siteId, getSelectedSection(siteId))
 }
@@ -741,10 +775,18 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
 
   if (site?.adapter === 'anibt') {
     const trackers = parseTrackerText(draft.trackersText)
+    const language = parseTextList(draft.languageText)
     return {
       ...baseInput,
       trackers: trackers.length > 0 ? trackers : undefined,
       bangumiId: draft.bangumiId,
+      episodeKey: readOptionalString(draft.episodeKey),
+      resolution: readOptionalString(draft.resolution),
+      language: language.length > 0 ? language : undefined,
+      subtitle: readOptionalString(draft.subtitle),
+      format: readOptionalString(draft.format),
+      version: readOptionalString(draft.version),
+      fileSize: draft.fileSize,
     }
   }
 
@@ -1415,6 +1457,69 @@ onMounted(() => {
                 <div class="nexus-site-card__hint">
                   {{ t('nexus.site.anibtOptionalHint') }}
                 </div>
+
+                <div class="nexus-form__grid nexus-form__grid--meta">
+                  <el-form-item :label="t('sites.form.episodeKey')">
+                    <el-input
+                      v-model="ensureDraft(site.id).episodeKey"
+                      :placeholder="t('sites.form.episodeKeyPlaceholder')"
+                    />
+                  </el-form-item>
+                  <el-form-item :label="t('sites.form.resolution')">
+                    <el-select v-model="ensureDraft(site.id).resolution" clearable>
+                      <el-option
+                        v-for="option in getSiteFieldOptions(site.id, 'resolution')"
+                        :key="option.value"
+                        :label="option.label"
+                        :value="option.value"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </div>
+
+                <div class="nexus-form__grid nexus-form__grid--meta">
+                  <el-form-item :label="t('sites.form.subtitle')">
+                    <el-select v-model="ensureDraft(site.id).subtitle" clearable>
+                      <el-option
+                        v-for="option in getSiteFieldOptions(site.id, 'subtitle')"
+                        :key="option.value"
+                        :label="option.label"
+                        :value="option.value"
+                      />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item :label="t('sites.form.format')">
+                    <el-select v-model="ensureDraft(site.id).format" clearable>
+                      <el-option
+                        v-for="option in getSiteFieldOptions(site.id, 'format')"
+                        :key="option.value"
+                        :label="option.label"
+                        :value="option.value"
+                      />
+                    </el-select>
+                  </el-form-item>
+                </div>
+
+                <div class="nexus-form__grid nexus-form__grid--meta">
+                  <el-form-item :label="t('sites.form.version')">
+                    <el-input
+                      v-model="ensureDraft(site.id).version"
+                      :placeholder="t('sites.form.versionPlaceholder')"
+                    />
+                  </el-form-item>
+                  <el-form-item :label="t('sites.form.fileSize')">
+                    <el-input-number v-model="ensureDraft(site.id).fileSize" :controls="false" :min="1" :step="1" />
+                  </el-form-item>
+                </div>
+
+                <el-form-item :label="t('sites.form.language')">
+                  <el-input
+                    v-model="ensureDraft(site.id).languageText"
+                    type="textarea"
+                    :rows="2"
+                    :placeholder="t('sites.form.languagePlaceholder')"
+                  />
+                </el-form-item>
 
                 <el-form-item :label="t('sites.form.trackers')">
                   <el-input

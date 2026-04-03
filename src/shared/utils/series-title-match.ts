@@ -66,6 +66,20 @@ export function renderSeriesTitleTemplate(template: string | undefined, variable
   return template.replace(TOKEN_PATTERN, (_match, token: string) => variables[token] ?? '').trim()
 }
 
+export function renderSeriesTitleCustomTags(template: string | undefined, variables: Record<string, string>) {
+  const rendered = renderSeriesTitleTemplate(template, variables)
+  if (!rendered) {
+    return []
+  }
+
+  return [...new Set(
+    rendered
+      .split(/[\r\n,，;；|]+/)
+      .map(item => item.trim())
+      .filter(Boolean),
+  )]
+}
+
 export function normalizeSeriesTitleMatchConfig(value: unknown): SeriesTitleMatchConfig | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined
@@ -88,7 +102,7 @@ export function normalizeSeriesTitleMatchConfig(value: unknown): SeriesTitleMatc
     videoCodecTemplate: normalizeText(raw.videoCodecTemplate) || undefined,
     audioCodecTemplate: normalizeText(raw.audioCodecTemplate) || undefined,
     subtitleTemplate: normalizeText(raw.subtitleTemplate) || undefined,
-    informationTemplate: normalizeText(raw.informationTemplate) || undefined,
+    customTemplate: normalizeText(raw.customTemplate) || undefined,
     targetSites: targetSites.length ? (targetSites as SiteId[]) : undefined,
     createdAt: normalizeText(raw.createdAt) || undefined,
     updatedAt: normalizeText(raw.updatedAt) || undefined,
@@ -124,11 +138,11 @@ export function normalizeMatchedSubtitleProfile(
     return undefined
   }
 
-  if (normalizedValue.includes('bilingual') || normalizedValue.includes('chs&cht') || normalizedValue.includes('简繁')) {
+  if (normalizedValue.includes('bilingual') || normalizedValue.includes('chs&cht') || normalizedValue.includes('\u7b80\u7e41')) {
     return 'bilingual'
   }
 
-  if (normalizedValue.includes('cht') || normalizedValue.includes('繁')) {
+  if (normalizedValue.includes('cht') || normalizedValue.includes('\u7e41')) {
     return 'cht'
   }
 
@@ -136,7 +150,7 @@ export function normalizeMatchedSubtitleProfile(
     return 'eng'
   }
 
-  if (normalizedValue.includes('chs') || normalizedValue.includes('简')) {
+  if (normalizedValue.includes('chs') || normalizedValue.includes('\u7b80')) {
     return 'chs'
   }
 

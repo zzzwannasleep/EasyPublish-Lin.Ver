@@ -31,6 +31,13 @@ export interface SitePublishDraft {
   batchEntries?: SitePublishBatchEntry[]
   trackers?: string[]
   bangumiId?: number
+  episodeKey?: string
+  resolution?: string
+  language?: string[]
+  subtitle?: string
+  format?: string
+  version?: string
+  fileSize?: number
   subtitleGroupId?: number
   publishGroupId?: number
   categoryId?: number

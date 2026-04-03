@@ -131,6 +131,7 @@ export function registerIpcHandlers({ Global, BT, Forum, Project, Site, Log, Tas
   ipcMain.handle('BT_updateTorrent', (_event, msg) => BT.updateTorrent(msg))
 
   ipcMain.handle('forum_getAccountInfo', () => Forum.getAccountInfo())
+  ipcMain.handle('forum_saveAccountInfo', (_event, msg) => Forum.saveAccountInfo(msg))
   ipcMain.handle('forum_searchPosts', (_event, msg) => Forum.searchPosts(msg))
   ipcMain.handle('forum_publish', (_event, msg) => Forum.publish(msg))
   ipcMain.handle('forum_rsPublish', (_event, msg) => Forum.rsPublish(msg))
@@ -188,8 +189,6 @@ export function registerIpcHandlers({ Global, BT, Forum, Project, Site, Log, Tas
   ipcMain.on('BT_exportCookies', (_event, msg) => BT.exportCookies(msg))
   ipcMain.on('BT_importCookies', (_event, msg) => BT.importCookies(msg))
   ipcMain.on('BT_saveAcgnXAPIConfig', (_event, msg) => BT.saveAcgnXAPIConfig(msg))
-
-  ipcMain.on('forum_saveAccountInfo', (_event, msg) => Forum.saveAccountInfo(msg))
 
   ipcMain.on('task_removeTask', (_event, msg) => Task.removeTask(msg))
   ipcMain.on('task_setTaskProcess', (_event, msg) => Task.setTaskProcess(msg))

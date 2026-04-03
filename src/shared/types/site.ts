@@ -95,6 +95,7 @@ export interface SiteCatalogEntry {
   accountStatus?: AccountHealthStatus
   accountMessage?: string
   accountConfigured?: boolean
+  lastCheckAt?: string
 }
 
 export interface SiteSectionOption {

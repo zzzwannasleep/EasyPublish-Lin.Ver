@@ -26,6 +26,12 @@ interface SitePublishDraftForm {
   description: string
   torrentPath: string
   trackersText: string
+  episodeKey: string
+  resolution: string
+  languageText: string
+  subtitle: string
+  format: string
+  version: string
   smallDescription: string
   url: string
   technicalInfo: string
@@ -52,6 +58,7 @@ interface SitePublishDraftForm {
   bangumiId?: number
   subtitleGroupId?: number
   publishGroupId?: number
+  fileSize?: number
   regionId?: number
   distributorId?: number
   seasonNumber?: number
@@ -304,7 +311,7 @@ function buildTorrentBody(currentConfig: Config.PublishConfig, entry: PublishTor
   }
 }
 
-function parseTrackerText(value: string) {
+function parseTextList(value: string) {
   return [
     ...new Set(
       value
@@ -315,12 +322,22 @@ function parseTrackerText(value: string) {
   ]
 }
 
+function parseTrackerText(value: string) {
+  return parseTextList(value)
+}
+
 function createEmptyDraft(): SitePublishDraftForm {
   return {
     title: '',
     description: '',
     torrentPath: '',
     trackersText: '',
+    episodeKey: '',
+    resolution: '',
+    languageText: '',
+    subtitle: '',
+    format: '',
+    version: '',
     smallDescription: '',
     url: '',
     technicalInfo: '',
@@ -347,6 +364,7 @@ function createEmptyDraft(): SitePublishDraftForm {
     bangumiId: undefined,
     subtitleGroupId: undefined,
     publishGroupId: undefined,
+    fileSize: undefined,
     regionId: undefined,
     distributorId: undefined,
     seasonNumber: undefined,
@@ -453,6 +471,13 @@ function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefa
   draft.categoryId = readStoredNumber(siteFieldDefaults.categoryId)
   draft.typeId = readStoredNumber(siteFieldDefaults.typeId)
   draft.resolutionId = readStoredNumber(siteFieldDefaults.resolutionId)
+  draft.episodeKey = readStoredString(siteFieldDefaults.episodeKey)
+  draft.resolution = readStoredString(siteFieldDefaults.resolution)
+  draft.languageText = readStoredTrackersText(siteFieldDefaults.language ?? siteFieldDefaults.languageText)
+  draft.subtitle = readStoredString(siteFieldDefaults.subtitle)
+  draft.format = readStoredString(siteFieldDefaults.format)
+  draft.version = readStoredString(siteFieldDefaults.version)
+  draft.fileSize = readStoredNumber(siteFieldDefaults.fileSize)
   draft.trackersText = readStoredTrackersText(siteFieldDefaults.trackers ?? siteFieldDefaults.trackersText)
   draft.bangumiId = readStoredNumber(siteFieldDefaults.bangumiId)
   draft.subtitleGroupId = readStoredNumber(siteFieldDefaults.subtitleGroupId)
@@ -700,10 +725,18 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
 
   if (site?.adapter === 'anibt') {
     const trackers = parseTrackerText(draft.trackersText)
+    const language = parseTextList(draft.languageText)
     return {
       ...baseInput,
       trackers: trackers.length > 0 ? trackers : undefined,
       bangumiId: draft.bangumiId,
+      episodeKey: readOptionalString(draft.episodeKey),
+      resolution: readOptionalString(draft.resolution),
+      language: language.length > 0 ? language : undefined,
+      subtitle: readOptionalString(draft.subtitle),
+      format: readOptionalString(draft.format),
+      version: readOptionalString(draft.version),
+      fileSize: draft.fileSize,
     }
   }
 

@@ -45,6 +45,16 @@ const sites = {
   'sites.form.torrentFile': 'Torrent File',
   'sites.form.trackers': 'Trackers',
   'sites.form.trackersPlaceholder': 'One tracker per line, up to 10 entries',
+  'sites.form.episodeKey': 'Episode Key',
+  'sites.form.episodeKeyPlaceholder': '01, 01-13, Collection, SP',
+  'sites.form.resolution': 'Resolution',
+  'sites.form.language': 'Language',
+  'sites.form.languagePlaceholder': 'CHS, CHT, JP, EN',
+  'sites.form.subtitle': 'Subtitle Type',
+  'sites.form.format': 'Format',
+  'sites.form.version': 'Version',
+  'sites.form.versionPlaceholder': 'v2',
+  'sites.form.fileSize': 'File Size (bytes)',
   'sites.form.bangumiId': 'Bangumi ID',
   'sites.form.teamId': 'Publish Team',
   'sites.form.subtitleGroupId': 'Subtitle Group ID',
@@ -96,7 +106,7 @@ const sites = {
   'nexus.site.sharedFields': 'This site uses the shared title, description, torrent, NFO, and anonymous settings above.',
   'nexus.site.sharedFieldsMikan': 'This adapter uses the shared title, description, and torrent file above.',
   'nexus.site.sharedFieldsAnibt':
-    'This adapter uses the shared title and torrent above, then converts the shared description to Markdown and sends it as Anibt notes.',
+    'This adapter uses the shared title, description, and torrent above. The description is converted to Markdown and sent as Anibt notes.',
   'nexus.site.sharedFieldsDmhy':
     'This adapter uses the shared title, description, and torrent file above. Category, publish team, and DMHY-specific options are configured below.',
   'nexus.site.requiredSection': 'Required Fields',
@@ -104,7 +114,7 @@ const sites = {
   'nexus.site.noRequiredFields': 'This adapter does not require any site-specific fields yet.',
   'nexus.site.mikanOptionalHint': 'bangumiId and subtitleGroupId must be filled together. If you enter more than 10 trackers, only the first 10 will be sent.',
   'nexus.site.anibtOptionalHint':
-    'Bangumi ID is required. If trackers are left empty, the adapter will derive them from the torrent file and convert the torrent into a magnet URI automatically before calling the Anibt API.',
+    'Bangumi ID is required. You can also send episode, resolution, language, subtitle, format, version, and file size. If trackers or file size are left empty, the adapter will try to derive them from the torrent file automatically.',
   'nexus.site.dmhyOptionalHint':
     'If poster URL is empty, the adapter will try to use the first image from the description. Team ID 0 means personal publishing.',
   'nexus.site.manualTypeId': 'Type ID',

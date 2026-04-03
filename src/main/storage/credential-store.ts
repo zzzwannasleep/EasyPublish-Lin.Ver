@@ -167,6 +167,20 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
   }
 
   function getSiteAccount(siteId: SiteId): SiteAccount {
+    if (siteId === 'forum') {
+      const forum = getUserDBOrThrow().data.forum
+      const hasCredentials = Boolean(forum.username.trim() && forum.password)
+      return {
+        siteId,
+        authMode: 'username_password',
+        username: forum.username,
+        enabled: true,
+        lastCheckAt: forum.lastCheckAt,
+        healthStatus: forum.healthStatus ?? (hasCredentials ? 'unknown' : 'unauthenticated'),
+        legacyStatus: forum.statusMessage,
+      }
+    }
+
     if (!isLegacySite(siteId)) {
       const site = getCustomPtSite(siteId)
       if (!site) {
@@ -198,6 +212,25 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
   }
 
   function getSiteCredentialRecord(siteId: SiteId): SiteCredentialRecord {
+    if (siteId === 'forum') {
+      const forum = getUserDBOrThrow().data.forum
+      return {
+        siteId,
+        username: forum.username || undefined,
+        password: forum.password || undefined,
+        cookies: forum.cookies?.map(cookie => ({
+          name: cookie.name,
+          value: cookie.value,
+          domain: cookie.domain,
+          path: cookie.path,
+          expires: cookie.expirationDate,
+          secure: cookie.secure,
+          httpOnly: cookie.httpOnly,
+          sameSite: cookie.sameSite,
+        })),
+      }
+    }
+
     if (!isLegacySite(siteId)) {
       const site = getCustomPtSite(siteId)
       if (!site) {
@@ -255,6 +288,10 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
     if (credentials.cookies) {
       userDB.data.forum.cookies = credentials.cookies
     }
+    userDB.data.forum.lastCheckAt = undefined
+    userDB.data.forum.healthStatus = credentials.username.trim() && credentials.password ? 'unknown' : 'unauthenticated'
+    userDB.data.forum.statusMessage =
+      credentials.username.trim() && credentials.password ? '主站账号已更新，等待检测' : '主站账号未配置'
     await userDB.write()
   }
 
@@ -354,6 +391,17 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
     await userDB.write()
   }
 
+  async function recordForumValidation(
+    status: SiteAccount['healthStatus'],
+    message?: string,
+  ) {
+    const userDB = getUserDBOrThrow()
+    userDB.data.forum.lastCheckAt = new Date().toISOString()
+    userDB.data.forum.healthStatus = status
+    userDB.data.forum.statusMessage = message
+    await userDB.write()
+  }
+
   return {
     getSiteCookies,
     setSiteCookies,
@@ -365,6 +413,7 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
     saveManagedPtSite,
     removeManagedPtSite,
     recordCustomPtSiteValidation,
+    recordForumValidation,
     getForumCredentials,
     saveForumCredentials,
     getAcgnxApiConfig,

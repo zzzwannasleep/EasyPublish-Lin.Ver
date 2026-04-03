@@ -9,6 +9,10 @@ import type { SiteAdapter } from '../adapter'
 const ANIBT_WEB_BASE = 'https://anibt.net'
 const ANIBT_API_BASE = 'https://site.anibt.net'
 const ANIBT_PUBLISH_PATH = 'api/releases/publish'
+const ANIBT_RESOLUTION_OPTIONS = ['4K', '2160p', '1080p', '720p', '480p', '360p'] as const
+const ANIBT_LANGUAGE_OPTIONS = ['CHS', 'CHT', 'JP', 'EN'] as const
+const ANIBT_SUBTITLE_OPTIONS = ['EXTERNAL', 'INTERNAL', 'EMBEDDED', 'NONE'] as const
+const ANIBT_FORMAT_OPTIONS = ['MKV', 'MP4', 'AVI', 'WEBM'] as const
 
 const ANIBT_FIELD_SCHEMAS: SiteFieldSchemaEntry[] = [
   {
@@ -18,6 +22,63 @@ const ANIBT_FIELD_SCHEMAS: SiteFieldSchemaEntry[] = [
     control: 'number',
     mode: 'required',
     min: 1,
+  },
+  {
+    key: 'episodeKey',
+    labelKey: 'sites.form.episodeKey',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.anibtEpisodeKeyHelp',
+    control: 'text',
+    mode: 'optional',
+    placeholderKey: 'sites.form.episodeKeyPlaceholder',
+  },
+  {
+    key: 'resolution',
+    labelKey: 'sites.form.resolution',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.anibtResolutionHelp',
+    control: 'select',
+    mode: 'optional',
+    options: ANIBT_RESOLUTION_OPTIONS.map(value => ({ label: value, value })),
+  },
+  {
+    key: 'languageText',
+    labelKey: 'sites.form.language',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.anibtLanguageHelp',
+    control: 'text',
+    mode: 'optional',
+    placeholderKey: 'sites.form.languagePlaceholder',
+  },
+  {
+    key: 'subtitle',
+    labelKey: 'sites.form.subtitle',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.anibtSubtitleHelp',
+    control: 'select',
+    mode: 'optional',
+    options: ANIBT_SUBTITLE_OPTIONS.map(value => ({ label: value, value })),
+  },
+  {
+    key: 'format',
+    labelKey: 'sites.form.format',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.anibtFormatHelp',
+    control: 'select',
+    mode: 'optional',
+    options: ANIBT_FORMAT_OPTIONS.map(value => ({ label: value, value })),
+  },
+  {
+    key: 'version',
+    labelKey: 'sites.form.version',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.anibtVersionHelp',
+    control: 'text',
+    mode: 'optional',
+    placeholderKey: 'sites.form.versionPlaceholder',
+  },
+  {
+    key: 'fileSize',
+    labelKey: 'sites.form.fileSize',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.anibtFileSizeHelp',
+    control: 'number',
+    mode: 'optional',
+    min: 1,
+    step: 1,
   },
   {
     key: 'trackersText',
@@ -34,6 +95,13 @@ interface AnibtPublishDraft {
   title: string
   torrentPath: string
   notes?: string
+  episodeKey?: string
+  resolution?: string
+  language: string[]
+  subtitle?: string
+  format?: string
+  version?: string
+  fileSize?: number
   trackers: string[]
 }
 
@@ -81,6 +149,15 @@ function asPositiveNumber(value: unknown): number | undefined {
   return undefined
 }
 
+function normalizeEnumValue<T extends readonly string[]>(value: unknown, allowedValues: T): T[number] | undefined {
+  const textValue = asString(value)
+  if (!textValue) {
+    return undefined
+  }
+
+  return allowedValues.find(option => option.toLowerCase() === textValue.toLowerCase())
+}
+
 function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return []
@@ -91,7 +168,7 @@ function asStringArray(value: unknown): string[] {
     .filter(Boolean)
 }
 
-function parseTrackers(value: unknown): string[] {
+function parseDelimitedText(value: unknown): string[] {
   const arrayValue = asStringArray(value)
   if (arrayValue.length > 0) {
     return [...new Set(arrayValue)]
@@ -110,6 +187,25 @@ function parseTrackers(value: unknown): string[] {
         .filter(Boolean),
     ),
   ]
+}
+
+function parseTrackers(value: unknown): string[] {
+  return parseDelimitedText(value)
+}
+
+function parseAnibtLanguages(value: unknown): string[] {
+  const languages: string[] = []
+  const seen = new Set<string>()
+
+  parseDelimitedText(value).forEach(item => {
+    const normalized = normalizeEnumValue(item, ANIBT_LANGUAGE_OPTIONS)
+    if (normalized && !seen.has(normalized)) {
+      seen.add(normalized)
+      languages.push(normalized)
+    }
+  })
+
+  return languages
 }
 
 function maybeConvertHtmlToMarkdown(value?: string) {
@@ -268,8 +364,8 @@ function describeAnibtSite(profile: SiteProfile): SiteCatalogEntry {
     capabilitySet: buildSiteCapabilitySet(profile.capabilities),
     notes: [
       'Publishes through the Anibt release API with Bearer token authentication.',
-      'The adapter converts the selected .torrent into a magnet link automatically before publishing.',
-      'Shared description content is sent as optional release notes and HTML content is converted to Markdown first.',
+      'The adapter converts the selected .torrent into a magnet link automatically and can derive trackers plus file size from the torrent metadata.',
+      'Shared description content is sent as optional release notes, and optional Anibt metadata such as episode, language, subtitle, format, version, and resolution are supported.',
     ],
     customFieldMap: profile.customFieldMap,
     fieldSchemas: cloneSiteFieldSchemas(ANIBT_FIELD_SCHEMAS),
@@ -281,6 +377,13 @@ function validateAnibtPublishDraft(profile: SiteProfile, payload: Record<string,
   const bangumiId = asPositiveNumber(payload.bangumiId)
   const title = asString(payload.title)
   const torrentPath = asString(payload.torrentPath)
+  const hasResolution = asString(payload.resolution)
+  const hasSubtitle = asString(payload.subtitle)
+  const hasFormat = asString(payload.format)
+  const languageValues = parseDelimitedText(payload.language ?? payload.languageText)
+  const invalidLanguageValues = [...new Set(languageValues.filter(value => !normalizeEnumValue(value, ANIBT_LANGUAGE_OPTIONS)))]
+  const fileSizeProvided = payload.fileSize !== undefined && payload.fileSize !== null && `${payload.fileSize}`.trim() !== ''
+  const fileSize = asPositiveNumber(payload.fileSize)
 
   if (!bangumiId) {
     issues.push({
@@ -312,6 +415,54 @@ function validateAnibtPublishDraft(profile: SiteProfile, payload: Record<string,
     })
   }
 
+  if (hasResolution && !normalizeEnumValue(payload.resolution, ANIBT_RESOLUTION_OPTIONS)) {
+    issues.push({
+      field: 'resolution',
+      message: `resolution must be one of: ${ANIBT_RESOLUTION_OPTIONS.join(', ')}`,
+      severity: 'error',
+    })
+  }
+
+  if (hasSubtitle && !normalizeEnumValue(payload.subtitle, ANIBT_SUBTITLE_OPTIONS)) {
+    issues.push({
+      field: 'subtitle',
+      message: `subtitle must be one of: ${ANIBT_SUBTITLE_OPTIONS.join(', ')}`,
+      severity: 'error',
+    })
+  }
+
+  if (hasFormat && !normalizeEnumValue(payload.format, ANIBT_FORMAT_OPTIONS)) {
+    issues.push({
+      field: 'format',
+      message: `format must be one of: ${ANIBT_FORMAT_OPTIONS.join(', ')}`,
+      severity: 'error',
+    })
+  }
+
+  if (invalidLanguageValues.length > 0) {
+    issues.push({
+      field: 'language',
+      message: `language can only include: ${ANIBT_LANGUAGE_OPTIONS.join(', ')}`,
+      severity: 'error',
+    })
+  }
+
+  if (languageValues.length > 4) {
+    issues.push({
+      field: 'language',
+      message: 'language can include at most 4 entries',
+      severity: 'error',
+    })
+  }
+
+  if (fileSizeProvided && !fileSize) {
+    issues.push({
+      field: 'fileSize',
+      message: 'fileSize must be a positive number',
+      severity: 'error',
+    })
+  }
+
   return issues
 }
 
@@ -332,7 +483,17 @@ function parseAnibtPublishDraft(profile: SiteProfile, payload: Record<string, un
     bangumiId,
     title,
     torrentPath,
-    notes: maybeConvertHtmlToMarkdown(asString(payload.description)),
+    notes:
+      maybeConvertHtmlToMarkdown(asString(payload.notes)) ??
+      maybeConvertHtmlToMarkdown(asString(payload.descriptionMarkdown)) ??
+      maybeConvertHtmlToMarkdown(asString(payload.description)),
+    episodeKey: asString(payload.episodeKey),
+    resolution: normalizeEnumValue(payload.resolution, ANIBT_RESOLUTION_OPTIONS),
+    language: parseAnibtLanguages(payload.language ?? payload.languageText).slice(0, 4),
+    subtitle: normalizeEnumValue(payload.subtitle, ANIBT_SUBTITLE_OPTIONS),
+    format: normalizeEnumValue(payload.format, ANIBT_FORMAT_OPTIONS),
+    version: asString(payload.version),
+    fileSize: asPositiveNumber(payload.fileSize),
     trackers: parseTrackers(payload.trackers ?? payload.trackersText),
   }
 }
@@ -419,6 +580,42 @@ function collectTrackersFromBencode(value: BencodeValue): string[] {
   return []
 }
 
+function readTorrentContentSize(value: BencodeValue): number | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Buffer.isBuffer(value)) {
+    return undefined
+  }
+
+  const info = value as BencodeDictionary
+  if (typeof info.length === 'number' && Number.isFinite(info.length) && info.length > 0) {
+    return info.length
+  }
+
+  if (!Array.isArray(info.files)) {
+    return undefined
+  }
+
+  let totalSize = 0
+  for (const fileEntry of info.files) {
+    if (!fileEntry || typeof fileEntry !== 'object' || Array.isArray(fileEntry) || Buffer.isBuffer(fileEntry)) {
+      return undefined
+    }
+
+    const entryLength = (fileEntry as BencodeDictionary).length
+    if (typeof entryLength !== 'number' || !Number.isFinite(entryLength) || entryLength <= 0) {
+      return undefined
+    }
+
+    const nextTotal = totalSize + entryLength
+    if (!Number.isSafeInteger(nextTotal)) {
+      return undefined
+    }
+
+    totalSize = nextTotal
+  }
+
+  return totalSize > 0 ? totalSize : undefined
+}
+
 function buildTorrentMagnet(torrentPath: string, title: string, preferredTrackers: string[]) {
   const torrent = fs.readFileSync(torrentPath)
   if (torrent[0] !== 100) {
@@ -427,6 +624,7 @@ function buildTorrentMagnet(torrentPath: string, title: string, preferredTracker
 
   let cursor = 1
   let infoBytes: Buffer | undefined
+  let contentSize: number | undefined
   const trackerCandidates: string[] = []
 
   while (torrent[cursor] !== 101) {
@@ -441,6 +639,7 @@ function buildTorrentMagnet(torrentPath: string, title: string, preferredTracker
 
     if (key === 'info') {
       infoBytes = torrent.subarray(valueStart, valueResult.next)
+      contentSize = readTorrentContentSize(valueResult.value)
     } else if (key === 'announce') {
       trackerCandidates.push(...collectTrackersFromBencode(valueResult.value))
     } else if (key === 'announce-list') {
@@ -470,6 +669,7 @@ function buildTorrentMagnet(torrentPath: string, title: string, preferredTracker
     infoHash,
     trackers,
     magnetUri: magnetParts.join('&'),
+    contentSize,
   }
 }
 
@@ -552,6 +752,8 @@ export function createAnibtAdapter(): SiteAdapter {
       const draft = parseAnibtPublishDraft(profile, payload)
       const endpoint = joinAnibtUrl(ANIBT_API_BASE, ANIBT_PUBLISH_PATH)
       const magnet = buildTorrentMagnet(draft.torrentPath, draft.title, draft.trackers)
+      const resolvedTrackers = draft.trackers.length > 0 ? draft.trackers : magnet.trackers
+      const resolvedFileSize = draft.fileSize ?? magnet.contentSize
       const requestPayload: Record<string, unknown> = {
         bgmId: draft.bangumiId,
         title: draft.title,
@@ -562,8 +764,36 @@ export function createAnibtAdapter(): SiteAdapter {
         requestPayload.notes = draft.notes
       }
 
-      if (magnet.trackers.length > 0) {
-        requestPayload.trackers = magnet.trackers
+      if (draft.episodeKey) {
+        requestPayload.episodeKey = draft.episodeKey
+      }
+
+      if (draft.resolution) {
+        requestPayload.resolution = draft.resolution
+      }
+
+      if (draft.language.length > 0) {
+        requestPayload.language = draft.language
+      }
+
+      if (draft.subtitle) {
+        requestPayload.subtitle = draft.subtitle
+      }
+
+      if (draft.format) {
+        requestPayload.format = draft.format
+      }
+
+      if (draft.version) {
+        requestPayload.version = draft.version
+      }
+
+      if (resolvedFileSize) {
+        requestPayload.fileSize = resolvedFileSize
+      }
+
+      if (resolvedTrackers.length > 0) {
+        requestPayload.trackers = resolvedTrackers
       }
 
       const response = await axios.post(endpoint, requestPayload, {

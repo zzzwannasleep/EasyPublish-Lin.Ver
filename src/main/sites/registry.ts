@@ -7,6 +7,7 @@ import { createMikanAdapter } from './mikan/adapter'
 import { createMiobtAdapter } from './miobt/adapter'
 import { createNexusphpAdapter } from './nexusphp/adapter'
 import { createUnit3dAdapter } from './unit3d/adapter'
+import { createWordpressAdapter } from './wordpress/adapter'
 
 interface CreateSiteRegistryOptions {
   getCustomProfiles?: () => SiteProfile[]
@@ -121,7 +122,7 @@ export function createSiteRegistry(options: CreateSiteRegistryOptions = {}) {
     ),
     createNexusphpAdapter(),
     createUnit3dAdapter(),
-    createStaticAdapter('wordpress', 'WordPress', 'Forum publishing still routes through the legacy forum service for now.'),
+    createWordpressAdapter(),
   ]
 
   const adapterMap = new Map<SiteAdapterKind, SiteAdapter>(

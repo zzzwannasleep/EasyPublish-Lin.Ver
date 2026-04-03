@@ -35,7 +35,13 @@ export const defaultUserData: Config.UserData = {
     },
   },
   ptSites: [],
-  forum: { username: '', password: '', cookies: [] },
+  forum: {
+    username: '',
+    password: '',
+    cookies: [],
+    healthStatus: 'unknown',
+    statusMessage: '主站账号尚未检测',
+  },
   info: [
     createDefaultLoginInfo('bangumi'),
     createDefaultLoginInfo('nyaa'),

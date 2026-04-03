@@ -87,7 +87,21 @@ declare namespace Config {
     acgnxAPI?: AcgnXAPIConfig
     ptSites?: PTSiteConfig[]
     proxyConfig: ProxyConfig
-    forum: {username: string, password: string, cookies?: Cookie[]}
+    forum: {
+      username: string
+      password: string
+      cookies?: Cookie[]
+      lastCheckAt?: string
+      healthStatus?:
+        | 'unknown'
+        | 'disabled'
+        | 'checking'
+        | 'authenticated'
+        | 'unauthenticated'
+        | 'blocked'
+        | 'error'
+      statusMessage?: string
+    }
   }
 
   interface ProxyConfig{

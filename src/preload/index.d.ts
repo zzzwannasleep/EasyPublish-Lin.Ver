@@ -45,7 +45,7 @@ export interface BTAPI {
 }
 
 export interface ForumAPI {
-  saveAccountInfo: (msg: string) => void
+  saveAccountInfo: (msg: string) => Promise<unknown>
   getAccountInfo: () => Promise<string>
   searchPosts: (msg: string) => Promise<string>
   publish: (msg: string) => Promise<string>

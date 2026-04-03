@@ -5,5 +5,5 @@ export const forumAPI = {
   searchPosts: async (msg: string) => await ipcRenderer.invoke('forum_searchPosts', msg),
   publish: async (msg: string) => await ipcRenderer.invoke('forum_publish', msg),
   rsPublish: async (msg: string) => await ipcRenderer.invoke('forum_rsPublish', msg),
-  saveAccountInfo: (msg: string) => ipcRenderer.send('forum_saveAccountInfo', msg),
+  saveAccountInfo: async (msg: string) => await ipcRenderer.invoke('forum_saveAccountInfo', msg),
 }

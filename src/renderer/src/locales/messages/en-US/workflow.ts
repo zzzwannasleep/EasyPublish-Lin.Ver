@@ -495,6 +495,20 @@ const workflow = {
     'Prefill the Mikan Bangumi ID. It must be provided together with the subtitle group ID.',
   'seriesWorkspace.profileEditor.siteFields.anibtBangumiIdHelp':
     'Prefill the Anibt Bangumi ID here. It is sent as bgmId in the release API payload.',
+  'seriesWorkspace.profileEditor.siteFields.anibtEpisodeKeyHelp':
+    'Prefill the episode marker sent as episodeKey, for example 01, 01-13, Collection, or SP.',
+  'seriesWorkspace.profileEditor.siteFields.anibtResolutionHelp':
+    'Prefill the Anibt resolution metadata. Leave it empty to let Anibt infer it from the title when possible.',
+  'seriesWorkspace.profileEditor.siteFields.anibtLanguageHelp':
+    'Prefill one or more Anibt language codes here. Use commas or new lines, and keep the list within 4 entries.',
+  'seriesWorkspace.profileEditor.siteFields.anibtSubtitleHelp':
+    'Prefill the Anibt subtitle type metadata such as EXTERNAL, INTERNAL, EMBEDDED, or NONE.',
+  'seriesWorkspace.profileEditor.siteFields.anibtFormatHelp':
+    'Prefill the Anibt container format metadata such as MKV or MP4.',
+  'seriesWorkspace.profileEditor.siteFields.anibtVersionHelp':
+    'Prefill the optional Anibt version string, for example v2.',
+  'seriesWorkspace.profileEditor.siteFields.anibtFileSizeHelp':
+    'Prefill the resource file size in bytes. If left empty, the adapter will try to derive it from the torrent metadata.',
   'seriesWorkspace.profileEditor.siteFields.anibtTrackersHelp':
     'Prefill Anibt trackers here. If left empty, the adapter will try to derive announce and announce-list trackers from the torrent file.',
   'seriesWorkspace.profileEditor.siteFields.mikanSubtitleGroupIdHelp':

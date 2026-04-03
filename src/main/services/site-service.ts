@@ -173,10 +173,6 @@ export function createSiteService(options: CreateSiteServiceOptions) {
   }
 
   function enrichSiteCatalogEntry(site: SiteCatalogEntry): SiteCatalogEntry {
-    if (!site.capabilitySet.publish.torrent) {
-      return site
-    }
-
     try {
       const account = credentialStore.getSiteAccount(site.id)
       return {
@@ -184,6 +180,7 @@ export function createSiteService(options: CreateSiteServiceOptions) {
         accountAuthMode: account.authMode,
         accountStatus: account.healthStatus,
         accountMessage: account.legacyStatus,
+        lastCheckAt: account.lastCheckAt,
         accountConfigured:
           hasConfiguredCredentials(site.id) ||
           ['authenticated', 'blocked', 'error', 'disabled'].includes(account.healthStatus),
@@ -202,15 +199,6 @@ export function createSiteService(options: CreateSiteServiceOptions) {
     const adapter = siteRegistry.getAdapter(profile.adapter)
     if (!adapter) {
       throw new Error(`Adapter ${profile.adapter} is not registered`)
-    }
-
-    if (id === 'forum') {
-      return {
-        profile,
-        adapter,
-        account: undefined,
-        credentials: undefined,
-      }
     }
 
     return {
@@ -314,16 +302,25 @@ export function createSiteService(options: CreateSiteServiceOptions) {
         credentials,
       })
 
+      const persistedStatus =
+        result.status === 'authenticated'
+          ? 'authenticated'
+          : result.status === 'unauthenticated'
+            ? 'unauthenticated'
+            : result.status === 'blocked'
+              ? 'blocked'
+              : 'error'
+
       if (credentialStore.getCustomPtSite(id)) {
         await credentialStore.recordCustomPtSiteValidation(
           id,
-          result.status === 'authenticated'
-            ? 'authenticated'
-            : result.status === 'unauthenticated'
-              ? 'unauthenticated'
-              : 'error',
+          persistedStatus,
           result.message,
         )
+      }
+
+      if (id === 'forum') {
+        await credentialStore.recordForumValidation(persistedStatus, result.message)
       }
 
       return JSON.stringify(
