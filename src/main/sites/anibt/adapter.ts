@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
 import axios from 'axios'
 import fs from 'fs'
+import { basename } from 'path'
 import { buildSiteCapabilitySet } from '../../../shared/types/site'
 import type { SiteCatalogEntry, SiteFieldSchemaEntry, SiteProfile, SiteValidationIssue } from '../../../shared/types/site'
 import { htmlToMarkdown } from '../../services/markup-conversion'
@@ -364,7 +365,7 @@ function describeAnibtSite(profile: SiteProfile): SiteCatalogEntry {
     capabilitySet: buildSiteCapabilitySet(profile.capabilities),
     notes: [
       'Publishes through the Anibt release API with Bearer token authentication.',
-      'The adapter converts the selected .torrent into a magnet link automatically and can derive trackers plus file size from the torrent metadata.',
+      'The adapter uploads the selected .torrent directly through multipart/form-data instead of converting it into a magnet payload locally.',
       'Shared description content is sent as optional release notes, and optional Anibt metadata such as episode, language, subtitle, format, version, and resolution are supported.',
     ],
     customFieldMap: profile.customFieldMap,
@@ -673,6 +674,19 @@ function buildTorrentMagnet(torrentPath: string, title: string, preferredTracker
   }
 }
 
+function appendOptionalFormValue(formData: FormData, key: string, value?: string | number) {
+  if (value === undefined || value === null) {
+    return
+  }
+
+  const normalized = typeof value === 'string' ? value.trim() : `${value}`
+  if (!normalized) {
+    return
+  }
+
+  formData.append(key, normalized)
+}
+
 export function createAnibtAdapter(): SiteAdapter {
   return {
     id: 'anibt',
@@ -751,55 +765,71 @@ export function createAnibtAdapter(): SiteAdapter {
 
       const draft = parseAnibtPublishDraft(profile, payload)
       const endpoint = joinAnibtUrl(ANIBT_API_BASE, ANIBT_PUBLISH_PATH)
-      const magnet = buildTorrentMagnet(draft.torrentPath, draft.title, draft.trackers)
-      const resolvedTrackers = draft.trackers.length > 0 ? draft.trackers : magnet.trackers
-      const resolvedFileSize = draft.fileSize ?? magnet.contentSize
-      const requestPayload: Record<string, unknown> = {
+      const torrentMetadata = buildTorrentMagnet(draft.torrentPath, draft.title, draft.trackers)
+      const torrentPart = new Blob([fs.readFileSync(draft.torrentPath)], {
+        type: 'application/x-bittorrent',
+      })
+
+      const formData = new FormData()
+      formData.append('torrent', torrentPart, basename(draft.torrentPath))
+      formData.append('bgmId', `${draft.bangumiId}`)
+      formData.append('title', draft.title)
+
+      const requestSummary: Record<string, unknown> = {
+        contentType: 'multipart/form-data',
         bgmId: draft.bangumiId,
         title: draft.title,
-        magnetBase64: magnet.magnetUri,
+        torrentFileName: basename(draft.torrentPath),
       }
 
       if (draft.notes) {
-        requestPayload.notes = draft.notes
+        formData.append('notes', draft.notes)
+        requestSummary.notes = draft.notes
       }
 
       if (draft.episodeKey) {
-        requestPayload.episodeKey = draft.episodeKey
+        formData.append('episodeKey', draft.episodeKey)
+        requestSummary.episodeKey = draft.episodeKey
       }
 
       if (draft.resolution) {
-        requestPayload.resolution = draft.resolution
+        formData.append('resolution', draft.resolution)
+        requestSummary.resolution = draft.resolution
       }
 
       if (draft.language.length > 0) {
-        requestPayload.language = draft.language
+        draft.language.forEach(language => formData.append('language', language))
+        requestSummary.language = [...draft.language]
       }
 
       if (draft.subtitle) {
-        requestPayload.subtitle = draft.subtitle
+        formData.append('subtitle', draft.subtitle)
+        requestSummary.subtitle = draft.subtitle
       }
 
       if (draft.format) {
-        requestPayload.format = draft.format
+        formData.append('format', draft.format)
+        requestSummary.format = draft.format
       }
 
       if (draft.version) {
-        requestPayload.version = draft.version
+        formData.append('version', draft.version)
+        requestSummary.version = draft.version
       }
 
-      if (resolvedFileSize) {
-        requestPayload.fileSize = resolvedFileSize
+      if (draft.fileSize) {
+        appendOptionalFormValue(formData, 'fileSize', draft.fileSize)
+        requestSummary.fileSize = draft.fileSize
       }
 
-      if (resolvedTrackers.length > 0) {
-        requestPayload.trackers = resolvedTrackers
+      if (draft.trackers.length > 0) {
+        draft.trackers.forEach(tracker => formData.append('trackers', tracker))
+        requestSummary.trackers = [...draft.trackers]
       }
 
-      const response = await axios.post(endpoint, requestPayload, {
+      const response = await axios.post(endpoint, formData, {
         responseType: 'text',
         headers: {
-          'Content-Type': 'application/json',
           Authorization: `Bearer ${apiToken}`,
         },
       })
@@ -819,9 +849,9 @@ export function createAnibtAdapter(): SiteAdapter {
       }
 
       const remoteUrl = extractRemoteUrl(parsedResponse)
-      const remoteId = extractRemoteId(parsedResponse) ?? magnet.infoHash
+      const remoteId = extractRemoteId(parsedResponse) ?? torrentMetadata.infoHash
       const raw = {
-        request: requestPayload,
+        request: requestSummary,
         response: parsedResponse,
         responseText: response.data,
         remoteUrl,

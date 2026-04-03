@@ -105,14 +105,15 @@ const sites = {
   'nexus.site.noSitesSelected': '请选择至少一个发布站点后，再填写站点专属字段。',
   'nexus.site.sharedFields': '使用上方通用字段中的标题、简介、种子、NFO 和匿名设置。',
   'nexus.site.sharedFieldsMikan': '这个适配器会使用上方通用字段中的标题、简介和种子文件。',
-  'nexus.site.sharedFieldsAnibt': '这个适配器会使用上方通用字段中的标题、简介和种子文件，并把通用简介转成 Markdown 后作为 Anibt 的 notes 发送。',
+  'nexus.site.sharedFieldsAnibt':
+    '这个适配器会使用上方通用字段中的标题、简介和种子文件，并直接把 torrent 作为种子上传到 Anibt；通用简介会转成 Markdown 后作为 notes 发送。',
   'nexus.site.sharedFieldsDmhy': '这个适配器会使用上方通用字段中的标题、简介和种子文件，分类、发布方式与附加字段在下方填写。',
   'nexus.site.requiredSection': '站点必填项',
   'nexus.site.optionalSection': '填写项目',
   'nexus.site.noRequiredFields': '这个适配器当前还没有站点专属必填字段。',
   'nexus.site.mikanOptionalHint': 'bangumiId 和 subtitleGroupId 必须成对填写。tracker 超过 10 条时，只会发送前 10 条。',
   'nexus.site.anibtOptionalHint':
-    'Bangumi ID 为必填。现在还支持集数、分辨率、语言、字幕类型、封装格式、版本号和文件大小；如果 trackers 或 fileSize 留空，适配器会优先尝试从 torrent 元数据里自动补全。',
+    'Bangumi ID 为必填。适配器现在会直接上传种子文件；集数、分辨率、语言、字幕类型、封装格式、版本号和文件大小都可选。若 trackers 或 fileSize 留空，可由 Anibt 从已上传的 torrent 中自动提取。',
   'nexus.site.dmhyOptionalHint': '海报地址留空时，会尝试使用简介里的第一张图片。发布方式填 0 表示个人发布。',
   'nexus.site.manualTypeId': 'Type ID',
   'nexus.site.manualCategoryId': 'Category ID',

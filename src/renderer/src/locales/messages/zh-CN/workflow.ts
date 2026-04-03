@@ -488,9 +488,9 @@ const workflow = {
   'seriesWorkspace.profileEditor.siteFields.anibtVersionHelp':
     '为 Anibt 预填版本号，例如 v2。',
   'seriesWorkspace.profileEditor.siteFields.anibtFileSizeHelp':
-    '为 Anibt 预填资源文件大小（字节）；若留空，适配器会尽量从 torrent 元数据里自动提取。',
+    '为 Anibt 预填资源文件大小（字节）；若留空，可由 Anibt 在上传种子后自动提取。',
   'seriesWorkspace.profileEditor.siteFields.anibtTrackersHelp':
-    '为 Anibt 预填 tracker 列表。若留空，适配器会优先尝试从 torrent 文件里提取 announce / announce-list。',
+    '为 Anibt 预填 tracker 列表；只有需要覆盖自动提取结果时才建议填写。若留空，可由 Anibt 在上传种子后自动提取。',
   'seriesWorkspace.profileEditor.siteFields.mikanSubtitleGroupIdHelp':
     '为 Mikan 预填字幕组 ID。这个字段必须和 Bangumi ID 一起填写。',
   'seriesWorkspace.profileEditor.siteFields.mikanPublishGroupIdHelp':

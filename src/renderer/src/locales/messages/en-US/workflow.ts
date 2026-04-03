@@ -508,9 +508,9 @@ const workflow = {
   'seriesWorkspace.profileEditor.siteFields.anibtVersionHelp':
     'Prefill the optional Anibt version string, for example v2.',
   'seriesWorkspace.profileEditor.siteFields.anibtFileSizeHelp':
-    'Prefill the resource file size in bytes. If left empty, the adapter will try to derive it from the torrent metadata.',
+    'Prefill the resource file size in bytes. If left empty, Anibt can derive it from the uploaded torrent.',
   'seriesWorkspace.profileEditor.siteFields.anibtTrackersHelp':
-    'Prefill Anibt trackers here. If left empty, the adapter will try to derive announce and announce-list trackers from the torrent file.',
+    'Prefill Anibt trackers here only when you want to override the list. If left empty, Anibt can derive trackers from the uploaded torrent.',
   'seriesWorkspace.profileEditor.siteFields.mikanSubtitleGroupIdHelp':
     'Prefill the Mikan subtitle group ID. It must be provided together with the Bangumi ID.',
   'seriesWorkspace.profileEditor.siteFields.mikanPublishGroupIdHelp':

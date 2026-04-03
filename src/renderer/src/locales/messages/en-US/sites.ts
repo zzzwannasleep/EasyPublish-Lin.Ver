@@ -106,7 +106,7 @@ const sites = {
   'nexus.site.sharedFields': 'This site uses the shared title, description, torrent, NFO, and anonymous settings above.',
   'nexus.site.sharedFieldsMikan': 'This adapter uses the shared title, description, and torrent file above.',
   'nexus.site.sharedFieldsAnibt':
-    'This adapter uses the shared title, description, and torrent above. The description is converted to Markdown and sent as Anibt notes.',
+    'This adapter uses the shared title, description, and torrent above, then uploads the torrent file directly to Anibt. The description is converted to Markdown and sent as notes.',
   'nexus.site.sharedFieldsDmhy':
     'This adapter uses the shared title, description, and torrent file above. Category, publish team, and DMHY-specific options are configured below.',
   'nexus.site.requiredSection': 'Required Fields',
@@ -114,7 +114,7 @@ const sites = {
   'nexus.site.noRequiredFields': 'This adapter does not require any site-specific fields yet.',
   'nexus.site.mikanOptionalHint': 'bangumiId and subtitleGroupId must be filled together. If you enter more than 10 trackers, only the first 10 will be sent.',
   'nexus.site.anibtOptionalHint':
-    'Bangumi ID is required. You can also send episode, resolution, language, subtitle, format, version, and file size. If trackers or file size are left empty, the adapter will try to derive them from the torrent file automatically.',
+    'Bangumi ID is required. The adapter now uploads the torrent file directly. Episode, resolution, language, subtitle, format, version, and file size are optional. Leave trackers or file size empty if you want Anibt to derive them from the uploaded torrent.',
   'nexus.site.dmhyOptionalHint':
     'If poster URL is empty, the adapter will try to use the first image from the description. Team ID 0 means personal publishing.',
   'nexus.site.manualTypeId': 'Type ID',
