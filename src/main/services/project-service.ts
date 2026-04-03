@@ -4,20 +4,14 @@ import { basename, join } from 'path'
 import { fail, ok } from '../../shared/types/api'
 import type { PublishResult, PublishState } from '../../shared/types/publish'
 import type {
-  BatchCreateSeriesVariantsInput,
   CreateProjectInput,
-  ExportSeriesPublishProfileInput,
-  ImportSeriesPublishProfileInput,
   LegacyProjectType,
   MarkupFormat,
   ProjectMode,
   ProjectSourceKind,
-  RemoveSeriesPublishProfileInput,
-  SaveSeriesPublishProfileInput,
   SeriesProjectEpisode,
   SeriesProjectVariant,
   SeriesPublishProfile,
-  SeriesPublishProfileExportPayload,
   SeriesPublishProfileSnapshot,
   SeriesPublishProfileSiteDraft,
   SeriesPublishProfileSiteDrafts,
@@ -65,18 +59,6 @@ const PUBLISH_PROFILE_TEMPLATE_CONTEXT_KEYS = [
   'videoProfile',
   'subtitleProfile',
   'subtitleProfileLabel',
-] as const
-
-const PUBLISH_PROFILE_TEMPLATE_CONTENT_KEYS = [
-  'releaseTeam',
-  'seriesTitleCN',
-  'seriesTitleEN',
-  'seriesTitleJP',
-  'seasonLabel',
-  'sourceType',
-  'resolution',
-  'videoCodec',
-  'audioCodec',
 ] as const
 
 interface CreateProjectServiceOptions {
@@ -342,22 +324,6 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     return supportedSubtitleProfiles.filter(profile => profileSet.has(profile))
   }
 
-  function normalizeTemplateVideoProfiles(
-    profiles: SeriesVariantTemplateVideoProfile[],
-  ): SeriesVariantTemplateVideoProfile[] {
-    return normalizeVariantVideoProfiles(profiles as SeriesVariantVideoProfile[]).filter(
-      (profile): profile is SeriesVariantTemplateVideoProfile => profile !== 'custom',
-    )
-  }
-
-  function normalizeTemplateSubtitleProfiles(
-    profiles: SeriesVariantTemplateSubtitleProfile[],
-  ): SeriesVariantTemplateSubtitleProfile[] {
-    return normalizeVariantSubtitleProfiles(profiles as SeriesVariantSubtitleProfile[]).filter(
-      (profile): profile is SeriesVariantTemplateSubtitleProfile => profile !== 'custom',
-    )
-  }
-
   function normalizeSiteIds(value: unknown): SiteId[] {
     if (!Array.isArray(value)) {
       return []
@@ -447,15 +413,6 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     return normalizePublishProfileTemplateContext(context)
   }
 
-  function serializePublishProfileTemplateContext(context?: SeriesPublishProfileTemplateContext) {
-    const normalizedContext = normalizePublishProfileTemplateContext(context)
-    if (!normalizedContext) {
-      return ''
-    }
-
-    return PUBLISH_PROFILE_TEMPLATE_CONTEXT_KEYS.map(key => `${key}:${normalizedContext[key] ?? ''}`).join('|')
-  }
-
   function clonePublishResults(value: unknown): PublishResult[] | undefined {
     if (!Array.isArray(value)) {
       return undefined
@@ -537,37 +494,6 @@ export function createProjectService(options: CreateProjectServiceOptions) {
 
   function cloneSiteFieldDefaults(fieldDefaults?: SeriesPublishProfileSiteFieldDefaults) {
     return normalizeSiteFieldDefaults(fieldDefaults)
-  }
-
-  function mergeSiteFieldDefaults(
-    baseFieldDefaults?: SeriesPublishProfileSiteFieldDefaults,
-    overrideFieldDefaults?: SeriesPublishProfileSiteFieldDefaults,
-  ) {
-    const normalizedBase = normalizeSiteFieldDefaults(baseFieldDefaults)
-    const normalizedOverride = normalizeSiteFieldDefaults(overrideFieldDefaults)
-
-    if (!normalizedBase && !normalizedOverride) {
-      return undefined
-    }
-
-    const mergedDefaults: Partial<Record<SiteId, Record<string, unknown>>> = {}
-    const siteIds = new Set<SiteId>([
-      ...Object.keys(normalizedBase ?? {}),
-      ...Object.keys(normalizedOverride ?? {}),
-    ] as SiteId[])
-
-    siteIds.forEach(siteId => {
-      const nextEntry = {
-        ...(normalizedBase?.[siteId] ?? {}),
-        ...(normalizedOverride?.[siteId] ?? {}),
-      }
-
-      if (Object.keys(nextEntry).length > 0) {
-        mergedDefaults[siteId] = nextEntry
-      }
-    })
-
-    return Object.keys(mergedDefaults).length > 0 ? mergedDefaults : undefined
   }
 
   function buildProjectSiteFieldDefaults(config: Config.PublishConfig) {
@@ -961,19 +887,6 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     }))
   }
 
-  function resolveDefaultPublishProfileId(profiles: SeriesPublishProfile[], preferredId?: number) {
-    if (!profiles.length) {
-      return undefined
-    }
-
-    if (preferredId && profiles.some(profile => profile.id === preferredId)) {
-      return preferredId
-    }
-
-    const defaultProfile = profiles.find(profile => profile.isDefault)
-    return defaultProfile?.id ?? profiles[0]?.id
-  }
-
   function getVariantTargetSitesFromConfig(config: Config.PublishConfig) {
     const content = config.content as Partial<Config.Content_episode>
     return normalizeSiteIds(config.targetSites ?? content.targetSites)
@@ -1018,297 +931,6 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       title: summary.title ?? normalizeOptionalString(variant.title),
       targetSites: summary.targetSites?.length ? [...summary.targetSites] : normalizeSiteIds(variant.targetSites),
     }
-  }
-
-  function getVariantTemplateIdentity(
-    videoProfiles: SeriesVariantTemplateVideoProfile[],
-    subtitleProfiles: SeriesVariantTemplateSubtitleProfile[],
-    targetSites: SiteId[] = [],
-    templateContext?: string,
-    titleTemplate?: string,
-    summaryTemplate?: string,
-    bodyTemplate?: string,
-    bodyTemplateFormat?: MarkupFormat,
-    siteDrafts?: string,
-    siteFieldDefaults?: string,
-  ) {
-    return [
-      normalizeTemplateVideoProfiles(videoProfiles).join(','),
-      normalizeTemplateSubtitleProfiles(subtitleProfiles).join(','),
-      [...targetSites].sort().join(','),
-      templateContext ?? '',
-      titleTemplate?.trim() ?? '',
-      summaryTemplate?.trim() ?? '',
-      bodyTemplate?.trim() ?? '',
-      bodyTemplateFormat ?? '',
-      siteDrafts ?? '',
-      siteFieldDefaults ?? '',
-    ].join('|')
-  }
-
-  function buildSeriesLabelFromValues(values: {
-    seriesTitleCN?: string
-    seriesTitleEN?: string
-    seriesTitleJP?: string
-    seasonLabel?: string
-  }) {
-    const titles = [values.seriesTitleCN, values.seriesTitleEN, values.seriesTitleJP]
-      .map(value => value?.trim() ?? '')
-      .filter(Boolean)
-    const dedupedTitles = [...new Set(titles)]
-    const seasonLabel = values.seasonLabel?.trim()
-
-    return seasonLabel ? [...dedupedTitles, seasonLabel].join(' / ') : dedupedTitles.join(' / ')
-  }
-
-  function buildSeriesLabelFromContent(content: Partial<Config.Content_episode>) {
-    return buildSeriesLabelFromValues(content)
-  }
-
-  function buildTechLabelFromValues(values: {
-    sourceType?: string
-    resolution?: string
-    videoCodec?: string
-    audioCodec?: string
-  }) {
-    return [values.sourceType, values.resolution, values.videoCodec, values.audioCodec]
-      .map(value => value?.trim() ?? '')
-      .filter(Boolean)
-      .join(' ')
-  }
-
-  function buildTechLabelFromContent(content: Partial<Config.Content_episode>, resolutionOverride?: string) {
-    return buildTechLabelFromValues({
-      sourceType: content.sourceType,
-      resolution: resolutionOverride ?? content.resolution,
-      videoCodec: content.videoCodec,
-      audioCodec: content.audioCodec,
-    })
-  }
-
-  function getSubtitleTemplateLabel(profile?: SeriesVariantSubtitleProfile) {
-    if (!profile) {
-      return ''
-    }
-
-    const subtitleLabelMap: Record<SeriesVariantSubtitleProfile, string> = {
-      chs: 'CHS',
-      cht: 'CHT',
-      eng: 'ENG',
-      bilingual: 'bilingual',
-      custom: 'custom',
-    }
-
-    return subtitleLabelMap[profile]
-  }
-
-  function applyTemplateContextToVariables(
-    variables: Record<string, string>,
-    templateContext?: SeriesPublishProfileTemplateContext,
-  ) {
-    if (!templateContext) {
-      return variables
-    }
-
-    const nextVariables = { ...variables }
-    PUBLISH_PROFILE_TEMPLATE_CONTEXT_KEYS.forEach(key => {
-      if (key === 'seriesLabel' || key === 'techLabel') {
-        return
-      }
-
-      const overrideValue = normalizeOptionalString(templateContext[key])
-      if (overrideValue) {
-        nextVariables[key] = overrideValue
-      }
-    })
-
-    const seriesLabelOverride = normalizeOptionalString(templateContext.seriesLabel)
-    const techLabelOverride = normalizeOptionalString(templateContext.techLabel)
-    const derivedSeriesLabel = buildSeriesLabelFromValues({
-      seriesTitleCN: nextVariables.seriesTitleCN,
-      seriesTitleEN: nextVariables.seriesTitleEN,
-      seriesTitleJP: nextVariables.seriesTitleJP,
-      seasonLabel: nextVariables.seasonLabel,
-    })
-    const derivedTechLabel = buildTechLabelFromValues({
-      sourceType: nextVariables.sourceType,
-      resolution: nextVariables.resolution,
-      videoCodec: nextVariables.videoCodec,
-      audioCodec: nextVariables.audioCodec,
-    })
-
-    nextVariables.seriesLabel = seriesLabelOverride ?? derivedSeriesLabel ?? nextVariables.seriesLabel
-    nextVariables.techLabel = techLabelOverride ?? derivedTechLabel ?? nextVariables.techLabel
-
-    return nextVariables
-  }
-
-  function buildSeriesVariantTemplateVariables(
-    config: Config.PublishConfig,
-    variant: SeriesProjectVariant,
-    templateContext?: SeriesPublishProfileTemplateContext,
-  ) {
-    const content = config.content as Partial<Config.Content_episode>
-    const resolution =
-      content.resolution?.trim() ??
-      (variant.videoProfile && variant.videoProfile !== 'custom' ? variant.videoProfile : '')
-    return applyTemplateContextToVariables(
-      {
-      title: config.title?.trim() ?? '',
-      summary: content.summary?.trim() ?? '',
-      releaseTeam: content.releaseTeam?.trim() ?? '',
-      seriesTitleCN: content.seriesTitleCN?.trim() ?? '',
-      seriesTitleEN: content.seriesTitleEN?.trim() ?? '',
-      seriesTitleJP: content.seriesTitleJP?.trim() ?? '',
-      seasonLabel: content.seasonLabel?.trim() ?? '',
-      episodeLabel: content.episodeLabel?.trim() ?? '',
-      episodeTitle: content.episodeTitle?.trim() ?? '',
-      sourceType: content.sourceType?.trim() ?? '',
-      resolution,
-      videoCodec: content.videoCodec?.trim() ?? '',
-      audioCodec: content.audioCodec?.trim() ?? '',
-      seriesLabel: buildSeriesLabelFromContent(content),
-      techLabel: buildTechLabelFromContent(content, resolution),
-      variantName: variant.name,
-      videoProfile: variant.videoProfile ?? '',
-      subtitleProfile: variant.subtitleProfile ?? '',
-      subtitleProfileLabel: getSubtitleTemplateLabel(variant.subtitleProfile),
-      },
-      templateContext,
-    )
-  }
-
-  function renderSeriesVariantTemplate(
-    template: string,
-    variables: Record<string, string>,
-    options?: {
-      collapseWhitespace?: boolean
-    },
-  ) {
-    const rendered = template
-      .replace(/\{\{\s*(\w+)\s*\}\}/g, (_match, token: string) => variables[token] ?? '')
-      .replace(/\{(\w+)\}/g, (_match, token: string) => variables[token] ?? '')
-      .trim()
-
-    if (!options?.collapseWhitespace) {
-      return rendered
-    }
-
-    return rendered.replace(/\s+/g, ' ').trim()
-  }
-
-  function buildVariantConfigFromDraft(
-    projectPath: string,
-    variant: SeriesProjectVariant,
-    options?: {
-      targetSites?: SiteId[]
-      templateContext?: SeriesPublishProfileTemplateContext
-      titleTemplate?: string
-      summaryTemplate?: string
-      bodyTemplate?: string
-      bodyTemplateFormat?: MarkupFormat
-      siteDrafts?: SeriesPublishProfileSiteDrafts
-      siteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
-    },
-  ) {
-    const config = JSON.parse(fs.readFileSync(getDraftConfigPath(projectPath), { encoding: 'utf-8' })) as Config.PublishConfig
-    const targetSites = normalizeSiteIds(options?.targetSites)
-    const templateContext = clonePublishProfileTemplateContext(options?.templateContext)
-    const titleTemplate = normalizeTitleTemplate(options?.titleTemplate)
-    const bodyTemplate = normalizeBodyTemplate(options?.bodyTemplate)
-    const bodyTemplateFormat = normalizeMarkupFormat(options?.bodyTemplateFormat)
-    const siteDrafts = normalizeSiteDrafts(options?.siteDrafts, {
-      targetSites,
-      summaryTemplate: options?.summaryTemplate,
-    })
-    const summaryTemplate = resolvePrimarySiteDraftSummaryTemplate(siteDrafts, targetSites, options?.summaryTemplate)
-    const siteFieldDefaults = mergeSiteFieldDefaults(buildProjectSiteFieldDefaults(config), options?.siteFieldDefaults)
-
-    if (templateContext && typeof config.content === 'object' && config.content && !Array.isArray(config.content)) {
-      const content = config.content as unknown as Record<string, string | SiteId[] | undefined>
-      PUBLISH_PROFILE_TEMPLATE_CONTENT_KEYS.forEach(key => {
-        const value = templateContext[key]
-        if (value) {
-          content[key] = value
-        }
-      })
-    }
-
-    if (targetSites.length > 0) {
-      config.targetSites = [...targetSites]
-      if ('targetSites' in config.content) {
-        config.content.targetSites = [...targetSites]
-      }
-    }
-
-    if (titleTemplate) {
-      const renderedTitle = renderSeriesVariantTemplate(
-        titleTemplate,
-        buildSeriesVariantTemplateVariables(config, variant, templateContext),
-        { collapseWhitespace: true },
-      )
-      if (renderedTitle) {
-        config.title = renderedTitle
-      }
-    }
-
-    if (summaryTemplate && 'summary' in config.content) {
-      const renderedSummary = renderSeriesVariantTemplate(
-        summaryTemplate,
-        buildSeriesVariantTemplateVariables(config, variant, templateContext),
-      )
-      if (renderedSummary) {
-        config.content.summary = renderedSummary
-      }
-    }
-
-    if (bodyTemplate) {
-      config.bodyTemplate = bodyTemplate
-      config.bodyTemplateFormat = bodyTemplateFormat ?? 'md'
-    } else {
-      delete config.bodyTemplate
-      delete config.bodyTemplateFormat
-    }
-
-    if (siteFieldDefaults) {
-      config.siteFieldDefaults = cloneSiteFieldDefaults(siteFieldDefaults)
-    } else {
-      delete config.siteFieldDefaults
-    }
-
-    const bangumiCategory = normalizeOptionalString(siteFieldDefaults?.bangumi?.category_bangumi)
-    if (bangumiCategory) {
-      config.category_bangumi = bangumiCategory
-    }
-
-    const nyaaCategory = normalizeOptionalString(siteFieldDefaults?.nyaa?.category_nyaa)
-    if (nyaaCategory) {
-      config.category_nyaa = nyaaCategory
-    }
-
-    return config
-  }
-
-  function writeVariantConfigFromDraft(
-    projectPath: string,
-    episode: SeriesProjectEpisode,
-    variant: SeriesProjectVariant,
-    options?: {
-      targetSites?: SiteId[]
-      templateContext?: SeriesPublishProfileTemplateContext
-      titleTemplate?: string
-      summaryTemplate?: string
-      bodyTemplate?: string
-      bodyTemplateFormat?: MarkupFormat
-      siteDrafts?: SeriesPublishProfileSiteDrafts
-      siteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
-    },
-  ) {
-    const variantConfigPath = getVariantConfigPath(projectPath, episode, variant)
-    fs.mkdirSync(join(variantConfigPath, '..'), { recursive: true })
-    const config = buildVariantConfigFromDraft(projectPath, variant, options)
-    fs.writeFileSync(variantConfigPath, JSON.stringify(config))
-    return config
   }
 
   function readPublishConfigFromPath(configPath: string) {
@@ -1399,24 +1021,6 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     return nextConfig
   }
 
-  function getVariantPresetName(
-    videoProfile?: SeriesVariantVideoProfile,
-    subtitleProfile?: SeriesVariantSubtitleProfile,
-  ) {
-    if (!videoProfile || !subtitleProfile || videoProfile === 'custom' || subtitleProfile === 'custom') {
-      return ''
-    }
-
-    const subtitleLabelMap: Record<Exclude<SeriesVariantSubtitleProfile, 'custom'>, string> = {
-      chs: 'CHS',
-      cht: 'CHT',
-      eng: 'ENG',
-      bilingual: 'bilingual',
-    }
-
-    return `${videoProfile}-${subtitleLabelMap[subtitleProfile]}`
-  }
-
   function normalizeVariantName(value: string) {
     return value.trim().toLowerCase()
   }
@@ -1437,23 +1041,6 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     return normalizeVariantName(name)
   }
 
-  function resolveVariantName({
-    name,
-    videoProfile,
-    subtitleProfile,
-  }: {
-    name?: string
-    videoProfile?: SeriesVariantVideoProfile
-    subtitleProfile?: SeriesVariantSubtitleProfile
-  }) {
-    const trimmedName = name?.trim() ?? ''
-    if (trimmedName) {
-      return trimmedName
-    }
-
-    return getVariantPresetName(videoProfile, subtitleProfile)
-  }
-
   function resolveCopiedVariantName(name: string, existingVariants: SeriesProjectVariant[]) {
     const trimmedName = name.trim() || 'variant'
     const baseName = `${trimmedName} 副本`
@@ -1469,25 +1056,6 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     }
 
     return `${baseName} ${suffix}`
-  }
-
-  function hasVariantConflict(
-    episode: SeriesProjectEpisode,
-    name: string,
-    videoProfile?: SeriesVariantVideoProfile,
-    subtitleProfile?: SeriesVariantSubtitleProfile,
-  ) {
-    const nextVariantIdentity = getVariantIdentity({ name, videoProfile, subtitleProfile })
-    return episode.variants.some(variant => {
-      const hasSameName = normalizeVariantName(variant.name) === normalizeVariantName(name)
-      const hasSameIdentity =
-        getVariantIdentity({
-          name: variant.name,
-          videoProfile: variant.videoProfile,
-          subtitleProfile: variant.subtitleProfile,
-        }) === nextVariantIdentity
-      return hasSameName || hasSameIdentity
-    })
   }
 
   function buildSeriesVariant(
@@ -1639,25 +1207,6 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       }
     }
   }
-
-  function findPreviousEpisode(workspace: SeriesProjectWorkspace, episodeId: number) {
-    const sortedEpisodes = [...workspace.episodes].sort((left, right) => left.sortIndex - right.sortIndex)
-    const episodeIndex = sortedEpisodes.findIndex(episode => episode.id === episodeId)
-    if (episodeIndex <= 0) {
-      return null
-    }
-
-    return sortedEpisodes[episodeIndex - 1] ?? null
-  }
-
-  function findPublishProfile(workspace: SeriesProjectWorkspace, profileId?: number) {
-    if (typeof profileId !== 'number') {
-      return null
-    }
-
-    return workspace.publishProfiles.find(profile => profile.id === profileId) ?? null
-  }
-
   function buildInitialContent(projectMode: ProjectMode, sourceKind?: ProjectSourceKind) {
     if (projectMode === 'episode') {
       return {
@@ -1741,7 +1290,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     let { workingDirectory, name, projectMode, sourceKind } = input
 
     if (projectMode === 'feature' && !sourceKind) {
-      return fail('PROJECT_SOURCE_KIND_REQUIRED', 'Feature projects must include a source kind')
+      return fail('PROJECT_SOURCE_KIND_REQUIRED', '电影项目必须指定来源类型')
     }
 
     if (workingDirectory === '') {
@@ -1752,7 +1301,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     }
 
     if (!fs.existsSync(workingDirectory)) {
-      return fail('PROJECT_DIRECTORY_NOT_FOUND', 'Project working directory does not exist')
+      return fail('PROJECT_DIRECTORY_NOT_FOUND', '项目工作目录不存在')
     }
 
     if (name === '') {
@@ -1783,7 +1332,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
 
     const project = projectStore.getProjectById(id)
     if (!project) {
-      return fail('PROJECT_CREATE_FAILED', 'Project record was not persisted')
+      return fail('PROJECT_CREATE_FAILED', '项目记录写入失败')
     }
 
     return ok({ project })
@@ -1794,8 +1343,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const input: CreateProjectInput = JSON.parse(msg)
       return JSON.stringify(await createProjectRecord(input))
     } catch (err) {
-      dialog.showErrorBox('闁挎瑨顕?', (err as Error).message)
-      return JSON.stringify(fail('PROJECT_CREATE_FAILED', 'Unable to create project', (err as Error).message))
+      dialog.showErrorBox('创建项目失败', (err as Error).message)
+      return JSON.stringify(fail('PROJECT_CREATE_FAILED', '无法创建项目', (err as Error).message))
     }
   }
 
@@ -1817,7 +1366,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const legacyResult: Message.Task.Result = { result: `success:${result.data.project.id}` }
       return JSON.stringify(legacyResult)
     } catch (err) {
-      dialog.showErrorBox('闁挎瑨顕?', (err as Error).message)
+      dialog.showErrorBox('创建任务失败', (err as Error).message)
       const result: Message.Task.Result = { result: 'failed' }
       return JSON.stringify(result)
     }
@@ -1831,7 +1380,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     const { id }: Message.Task.TaskID = JSON.parse(msg)
     const project = projectStore.getProjectById(id)
     if (!project) {
-      return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${id} does not exist`))
+      return JSON.stringify(fail('PROJECT_NOT_FOUND', `项目 ${id} 不存在`))
     }
     return JSON.stringify(ok({ project }))
   }
@@ -1840,304 +1389,15 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     const { id }: Message.Task.TaskID = JSON.parse(msg)
     const task = projectStore.findLegacyTaskById(id)
     if (!task) {
-      return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${id} does not exist`))
+      return JSON.stringify(fail('PROJECT_NOT_FOUND', `项目 ${id} 不存在`))
     }
 
     const project = projectStore.getProjectById(id)
     if (!project || project.projectMode !== 'episode') {
-      return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `Project ${id} is not in series mode`))
+      return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `项目 ${id} 不是剧集项目`))
     }
 
     return JSON.stringify(ok({ workspace: readSeriesWorkspace(project.id, task.path) }))
-  }
-  async function batchCreateSeriesVariants(msg: string) {
-    try {
-      const input: BatchCreateSeriesVariantsInput = JSON.parse(msg)
-      const { projectId, episodeId } = input
-      const videoProfiles = Array.isArray(input.videoProfiles)
-        ? input.videoProfiles.filter(profile => isSeriesVariantTemplateVideoProfile(profile))
-        : []
-      const subtitleProfiles = Array.isArray(input.subtitleProfiles)
-        ? input.subtitleProfiles.filter(profile => isSeriesVariantTemplateSubtitleProfile(profile))
-        : []
-      const targetSites = normalizeSiteIds(input.targetSites)
-      const titleTemplate = normalizeTitleTemplate(input.titleTemplate)
-      const summaryTemplate = normalizeSummaryTemplate(input.summaryTemplate)
-
-      if (!videoProfiles.length || !subtitleProfiles.length) {
-        return JSON.stringify(
-          fail('SERIES_VARIANT_BATCH_PRESET_REQUIRED', 'At least one video profile and subtitle profile are required'),
-        )
-      }
-
-      const task = projectStore.findLegacyTaskById(projectId)
-      if (!task) {
-        return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${projectId} does not exist`))
-      }
-
-      const project = projectStore.getProjectById(projectId)
-      if (!project || project.projectMode !== 'episode') {
-        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `Project ${projectId} is not in series mode`))
-      }
-
-      const workspace = readSeriesWorkspace(project.id, task.path)
-      const episode = workspace.episodes.find(item => item.id === episodeId)
-      if (!episode) {
-        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `Episode ${episodeId} does not exist`))
-      }
-      const publishProfile = findPublishProfile(workspace, input.publishProfileId)
-
-      const timestamp = new Date().toISOString()
-      const baseId = Date.now()
-      const existingDirectoryNames = episode.variants.map(item => item.directoryName)
-      const nextVariants: SeriesProjectVariant[] = []
-      let skippedCount = 0
-
-      videoProfiles.forEach(videoProfile => {
-        subtitleProfiles.forEach(subtitleProfile => {
-          const name = resolveVariantName({ videoProfile, subtitleProfile })
-          const nextEpisodeState: SeriesProjectEpisode = {
-            ...episode,
-            variants: [...episode.variants, ...nextVariants],
-          }
-          if (!name || hasVariantConflict(nextEpisodeState, name, videoProfile, subtitleProfile)) {
-            skippedCount += 1
-            return
-          }
-
-          nextVariants.push(
-            buildSeriesVariant(episode, {
-              id: baseId + nextVariants.length,
-              name,
-              videoProfile,
-              subtitleProfile,
-              publishProfileId: publishProfile?.id,
-              publishProfileName: publishProfile?.name,
-              createdAt: timestamp,
-              existingDirectoryNames,
-            }),
-          )
-        })
-      })
-
-      if (!nextVariants.length) {
-        return JSON.stringify(
-          fail(
-            'SERIES_VARIANT_BATCH_EMPTY',
-            `Episode ${episode.episodeLabel} already contains all selected preset variants`,
-          ),
-        )
-      }
-
-      const nextVariantsWithSummary = nextVariants.map(variant => {
-        const config = writeVariantConfigFromDraft(task.path, episode, variant, {
-          targetSites,
-          templateContext: publishProfile?.templateContext,
-          titleTemplate,
-          summaryTemplate,
-          bodyTemplate: publishProfile?.bodyTemplate,
-          bodyTemplateFormat: publishProfile?.bodyTemplateFormat,
-          siteDrafts: publishProfile?.siteDrafts,
-          siteFieldDefaults: publishProfile?.siteFieldDefaults,
-        })
-        const variantSummary = buildVariantSummaryFromConfig(config)
-        return {
-          ...applyVariantSummary(variant, variantSummary),
-          publishProfileSnapshot: buildPublishProfileSnapshot({
-            profile: publishProfile,
-            variantName: variant.name,
-            videoProfiles: publishProfile ? undefined : videoProfiles,
-            subtitleProfiles: publishProfile ? undefined : subtitleProfiles,
-            templateContext: publishProfile?.templateContext,
-            targetSites: variantSummary.targetSites,
-            titleTemplate,
-            summaryTemplate,
-            bodyTemplate: publishProfile?.bodyTemplate,
-            bodyTemplateFormat: publishProfile?.bodyTemplateFormat,
-            siteDrafts: publishProfile?.siteDrafts,
-            siteFieldDefaults: normalizeSiteFieldDefaults(config.siteFieldDefaults),
-          }),
-        }
-      })
-
-      const nextEpisode: SeriesProjectEpisode = {
-        ...episode,
-        variants: [...episode.variants, ...nextVariantsWithSummary],
-        variantCount: episode.variants.length + nextVariantsWithSummary.length,
-        updatedAt: timestamp,
-      }
-      writeEpisodeRecord(task.path, nextEpisode)
-
-      const nextWorkspace: SeriesProjectWorkspace = {
-        ...replaceEpisode(workspace, nextEpisode),
-        activeEpisodeId: workspace.activeEpisodeId ?? nextEpisode.id,
-        activeVariantId: workspace.activeVariantId,
-        updatedAt: timestamp,
-      }
-      writeSeriesWorkspace(task.path, nextWorkspace)
-
-      notifyProjectDataChanged()
-      return JSON.stringify(
-        ok({
-          episode: nextEpisode,
-          workspace: hydrateSeriesWorkspace(task.path, nextWorkspace),
-          createdCount: nextVariantsWithSummary.length,
-          skippedCount,
-        }),
-      )
-    } catch (err) {
-      dialog.showErrorBox('批量创建版本失败', (err as Error).message)
-      return JSON.stringify(
-        fail('SERIES_VARIANT_BATCH_FAILED', 'Unable to batch create series variants', (err as Error).message),
-      )
-    }
-  }
-
-  async function saveSeriesPublishProfile(msg: string) {
-    try {
-      const input: SaveSeriesPublishProfileInput = JSON.parse(msg)
-      const { projectId } = input
-      const name = input.name.trim()
-      const videoProfiles = Array.isArray(input.videoProfiles)
-        ? normalizeTemplateVideoProfiles(input.videoProfiles.filter(isSeriesVariantTemplateVideoProfile))
-        : []
-      const subtitleProfiles = Array.isArray(input.subtitleProfiles)
-        ? normalizeTemplateSubtitleProfiles(input.subtitleProfiles.filter(isSeriesVariantTemplateSubtitleProfile))
-        : []
-      const requestedTargetSites = normalizeSiteIds(input.targetSites)
-      const templateContext = normalizePublishProfileTemplateContext(input.templateContext)
-      const titleTemplate = normalizeTitleTemplate(input.titleTemplate)
-      const bodyTemplate = normalizeBodyTemplate(input.bodyTemplate)
-      const bodyTemplateFormat = normalizeMarkupFormat(input.bodyTemplateFormat) ?? (bodyTemplate ? 'md' : undefined)
-      const siteDrafts = normalizeSiteDrafts(input.siteDrafts, {
-        targetSites: requestedTargetSites,
-        summaryTemplate: normalizeSummaryTemplate(input.summaryTemplate),
-      })
-      const targetSites = normalizeSiteIds([...requestedTargetSites, ...getEnabledSiteIdsFromSiteDrafts(siteDrafts)])
-      const summaryTemplate = resolvePrimarySiteDraftSummaryTemplate(siteDrafts, targetSites, input.summaryTemplate)
-      const siteFieldDefaults = normalizeSiteFieldDefaults(input.siteFieldDefaults)
-      const profileId = typeof input.profileId === 'number' ? input.profileId : undefined
-      const requestedDefault = Boolean(input.isDefault)
-
-      if (!name) {
-        return JSON.stringify(fail('SERIES_PUBLISH_PROFILE_NAME_REQUIRED', 'Publish profile name is required'))
-      }
-
-      if (!videoProfiles.length || !subtitleProfiles.length) {
-        return JSON.stringify(
-          fail(
-            'SERIES_PUBLISH_PROFILE_PRESET_REQUIRED',
-            'Publish profile must contain at least one video profile and subtitle profile',
-          ),
-        )
-      }
-
-      const task = projectStore.findLegacyTaskById(projectId)
-      if (!task) {
-        return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${projectId} does not exist`))
-      }
-
-      const project = projectStore.getProjectById(projectId)
-      if (!project || project.projectMode !== 'episode') {
-        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `Project ${projectId} is not in series mode`))
-      }
-
-      const workspace = readSeriesWorkspace(project.id, task.path)
-      const templateIdentity = getVariantTemplateIdentity(
-        videoProfiles,
-        subtitleProfiles,
-        targetSites,
-        serializePublishProfileTemplateContext(templateContext),
-        titleTemplate,
-        summaryTemplate,
-        bodyTemplate,
-        bodyTemplateFormat,
-        JSON.stringify(normalizeSiteDrafts(siteDrafts) ?? {}),
-        JSON.stringify(siteFieldDefaults ?? {}),
-      )
-      if (
-        workspace.publishProfiles.some(profile => {
-          if (profile.id === profileId) {
-            return false
-          }
-
-          const hasSameName = normalizeVariantName(profile.name) === normalizeVariantName(name)
-          const hasSameIdentity =
-            getVariantTemplateIdentity(
-              profile.videoProfiles,
-              profile.subtitleProfiles,
-              profile.targetSites,
-              serializePublishProfileTemplateContext(profile.templateContext),
-              profile.titleTemplate,
-              profile.summaryTemplate,
-              profile.bodyTemplate,
-              profile.bodyTemplateFormat,
-              JSON.stringify(normalizeSiteDrafts(profile.siteDrafts, {
-                targetSites: profile.targetSites,
-                summaryTemplate: profile.summaryTemplate,
-              }) ?? {}),
-              JSON.stringify(normalizeSiteFieldDefaults(profile.siteFieldDefaults) ?? {}),
-            ) === templateIdentity
-          return hasSameName || hasSameIdentity
-        })
-      ) {
-        return JSON.stringify(
-          fail('SERIES_PUBLISH_PROFILE_DUPLICATED', `Publish profile ${name} already exists in this project`),
-        )
-      }
-
-      const timestamp = new Date().toISOString()
-      const profile: SeriesPublishProfile = {
-        id: profileId ?? Date.now(),
-        name,
-        isDefault: requestedDefault,
-        videoProfiles,
-        subtitleProfiles,
-        templateContext,
-        targetSites: targetSites.length ? targetSites : undefined,
-        titleTemplate,
-        summaryTemplate,
-        bodyTemplate,
-        bodyTemplateFormat,
-        siteDrafts,
-        siteFieldDefaults,
-        createdAt: workspace.publishProfiles.find(item => item.id === profileId)?.createdAt ?? timestamp,
-        updatedAt: timestamp,
-      }
-
-      const mergedProfiles = profileId
-        ? workspace.publishProfiles.map(item => (item.id === profile.id ? profile : item))
-        : [...workspace.publishProfiles, profile]
-      const defaultProfileId = resolveDefaultPublishProfileId(
-        mergedProfiles,
-        requestedDefault ? profile.id : workspace.publishProfiles.find(item => item.isDefault)?.id,
-      )
-      const nextProfiles = normalizePublishProfiles(
-        mergedProfiles.map(item => ({
-          ...item,
-          isDefault: item.id === defaultProfileId,
-        })),
-      )
-      const nextWorkspace: SeriesProjectWorkspace = {
-        ...workspace,
-        publishProfiles: nextProfiles,
-        updatedAt: timestamp,
-      }
-      writeSeriesWorkspace(task.path, nextWorkspace)
-
-      notifyProjectDataChanged()
-      return JSON.stringify(
-        ok({
-          profile: nextProfiles.find(item => item.id === profile.id) ?? profile,
-          workspace: hydrateSeriesWorkspace(task.path, nextWorkspace),
-        }),
-      )
-    } catch (err) {
-      dialog.showErrorBox('保存发布配置失败', (err as Error).message)
-      return JSON.stringify(
-        fail('SERIES_PUBLISH_PROFILE_SAVE_FAILED', 'Unable to save series publish profile', (err as Error).message),
-      )
-    }
   }
   async function saveSeriesTitleMatchConfig(msg: string) {
     try {
@@ -2145,17 +1405,17 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const { projectId } = input
       const task = projectStore.findLegacyTaskById(projectId)
       if (!task) {
-        return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${projectId} does not exist`))
+        return JSON.stringify(fail('PROJECT_NOT_FOUND', `项目 ${projectId} 不存在`))
       }
 
       const project = projectStore.getProjectById(projectId)
       if (!project || project.projectMode !== 'episode') {
-        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `Project ${projectId} is not in series mode`))
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `项目 ${projectId} 不是剧集项目`))
       }
 
       const titleMatchConfig = cloneSeriesTitleMatchConfig(input.config)
       if (!titleMatchConfig?.fileNamePattern) {
-        return JSON.stringify(fail('SERIES_TITLE_MATCH_PATTERN_REQUIRED', 'A file name pattern is required'))
+        return JSON.stringify(fail('SERIES_TITLE_MATCH_PATTERN_REQUIRED', '请先填写文件名匹配规则'))
       }
 
       const workspace = readSeriesWorkspace(project.id, task.path)
@@ -2177,7 +1437,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     } catch (err) {
       dialog.showErrorBox('保存标题匹配失败', (err as Error).message)
       return JSON.stringify(
-        fail('SERIES_TITLE_MATCH_SAVE_FAILED', 'Unable to save series title match config', (err as Error).message),
+        fail('SERIES_TITLE_MATCH_SAVE_FAILED', '无法保存标题匹配方案', (err as Error).message),
       )
     }
   }
@@ -2191,17 +1451,17 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         : []
 
       if (!filePaths.length) {
-        return JSON.stringify(fail('SERIES_MATCHED_TORRENTS_EMPTY', 'No torrent files were selected'))
+        return JSON.stringify(fail('SERIES_MATCHED_TORRENTS_EMPTY', '没有选择任何 .torrent 文件'))
       }
 
       const task = projectStore.findLegacyTaskById(projectId)
       if (!task) {
-        return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${projectId} does not exist`))
+        return JSON.stringify(fail('PROJECT_NOT_FOUND', `项目 ${projectId} 不存在`))
       }
 
       const project = projectStore.getProjectById(projectId)
       if (!project || project.projectMode !== 'episode') {
-        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `Project ${projectId} is not in series mode`))
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `项目 ${projectId} 不是剧集项目`))
       }
 
       const timestamp = new Date().toISOString()
@@ -2209,7 +1469,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const titleMatchConfig = cloneSeriesTitleMatchConfig(syncedWorkspace.titleMatchConfig)
       if (!titleMatchConfig?.fileNamePattern) {
         return JSON.stringify(
-          fail('SERIES_TITLE_MATCH_NOT_CONFIGURED', 'Configure the title match pattern before importing torrents'),
+          fail('SERIES_TITLE_MATCH_NOT_CONFIGURED', '请先保存标题匹配方案，再导入 .torrent 文件'),
         )
       }
 
@@ -2250,7 +1510,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
           unmatchedFiles.push({
             path: filePath,
             fileName,
-            reason: '文件名没有匹配到当前的标题匹配规�?,
+            reason: 'Title match rule did not match this file name',
           })
           continue
         }
@@ -2261,7 +1521,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
           unmatchedFiles.push({
             path: filePath,
             fileName,
-            reason: '没有从文件名中解析出剧集编号',
+            reason: 'Could not resolve an episode label from this file name',
           })
           continue
         }
@@ -2411,181 +1671,39 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     } catch (err) {
       dialog.showErrorBox('自动识别种子失败', (err as Error).message)
       return JSON.stringify(
-        fail('SERIES_MATCHED_TORRENT_IMPORT_FAILED', 'Unable to import matched torrents', (err as Error).message),
+        fail('SERIES_MATCHED_TORRENT_IMPORT_FAILED', '自动识别 .torrent 文件失败', (err as Error).message),
       )
     }
   }
-
-  async function importSeriesPublishProfile(msg: string) {
-    try {
-      const input: ImportSeriesPublishProfileInput = JSON.parse(msg)
-      const { canceled, filePaths } = await dialog.showOpenDialog({
-        properties: ['openFile'],
-        filters: [{ name: 'JSON', extensions: ['json'] }],
-      })
-
-      if (canceled || !filePaths[0]) {
-        return JSON.stringify(fail('SERIES_PUBLISH_PROFILE_IMPORT_CANCELLED', 'Import cancelled'))
-      }
-
-      const raw = JSON.parse(fs.readFileSync(filePaths[0], { encoding: 'utf-8' })) as
-        | { profile?: Partial<SeriesPublishProfile> }
-        | Partial<SeriesPublishProfile>
-      const importedProfile =
-        raw && typeof raw === 'object' && 'profile' in raw && raw.profile ? raw.profile : (raw as Partial<SeriesPublishProfile>)
-
-      return await saveSeriesPublishProfile(
-        JSON.stringify({
-          projectId: input.projectId,
-          name: normalizeOptionalString(importedProfile.name) ?? '导入配置',
-          isDefault: Boolean(importedProfile.isDefault),
-          videoProfiles: importedProfile.videoProfiles?.length ? importedProfile.videoProfiles : ['1080p'],
-          subtitleProfiles: importedProfile.subtitleProfiles?.length ? importedProfile.subtitleProfiles : ['chs'],
-          templateContext: importedProfile.templateContext,
-          targetSites: importedProfile.targetSites,
-          titleTemplate: importedProfile.titleTemplate,
-          summaryTemplate: importedProfile.summaryTemplate,
-          bodyTemplate: importedProfile.bodyTemplate,
-          bodyTemplateFormat: importedProfile.bodyTemplateFormat,
-          siteDrafts: importedProfile.siteDrafts,
-          siteFieldDefaults: importedProfile.siteFieldDefaults,
-        } satisfies SaveSeriesPublishProfileInput),
-      )
-    } catch (err) {
-      dialog.showErrorBox('导入发布配置失败', (err as Error).message)
-      return JSON.stringify(
-        fail('SERIES_PUBLISH_PROFILE_IMPORT_FAILED', 'Unable to import series publish profile', (err as Error).message),
-      )
-    }
-  }
-
-  async function exportSeriesPublishProfile(msg: string) {
-    try {
-      const input: ExportSeriesPublishProfileInput = JSON.parse(msg)
-      const { projectId, profileId } = input
-      const task = projectStore.findLegacyTaskById(projectId)
-      if (!task) {
-        return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${projectId} does not exist`))
-      }
-
-      const project = projectStore.getProjectById(projectId)
-      if (!project || project.projectMode !== 'episode') {
-        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `Project ${projectId} is not in series mode`))
-      }
-
-      const workspace = readSeriesWorkspace(project.id, task.path)
-      const profile = workspace.publishProfiles.find(item => item.id === profileId)
-      if (!profile) {
-        return JSON.stringify(fail('SERIES_PUBLISH_PROFILE_NOT_FOUND', `Publish profile ${profileId} does not exist`))
-      }
-
-      const safeName = profile.name.replace(/[<>:"/\\|?*\u0000-\u001F]+/g, '-').trim() || `publish-profile-${profile.id}`
-      const { canceled, filePath } = await dialog.showSaveDialog({
-        filters: [{ name: 'JSON', extensions: ['json'] }],
-        defaultPath: `${safeName}.json`,
-      })
-
-      if (canceled || !filePath) {
-        return JSON.stringify(fail('SERIES_PUBLISH_PROFILE_EXPORT_CANCELLED', 'Export cancelled'))
-      }
-
-      const payload = {
-        version: 1,
-        exportedAt: new Date().toISOString(),
-        profile,
-      } satisfies {
-        version: number
-        exportedAt: string
-        profile: SeriesPublishProfile
-      }
-      fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), { encoding: 'utf-8' })
-
-      const response: SeriesPublishProfileExportPayload = {
-        profile,
-        path: filePath,
-      }
-      return JSON.stringify(ok(response))
-    } catch (err) {
-      dialog.showErrorBox('导出发布配置失败', (err as Error).message)
-      return JSON.stringify(
-        fail('SERIES_PUBLISH_PROFILE_EXPORT_FAILED', 'Unable to export series publish profile', (err as Error).message),
-      )
-    }
-  }
-
-  async function removeSeriesPublishProfile(msg: string) {
-    try {
-      const input: RemoveSeriesPublishProfileInput = JSON.parse(msg)
-      const { projectId, profileId } = input
-      const task = projectStore.findLegacyTaskById(projectId)
-      if (!task) {
-        return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${projectId} does not exist`))
-      }
-
-      const project = projectStore.getProjectById(projectId)
-      if (!project || project.projectMode !== 'episode') {
-        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `Project ${projectId} is not in series mode`))
-      }
-
-      const workspace = readSeriesWorkspace(project.id, task.path)
-      if (!workspace.publishProfiles.some(profile => profile.id === profileId)) {
-        return JSON.stringify(fail('SERIES_PUBLISH_PROFILE_NOT_FOUND', `Publish profile ${profileId} does not exist`))
-      }
-
-      const timestamp = new Date().toISOString()
-      const nextProfiles = normalizePublishProfiles(workspace.publishProfiles.filter(profile => profile.id !== profileId))
-      const nextWorkspace: SeriesProjectWorkspace = {
-        ...workspace,
-        publishProfiles: nextProfiles,
-        updatedAt: timestamp,
-      }
-      writeSeriesWorkspace(task.path, nextWorkspace)
-
-      notifyProjectDataChanged()
-      return JSON.stringify(ok({ profileId, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
-    } catch (err) {
-      dialog.showErrorBox('删除发布配置失败', (err as Error).message)
-      return JSON.stringify(
-        fail(
-          'SERIES_PUBLISH_PROFILE_REMOVE_FAILED',
-          'Unable to remove series publish profile',
-          (err as Error).message,
-        ),
-      )
-    }
-  }
-
-  const saveSeriesVariantTemplate = saveSeriesPublishProfile
-  const removeSeriesVariantTemplate = removeSeriesPublishProfile
   async function duplicateSeriesVariant(msg: string) {
     try {
       const input: SeriesVariantDraftInput = JSON.parse(msg)
       const { projectId, episodeId, variantId } = input
       const task = projectStore.findLegacyTaskById(projectId)
       if (!task) {
-        return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${projectId} does not exist`))
+        return JSON.stringify(fail('PROJECT_NOT_FOUND', `项目 ${projectId} 不存在`))
       }
 
       const project = projectStore.getProjectById(projectId)
       if (!project || project.projectMode !== 'episode') {
-        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `Project ${projectId} is not in series mode`))
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `项目 ${projectId} 不是剧集项目`))
       }
 
       const workspace = readSeriesWorkspace(project.id, task.path)
       const episode = workspace.episodes.find(item => item.id === episodeId)
       if (!episode) {
-        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `Episode ${episodeId} does not exist`))
+        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `第 ${episodeId} 集不存在`))
       }
 
       const variant = episode.variants.find(item => item.id === variantId)
       if (!variant) {
-        return JSON.stringify(fail('SERIES_VARIANT_NOT_FOUND', `Variant ${variantId} does not exist`))
+        return JSON.stringify(fail('SERIES_VARIANT_NOT_FOUND', `版本 ${variantId} 不存在`))
       }
 
       const sourceConfigPath = getVariantConfigPath(task.path, episode, variant)
       if (!fs.existsSync(sourceConfigPath)) {
         return JSON.stringify(
-          fail('SERIES_VARIANT_CONFIG_NOT_FOUND', `Variant config for ${variant.name} does not exist`),
+          fail('SERIES_VARIANT_CONFIG_NOT_FOUND', `版本 ${variant.name} 的配置文件不存在`),
         )
       }
 
@@ -2640,7 +1758,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     } catch (err) {
       dialog.showErrorBox('复制版本失败', (err as Error).message)
       return JSON.stringify(
-        fail('SERIES_VARIANT_DUPLICATE_FAILED', 'Unable to duplicate series variant', (err as Error).message),
+        fail('SERIES_VARIANT_DUPLICATE_FAILED', '无法复制当前版本', (err as Error).message),
       )
     }
   }
@@ -2651,23 +1769,23 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const { projectId, episodeId, variantId } = input
       const task = projectStore.findLegacyTaskById(projectId)
       if (!task) {
-        return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${projectId} does not exist`))
+        return JSON.stringify(fail('PROJECT_NOT_FOUND', `项目 ${projectId} 不存在`))
       }
 
       const project = projectStore.getProjectById(projectId)
       if (!project || project.projectMode !== 'episode') {
-        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `Project ${projectId} is not in series mode`))
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `项目 ${projectId} 不是剧集项目`))
       }
 
       const workspace = readSeriesWorkspace(project.id, task.path)
       const episode = workspace.episodes.find(item => item.id === episodeId)
       if (!episode) {
-        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `Episode ${episodeId} does not exist`))
+        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `第 ${episodeId} 集不存在`))
       }
 
       const variant = episode.variants.find(item => item.id === variantId)
       if (!variant) {
-        return JSON.stringify(fail('SERIES_VARIANT_NOT_FOUND', `Variant ${variantId} does not exist`))
+        return JSON.stringify(fail('SERIES_VARIANT_NOT_FOUND', `版本 ${variantId} 不存在`))
       }
 
       const timestamp = new Date().toISOString()
@@ -2703,7 +1821,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     } catch (err) {
       dialog.showErrorBox('删除版本失败', (err as Error).message)
       return JSON.stringify(
-        fail('SERIES_VARIANT_REMOVE_FAILED', 'Unable to remove series variant', (err as Error).message),
+        fail('SERIES_VARIANT_REMOVE_FAILED', '无法删除当前版本', (err as Error).message),
       )
     }
   }
@@ -2714,30 +1832,30 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const { projectId, episodeId, variantId } = input
       const task = projectStore.findLegacyTaskById(projectId)
       if (!task) {
-        return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${projectId} does not exist`))
+        return JSON.stringify(fail('PROJECT_NOT_FOUND', `项目 ${projectId} 不存在`))
       }
 
       const project = projectStore.getProjectById(projectId)
       if (!project || project.projectMode !== 'episode') {
-        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `Project ${projectId} is not in series mode`))
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `项目 ${projectId} 不是剧集项目`))
       }
 
       const timestamp = new Date().toISOString()
       const workspace = syncActiveVariantDraft(task.path, readSeriesWorkspace(project.id, task.path), timestamp)
       const episode = workspace.episodes.find(item => item.id === episodeId)
       if (!episode) {
-        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `Episode ${episodeId} does not exist`))
+        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `第 ${episodeId} 集不存在`))
       }
 
       const variant = episode.variants.find(item => item.id === variantId)
       if (!variant) {
-        return JSON.stringify(fail('SERIES_VARIANT_NOT_FOUND', `Variant ${variantId} does not exist`))
+        return JSON.stringify(fail('SERIES_VARIANT_NOT_FOUND', `版本 ${variantId} 不存在`))
       }
 
       const variantConfigPath = getVariantConfigPath(task.path, episode, variant)
       if (!fs.existsSync(variantConfigPath)) {
         return JSON.stringify(
-          fail('SERIES_VARIANT_CONFIG_NOT_FOUND', `Variant config for ${variant.name} does not exist`),
+          fail('SERIES_VARIANT_CONFIG_NOT_FOUND', `版本 ${variant.name} 的配置文件不存在`),
         )
       }
 
@@ -2765,9 +1883,9 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       notifyProjectDataChanged()
       return JSON.stringify(ok({ episode: nextEpisode, variant: nextVariant, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
     } catch (err) {
-      dialog.showErrorBox('激活版本失�?, (err as Error).message)
+      dialog.showErrorBox('切换版本失败', (err as Error).message)
       return JSON.stringify(
-        fail('SERIES_VARIANT_ACTIVATE_FAILED', 'Unable to activate series variant', (err as Error).message),
+        fail('SERIES_VARIANT_ACTIVATE_FAILED', '无法切换到当前版本', (err as Error).message),
       )
     }
   }
@@ -2778,23 +1896,23 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const { projectId, episodeId, variantId } = input
       const task = projectStore.findLegacyTaskById(projectId)
       if (!task) {
-        return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${projectId} does not exist`))
+        return JSON.stringify(fail('PROJECT_NOT_FOUND', `项目 ${projectId} 不存在`))
       }
 
       const project = projectStore.getProjectById(projectId)
       if (!project || project.projectMode !== 'episode') {
-        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `Project ${projectId} is not in series mode`))
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `项目 ${projectId} 不是剧集项目`))
       }
 
       const workspace = readSeriesWorkspace(project.id, task.path)
       const episode = workspace.episodes.find(item => item.id === episodeId)
       if (!episode) {
-        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `Episode ${episodeId} does not exist`))
+        return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `第 ${episodeId} 集不存在`))
       }
 
       const variant = episode.variants.find(item => item.id === variantId)
       if (!variant) {
-        return JSON.stringify(fail('SERIES_VARIANT_NOT_FOUND', `Variant ${variantId} does not exist`))
+        return JSON.stringify(fail('SERIES_VARIANT_NOT_FOUND', `版本 ${variantId} 不存在`))
       }
 
       const variantDirectoryPath = getVariantDirectoryPath(task.path, episode, variant)
@@ -2822,11 +1940,11 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       notifyProjectDataChanged()
       return JSON.stringify(ok({ episode: nextEpisode, variant: nextVariant, workspace: hydrateSeriesWorkspace(task.path, nextWorkspace) }))
     } catch (err) {
-      dialog.showErrorBox('同步草稿到版本失�?, (err as Error).message)
+      dialog.showErrorBox('同步草稿到版本失败', (err as Error).message)
       return JSON.stringify(
         fail(
           'SERIES_VARIANT_SYNC_FAILED',
-          'Unable to sync current draft to series variant',
+          '无法把当前草稿同步到版本',
           (err as Error).message,
         ),
       )
@@ -2846,7 +1964,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     const { id }: Message.Task.TaskID = JSON.parse(msg)
     const task = projectStore.findLegacyTaskById(id)
     if (!task) {
-      return JSON.stringify(fail('PROJECT_NOT_FOUND', `Project ${id} does not exist`))
+      return JSON.stringify(fail('PROJECT_NOT_FOUND', `项目 ${id} 不存在`))
     }
     fs.rmSync(task.path, { recursive: true, force: true })
     projectStore.removeLegacyTask(id)
@@ -2878,7 +1996,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     const task = projectStore.findLegacyTaskById(id)!
     const result: Message.Task.PublishStatus = {}
     const isPublishedLink = (value?: string) => Boolean(value && /^https?:\/\//.test(value))
-    const publishedLabel = '发布完成'
+    const publishedLabel = '已发布'
 
     if (isPublishedLink(task.bangumi)) {
       result.bangumi = publishedLabel
@@ -2903,7 +2021,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       )
       return JSON.stringify(config)
     } catch (err) {
-      dialog.showErrorBox('闁挎瑨顕?', (err as Error).message)
+      dialog.showErrorBox('获取发布配置失败', (err as Error).message)
       return
     }
   }

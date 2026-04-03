@@ -181,39 +181,6 @@ export interface SeriesVariantDraftInput {
   variantId: number
 }
 
-export interface BatchCreateSeriesVariantsInput {
-  projectId: number
-  episodeId: number
-  publishProfileId?: number
-  videoProfiles: SeriesVariantTemplateVideoProfile[]
-  subtitleProfiles: SeriesVariantTemplateSubtitleProfile[]
-  targetSites?: SiteId[]
-  titleTemplate?: string
-  summaryTemplate?: string
-}
-
-export interface SaveSeriesPublishProfileInput {
-  projectId: number
-  profileId?: number
-  name: string
-  isDefault?: boolean
-  videoProfiles: SeriesVariantTemplateVideoProfile[]
-  subtitleProfiles: SeriesVariantTemplateSubtitleProfile[]
-  templateContext?: SeriesPublishProfileTemplateContext
-  targetSites?: SiteId[]
-  titleTemplate?: string
-  summaryTemplate?: string
-  bodyTemplate?: string
-  bodyTemplateFormat?: MarkupFormat
-  siteDrafts?: SeriesPublishProfileSiteDrafts
-  siteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
-}
-
-export interface RemoveSeriesPublishProfileInput {
-  projectId: number
-  profileId: number
-}
-
 export interface SaveSeriesTitleMatchConfigInput {
   projectId: number
   config: SeriesTitleMatchConfig
@@ -224,18 +191,6 @@ export interface ImportSeriesMatchedTorrentsInput {
   filePaths: string[]
   activateFirst?: boolean
 }
-
-export interface ImportSeriesPublishProfileInput {
-  projectId: number
-}
-
-export interface ExportSeriesPublishProfileInput {
-  projectId: number
-  profileId: number
-}
-
-export type SaveSeriesVariantTemplateInput = SaveSeriesPublishProfileInput
-export type RemoveSeriesVariantTemplateInput = RemoveSeriesPublishProfileInput
 
 export interface ProjectStats {
   total: number
@@ -278,29 +233,6 @@ export interface SeriesVariantPayload {
   workspace: SeriesProjectWorkspace
 }
 
-export interface SeriesEpisodeInheritancePayload {
-  episode: SeriesProjectEpisode
-  workspace: SeriesProjectWorkspace
-  copiedCount: number
-}
-
-export interface SeriesEpisodeVariantBatchPayload {
-  episode: SeriesProjectEpisode
-  workspace: SeriesProjectWorkspace
-  createdCount: number
-  skippedCount: number
-}
-
-export interface SeriesPublishProfilePayload {
-  profile: SeriesPublishProfile
-  workspace: SeriesProjectWorkspace
-}
-
-export interface SeriesPublishProfileRemovalPayload {
-  profileId: number
-  workspace: SeriesProjectWorkspace
-}
-
 export interface SeriesTitleMatchConfigPayload {
   config: SeriesTitleMatchConfig
   workspace: SeriesProjectWorkspace
@@ -324,11 +256,3 @@ export interface SeriesMatchedTorrentImportPayload {
     variantId: number
   }
 }
-
-export interface SeriesPublishProfileExportPayload {
-  profile: SeriesPublishProfile
-  path?: string
-}
-
-export type SeriesVariantTemplatePayload = SeriesPublishProfilePayload
-export type SeriesVariantTemplateRemovalPayload = SeriesPublishProfileRemovalPayload
