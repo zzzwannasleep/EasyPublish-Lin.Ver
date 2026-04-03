@@ -73,7 +73,7 @@ function selectMode(mode: ProjectMode) {
 .mode-selector,
 .mode-selector__grid {
   display: grid;
-  gap: 16px;
+  gap: 14px;
 }
 
 .mode-selector__text {
@@ -88,12 +88,17 @@ function selectMode(mode: ProjectMode) {
 }
 
 .mode-selector__card {
-  display: grid;
-  gap: 14px;
-  padding: 22px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  min-height: 216px;
+  padding: 24px 22px 22px;
   border: 1px solid var(--border-soft);
-  border-radius: 24px;
-  background: var(--surface-soft-fill);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top left, var(--brand-soft), transparent 38%),
+    var(--surface-soft-fill);
   text-align: left;
   cursor: pointer;
   transition:
@@ -108,7 +113,9 @@ function selectMode(mode: ProjectMode) {
   transform: translateY(-2px);
   border-color: var(--border-strong);
   box-shadow: var(--shadow-md);
-  background: var(--surface-brand-fill);
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--brand-soft) 88%, white 12%), transparent 42%),
+    var(--surface-brand-fill);
 }
 
 .mode-selector__card.is-active {
@@ -124,9 +131,15 @@ function selectMode(mode: ProjectMode) {
   width: 46px;
   height: 46px;
   border-radius: 16px;
-  background: var(--surface-brand-fill-strong);
+  background: color-mix(in srgb, var(--surface-brand-fill-strong) 86%, white 14%);
   color: var(--brand);
   font-size: 18px;
+}
+
+.mode-selector__copy {
+  display: grid;
+  gap: 10px;
+  flex: 1;
 }
 
 .mode-selector__label {
@@ -137,6 +150,12 @@ function selectMode(mode: ProjectMode) {
 }
 
 .mode-selector__action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-soft) 74%, var(--bg-panel) 26%);
   color: var(--accent);
   font-size: 13px;
   font-weight: 700;

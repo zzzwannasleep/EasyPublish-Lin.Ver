@@ -10,18 +10,6 @@ const { t } = useI18n()
 const selectedMode = ref<ProjectMode | null>(null)
 const selectingMode = ref(true)
 
-const modeDescription = computed(() => {
-  if (selectedMode.value === 'episode') {
-    return t('create.mode.episode.description')
-  }
-
-  if (selectedMode.value === 'feature') {
-    return t('create.mode.feature.description')
-  }
-
-  return t('create.mode.dialog.description')
-})
-
 const showModeSelector = computed(() => selectingMode.value || !selectedMode.value)
 
 function openModeSelector() {
@@ -36,26 +24,19 @@ function handleModeSelect(mode: ProjectMode) {
 
 <template>
   <div class="create-flow">
-    <section class="create-flow__hero">
-      <div class="create-flow__hero-main">
-        <div class="create-flow__eyebrow">{{ t('create.mode.current') }}</div>
-        <h3 class="create-flow__title">
-          {{ selectedMode ? t(`create.mode.${selectedMode}.label`) : t('create.mode.unselected') }}
-        </h3>
-        <p class="create-flow__description">{{ modeDescription }}</p>
-      </div>
-      <div v-if="selectedMode" class="create-flow__hero-actions">
-        <el-button plain @click="openModeSelector">{{ t('create.mode.back') }}</el-button>
-      </div>
-    </section>
-
-    <section v-if="showModeSelector" class="create-flow__mode-panel">
+    <section class="create-flow__mode-panel" :class="{ 'is-compact': !showModeSelector }">
       <div class="create-flow__mode-head">
-        <div class="create-flow__mode-eyebrow">{{ t('create.mode.dialog.title') }}</div>
-        <h4 class="create-flow__mode-title">{{ t('create.mode.dialog.title') }}</h4>
-        <p class="create-flow__mode-description">{{ t('create.mode.dialog.description') }}</p>
+        <div class="create-flow__mode-copy">
+          <h4 class="create-flow__mode-title">{{ t('nav.newProject.label') }}</h4>
+          <span v-if="selectedMode && !showModeSelector" class="create-flow__mode-chip">
+            {{ t(`create.mode.${selectedMode}.label`) }}
+          </span>
+        </div>
+        <el-button v-if="selectedMode && !showModeSelector" plain class="create-flow__mode-button" @click="openModeSelector">
+          {{ t('create.mode.back') }}
+        </el-button>
       </div>
-      <ProjectModeSelectDialog :selected-mode="selectedMode" @select="handleModeSelect" />
+      <ProjectModeSelectDialog v-if="showModeSelector" :selected-mode="selectedMode" @select="handleModeSelect" />
     </section>
 
     <FeatureCreateForm v-if="selectedMode === 'feature' && !showModeSelector" @back="openModeSelector" />
@@ -66,56 +47,13 @@ function handleModeSelect(mode: ProjectMode) {
 <style scoped>
 .create-flow {
   display: grid;
-  gap: 18px;
-}
-
-.create-flow__hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 18px 20px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  background:
-    var(--surface-panel-wash-strong),
-    var(--bg-panel);
-}
-
-.create-flow__hero-main {
-  min-width: 0;
-}
-
-.create-flow__hero-actions {
-  flex: 0 0 auto;
-}
-
-.create-flow__eyebrow {
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.create-flow__title {
-  margin: 10px 0 0;
-  font-family: var(--font-display);
-  font-size: clamp(22px, 2vw, 28px);
-  letter-spacing: -0.04em;
-}
-
-.create-flow__description {
-  margin: 10px 0 0;
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.7;
+  gap: 20px;
 }
 
 .create-flow__mode-panel {
   display: grid;
   gap: 18px;
-  padding: 22px;
+  padding: 20px 22px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-xl);
   background:
@@ -124,42 +62,61 @@ function handleModeSelect(mode: ProjectMode) {
   box-shadow: var(--shadow-sm);
 }
 
-.create-flow__mode-head {
-  max-width: 720px;
+.create-flow__mode-panel.is-compact {
+  gap: 0;
 }
 
-.create-flow__mode-eyebrow {
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+.create-flow__mode-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.create-flow__mode-copy {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
 .create-flow__mode-title {
-  margin: 10px 0 0;
+  margin: 0;
   font-family: var(--font-display);
   font-size: clamp(24px, 2.2vw, 30px);
   letter-spacing: -0.04em;
 }
 
-.create-flow__mode-description {
-  margin: 10px 0 0;
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.7;
+.create-flow__mode-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-soft) 74%, var(--bg-panel) 26%);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.create-flow__mode-button {
+  flex: 0 0 auto;
 }
 
 @media (max-width: 760px) {
-  .create-flow__hero {
+  .create-flow__mode-head {
     flex-direction: column;
+    align-items: stretch;
   }
 
-  .create-flow__hero-actions {
-    width: 100%;
+  .create-flow__mode-copy {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
-  .create-flow__hero-actions :deep(.el-button) {
+  .create-flow__mode-head :deep(.el-button) {
     width: 100%;
   }
 
