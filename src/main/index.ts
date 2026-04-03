@@ -399,38 +399,11 @@ namespace Project {
   export function getSeriesWorkspace(msg: string) {
     return projectService.getSeriesWorkspace(msg)
   }
-  export function saveSeriesWorkspaceSettings(msg: string) {
-    return projectService.saveSeriesWorkspaceSettings(msg)
+  export function saveSeriesTitleMatchConfig(msg: string) {
+    return projectService.saveSeriesTitleMatchConfig(msg)
   }
-  export function createSeriesEpisode(msg: string) {
-    return projectService.createSeriesEpisode(msg)
-  }
-  export function createSeriesVariant(msg: string) {
-    return projectService.createSeriesVariant(msg)
-  }
-  export function batchCreateSeriesVariants(msg: string) {
-    return projectService.batchCreateSeriesVariants(msg)
-  }
-  export function saveSeriesPublishProfile(msg: string) {
-    return projectService.saveSeriesPublishProfile(msg)
-  }
-  export function importSeriesPublishProfile(msg: string) {
-    return projectService.importSeriesPublishProfile(msg)
-  }
-  export function exportSeriesPublishProfile(msg: string) {
-    return projectService.exportSeriesPublishProfile(msg)
-  }
-  export function removeSeriesPublishProfile(msg: string) {
-    return projectService.removeSeriesPublishProfile(msg)
-  }
-  export function saveSeriesVariantTemplate(msg: string) {
-    return projectService.saveSeriesVariantTemplate(msg)
-  }
-  export function removeSeriesVariantTemplate(msg: string) {
-    return projectService.removeSeriesVariantTemplate(msg)
-  }
-  export function inheritSeriesEpisodeVariants(msg: string) {
-    return projectService.inheritSeriesEpisodeVariants(msg)
+  export function importSeriesMatchedTorrents(msg: string) {
+    return projectService.importSeriesMatchedTorrents(msg)
   }
   export function duplicateSeriesVariant(msg: string) {
     return projectService.duplicateSeriesVariant(msg)

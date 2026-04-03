@@ -1,29 +1,18 @@
 import type { ApiResult } from '../../types/api'
 import type {
-  BatchCreateSeriesVariantsInput,
   CreateProjectInput,
-  CreateSeriesEpisodeInput,
-  CreateSeriesVariantInput,
-  InheritSeriesEpisodeVariantsInput,
-  ImportSeriesPublishProfileInput,
+  ImportSeriesMatchedTorrentsInput,
   ProjectDetailPayload,
   ProjectListPayload,
   ProjectRemovalPayload,
   ProjectStatsPayload,
-  RemoveSeriesPublishProfileInput,
-  SaveSeriesPublishProfileInput,
-  SaveSeriesWorkspaceSettingsInput,
-  SeriesEpisodeInheritancePayload,
-  SeriesEpisodeVariantBatchPayload,
+  SaveSeriesTitleMatchConfigInput,
   SeriesEpisodePayload,
-  SeriesPublishProfileExportPayload,
-  SeriesPublishProfilePayload,
-  SeriesPublishProfileRemovalPayload,
+  SeriesMatchedTorrentImportPayload,
+  SeriesTitleMatchConfigPayload,
   SeriesVariantDraftInput,
   SeriesVariantPayload,
-  SeriesWorkspaceSettingsPayload,
   SeriesWorkspacePayload,
-  ExportSeriesPublishProfileInput,
 } from '../../types/project'
 
 async function parseResult<T>(promise: Promise<string>): Promise<ApiResult<T>> {
@@ -47,51 +36,13 @@ export const projectBridge = {
     return parseResult<SeriesWorkspacePayload>(window.projectAPI.getSeriesWorkspace(JSON.stringify({ id: projectId })))
   },
 
-  saveSeriesWorkspaceSettings(input: SaveSeriesWorkspaceSettingsInput) {
-    return parseResult<SeriesWorkspaceSettingsPayload>(window.projectAPI.saveSeriesWorkspaceSettings(JSON.stringify(input)))
+  saveSeriesTitleMatchConfig(input: SaveSeriesTitleMatchConfigInput) {
+    return parseResult<SeriesTitleMatchConfigPayload>(window.projectAPI.saveSeriesTitleMatchConfig(JSON.stringify(input)))
   },
 
-  createSeriesEpisode(input: CreateSeriesEpisodeInput) {
-    return parseResult<SeriesEpisodePayload>(window.projectAPI.createSeriesEpisode(JSON.stringify(input)))
-  },
-
-  createSeriesVariant(input: CreateSeriesVariantInput) {
-    return parseResult<SeriesVariantPayload>(window.projectAPI.createSeriesVariant(JSON.stringify(input)))
-  },
-
-  batchCreateSeriesVariants(input: BatchCreateSeriesVariantsInput) {
-    return parseResult<SeriesEpisodeVariantBatchPayload>(
-      window.projectAPI.batchCreateSeriesVariants(JSON.stringify(input)),
-    )
-  },
-
-  saveSeriesPublishProfile(input: SaveSeriesPublishProfileInput) {
-    return parseResult<SeriesPublishProfilePayload>(
-      window.projectAPI.saveSeriesPublishProfile(JSON.stringify(input)),
-    )
-  },
-
-  importSeriesPublishProfile(input: ImportSeriesPublishProfileInput) {
-    return parseResult<SeriesPublishProfilePayload>(
-      window.projectAPI.importSeriesPublishProfile(JSON.stringify(input)),
-    )
-  },
-
-  exportSeriesPublishProfile(input: ExportSeriesPublishProfileInput) {
-    return parseResult<SeriesPublishProfileExportPayload>(
-      window.projectAPI.exportSeriesPublishProfile(JSON.stringify(input)),
-    )
-  },
-
-  removeSeriesPublishProfile(input: RemoveSeriesPublishProfileInput) {
-    return parseResult<SeriesPublishProfileRemovalPayload>(
-      window.projectAPI.removeSeriesPublishProfile(JSON.stringify(input)),
-    )
-  },
-
-  inheritSeriesEpisodeVariants(input: InheritSeriesEpisodeVariantsInput) {
-    return parseResult<SeriesEpisodeInheritancePayload>(
-      window.projectAPI.inheritSeriesEpisodeVariants(JSON.stringify(input)),
+  importSeriesMatchedTorrents(input: ImportSeriesMatchedTorrentsInput) {
+    return parseResult<SeriesMatchedTorrentImportPayload>(
+      window.projectAPI.importSeriesMatchedTorrents(JSON.stringify(input)),
     )
   },
 

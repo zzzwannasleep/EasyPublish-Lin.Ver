@@ -3,11 +3,9 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  CirclePlus,
   Delete,
   DocumentCopy,
   FolderOpened,
-  Plus,
   RefreshRight,
   SwitchButton,
   UploadFilled,
@@ -25,12 +23,19 @@ import {
 import type {
   PublishProject,
   SeriesProjectEpisode,
+  SeriesTitleMatchConfig,
   SeriesProjectVariant,
   SeriesProjectWorkspace,
-  SeriesVariantSubtitleProfile,
-  SeriesVariantVideoProfile,
 } from '../../types/project'
 import type { SiteCatalogEntry, SiteFieldSchemaEntry, SiteId } from '../../types/site'
+import {
+  matchSeriesTitlePattern,
+  normalizeMatchedSubtitleProfile,
+  normalizeMatchedVideoProfile,
+  normalizeSeriesTitleMatchConfig,
+  renderSeriesTitleTemplate,
+  stripTorrentExtension,
+} from '../../../../shared/utils/series-title-match'
 import SeriesRichTextEditor from './SeriesRichTextEditor.vue'
 
 const SITE_ORDER: SiteId[] = ['bangumi', 'mikan', 'miobt', 'nyaa', 'acgrip', 'dmhy', 'acgnx_a', 'acgnx_g']
@@ -59,10 +64,9 @@ const storedTags = ref<Array<{ label: string; value: string }>>([])
 
 const isLoading = ref(false)
 const isSaving = ref(false)
+const isSavingTitleMatch = ref(false)
+const isImportingMatchedTorrents = ref(false)
 const isPreparingReview = ref(false)
-const isCreatingEpisode = ref(false)
-const isCreatingVariant = ref(false)
-const isInheritingVariants = ref(false)
 const selectedEpisodeId = ref<number | null>(null)
 const loadError = ref('')
 const switchingVariantKey = ref('')
@@ -70,23 +74,21 @@ const duplicatingVariantKey = ref('')
 const removingVariantKey = ref('')
 const savedFingerprint = ref('')
 
-const episodeDialogVisible = ref(false)
-const variantDialogVisible = ref(false)
-
-const episodeForm = reactive({
-  episodeLabel: '',
-  episodeTitle: '',
+const titleMatchForm = reactive<SeriesTitleMatchConfig>({
+  fileNamePattern: '',
+  episodeTemplate: '<ep>',
+  variantTemplate: '<res>p-<sub>',
+  titleTemplate: '',
+  releaseTeamTemplate: '',
+  sourceTypeTemplate: '<source>',
+  resolutionTemplate: '<res>p',
+  videoCodecTemplate: '<video>',
+  audioCodecTemplate: '<audio>',
+  subtitleTemplate: '<sub>',
+  informationTemplate: '',
+  targetSites: [],
 })
-
-const variantForm = reactive<{
-  name: string
-  videoProfile: SeriesVariantVideoProfile
-  subtitleProfile: SeriesVariantSubtitleProfile
-}>({
-  name: '',
-  videoProfile: '1080p',
-  subtitleProfile: 'chs',
-})
+const savedTitleMatchFingerprint = ref('')
 
 const form = reactive({
   seriesTitleCN: '',
@@ -216,7 +218,7 @@ function resolveSiteFieldLabel(field: SiteFieldSchemaEntry) {
 }
 
 function resolveSiteFieldHelp(field: SiteFieldSchemaEntry) {
-  return resolveLocaleText(field.helpKey, field.mode === 'required' ? '该字段为必填。' : '该字段为选填。')
+  return resolveLocaleText(field.helpKey, field.mode === 'required' ? '该字段为必填�? : '该字段为选填�?)
 }
 
 function resolveSiteFieldPlaceholder(field: SiteFieldSchemaEntry) {
@@ -298,6 +300,44 @@ function buildSiteFieldDefaultsPayload() {
   return payload
 }
 
+function normalizeTitleMatchForm(config?: SeriesTitleMatchConfig | null) {
+  const normalized = normalizeSeriesTitleMatchConfig(config) ?? {
+    fileNamePattern: '',
+    episodeTemplate: '<ep>',
+    variantTemplate: '<res>p-<sub>',
+    sourceTypeTemplate: '<source>',
+    resolutionTemplate: '<res>p',
+    videoCodecTemplate: '<video>',
+    audioCodecTemplate: '<audio>',
+    subtitleTemplate: '<sub>',
+  }
+
+  titleMatchForm.fileNamePattern = normalized.fileNamePattern
+  titleMatchForm.episodeTemplate = normalized.episodeTemplate || '<ep>'
+  titleMatchForm.variantTemplate = normalized.variantTemplate || '<res>p-<sub>'
+  titleMatchForm.titleTemplate = normalized.titleTemplate || ''
+  titleMatchForm.releaseTeamTemplate = normalized.releaseTeamTemplate || ''
+  titleMatchForm.sourceTypeTemplate = normalized.sourceTypeTemplate || '<source>'
+  titleMatchForm.resolutionTemplate = normalized.resolutionTemplate || '<res>p'
+  titleMatchForm.videoCodecTemplate = normalized.videoCodecTemplate || '<video>'
+  titleMatchForm.audioCodecTemplate = normalized.audioCodecTemplate || '<audio>'
+  titleMatchForm.subtitleTemplate = normalized.subtitleTemplate || '<sub>'
+  titleMatchForm.informationTemplate = normalized.informationTemplate || ''
+  titleMatchForm.targetSites = sortSiteIds(normalized.targetSites ?? [])
+  savedTitleMatchFingerprint.value = buildTitleMatchFingerprint()
+}
+
+function buildTitleMatchPayload() {
+  return normalizeSeriesTitleMatchConfig({
+    ...titleMatchForm,
+    targetSites: sortSiteIds(titleMatchForm.targetSites ?? []),
+  })
+}
+
+function buildTitleMatchFingerprint() {
+  return JSON.stringify(buildTitleMatchPayload() ?? {})
+}
+
 const episodes = computed(() => workspace.value?.episodes ?? [])
 const activeEpisode = computed(() => episodes.value.find(item => item.id === workspace.value?.activeEpisodeId) ?? null)
 const activeVariant = computed(() => activeEpisode.value?.variants.find(item => item.id === workspace.value?.activeVariantId) ?? null)
@@ -330,10 +370,50 @@ const currentProgress = computed(() =>
 )
 
 const currentStructureLabel = computed(() =>
-  activeEpisode.value && activeVariant.value ? `第 ${activeEpisode.value.episodeLabel} 集 · ${activeVariant.value.name}` : '还没有打开版本',
+  activeEpisode.value && activeVariant.value ? `�?${activeEpisode.value.episodeLabel} �?· ${activeVariant.value.name}` : '还没有打开版本',
 )
 
 const isDirty = computed(() => Boolean(draftConfig.value && activeVariant.value && buildDirtyFingerprint() !== savedFingerprint.value))
+const isTitleMatchDirty = computed(() => buildTitleMatchFingerprint() !== savedTitleMatchFingerprint.value)
+const titleMatchPreview = computed(() => {
+  const config = buildTitleMatchPayload()
+  const currentFileName = form.torrentPath.trim() ? getFileName(form.torrentPath.trim()) : ''
+  if (!config?.fileNamePattern || !currentFileName) {
+    return null
+  }
+
+  const variables = matchSeriesTitlePattern(config.fileNamePattern, currentFileName)
+  if (!variables) {
+    return {
+      fileName: currentFileName,
+      matched: false as const,
+    }
+  }
+
+  const episodeLabel = renderSeriesTitleTemplate(config.episodeTemplate || '<ep>', variables)
+  const variantName = renderSeriesTitleTemplate(config.variantTemplate || '<res>p-<sub>', variables)
+  const sourceType = renderSeriesTitleTemplate(config.sourceTypeTemplate, variables)
+  const resolution = renderSeriesTitleTemplate(config.resolutionTemplate, variables)
+  const videoCodec = renderSeriesTitleTemplate(config.videoCodecTemplate, variables)
+  const audioCodec = renderSeriesTitleTemplate(config.audioCodecTemplate, variables)
+  const subtitle = renderSeriesTitleTemplate(config.subtitleTemplate, variables)
+
+  return {
+    fileName: currentFileName,
+    matched: true as const,
+    variables,
+    episodeLabel,
+    variantName: variantName || stripTorrentExtension(currentFileName),
+    title: renderSeriesTitleTemplate(config.titleTemplate, variables),
+    sourceType,
+    resolution,
+    videoCodec,
+    audioCodec,
+    subtitle,
+    videoProfile: normalizeMatchedVideoProfile(resolution),
+    subtitleProfile: normalizeMatchedSubtitleProfile(subtitle),
+  }
+})
 
 watch(
   [() => form.categoryBangumi, () => form.categoryNyaa],
@@ -345,6 +425,7 @@ watch(
 
 function applyWorkspace(nextWorkspace: SeriesProjectWorkspace) {
   workspace.value = nextWorkspace
+  normalizeTitleMatchForm(nextWorkspace.titleMatchConfig)
   selectedEpisodeId.value =
     nextWorkspace.activeEpisodeId ??
     (nextWorkspace.episodes.some(item => item.id === selectedEpisodeId.value) ? selectedEpisodeId.value : null) ??
@@ -525,6 +606,84 @@ function openWorkingDirectory() {
   window.globalAPI.openFolder(JSON.stringify({ path: props.project.workingDirectory }))
 }
 
+async function saveTitleMatchConfig() {
+  const config = buildTitleMatchPayload()
+  if (!config?.fileNamePattern) {
+    ElMessage.warning('先填写文件名匹配规则，再保存标题匹配方案�?)
+    return false
+  }
+
+  isSavingTitleMatch.value = true
+  try {
+    const result = await projectBridge.saveSeriesTitleMatchConfig({
+      projectId: props.id,
+      config,
+    })
+
+    if (!result.ok) {
+      ElMessage.error(result.error.message)
+      return false
+    }
+
+    applyWorkspace(result.data.workspace)
+    ElMessage.success('标题匹配方案已保�?)
+    return true
+  } finally {
+    isSavingTitleMatch.value = false
+  }
+}
+
+async function importMatchedTorrents() {
+  const config = buildTitleMatchPayload()
+  if (!config?.fileNamePattern) {
+    ElMessage.warning('先把标题匹配方案保存好，再导�?torrent�?)
+    return
+  }
+
+  if (isTitleMatchDirty.value) {
+    const saved = await saveTitleMatchConfig()
+    if (!saved) {
+      return
+    }
+  }
+
+  const response = await window.globalAPI.getFilePaths(JSON.stringify({ type: 'torrent' }))
+  const payload = JSON.parse(response) as Message.Global.Paths
+  if (!payload.paths.length) {
+    return
+  }
+
+  isImportingMatchedTorrents.value = true
+  try {
+    const result = await projectBridge.importSeriesMatchedTorrents({
+      projectId: props.id,
+      filePaths: payload.paths,
+      activateFirst: true,
+    })
+
+    if (!result.ok) {
+      ElMessage.error(result.error.message)
+      return
+    }
+
+    applyWorkspace(result.data.workspace)
+    await loadDraftConfig()
+
+    if (result.data.unmatchedFiles.length) {
+      const unmatchedNames = result.data.unmatchedFiles.map(item => item.fileName).slice(0, 3).join(' / ')
+      ElMessage.warning(
+        `已识�?${result.data.importedCount} �?torrent，另�?${result.data.unmatchedFiles.length} 个未匹配�?{unmatchedNames}`,
+      )
+    } else {
+      ElMessage.success(
+        `已自动识�?${result.data.importedCount} �?torrent，新�?${result.data.createdEpisodeCount} 集�?{result.data.createdVariantCount} 个版本`,
+      )
+    }
+  } finally {
+    isImportingMatchedTorrents.value = false
+  }
+}
+
 function addTargetSite(siteId: SiteId) {
   if (form.targetSites.includes(siteId)) {
     return
@@ -540,7 +699,7 @@ function removeTargetSite(siteId: SiteId) {
 async function persistDraft(options?: { quiet?: boolean; refresh?: boolean }) {
   if (!activeVariant.value) {
     if (!options?.quiet) {
-      ElMessage.warning('先打开一个版本，当前页的编辑内容都绑定到这个版本。')
+      ElMessage.warning('先打开一个版本，当前页的编辑内容都绑定到这个版本�?)
     }
     return false
   }
@@ -563,7 +722,7 @@ async function persistDraft(options?: { quiet?: boolean; refresh?: boolean }) {
       await refreshWorkspaceOnly()
     }
     if (!options?.quiet) {
-      ElMessage.success('已保存当前版本草稿')
+      ElMessage.success('已保存当前版本草�?)
     }
     return true
   } finally {
@@ -623,119 +782,6 @@ async function activateVariant(
   }
 }
 
-function resetEpisodeForm() {
-  episodeForm.episodeLabel = ''
-  episodeForm.episodeTitle = ''
-}
-
-function resetVariantForm() {
-  variantForm.name = ''
-  variantForm.videoProfile = '1080p'
-  variantForm.subtitleProfile = 'chs'
-}
-
-async function createEpisode() {
-  const episodeLabel = episodeForm.episodeLabel.trim()
-  if (!episodeLabel) {
-    ElMessage.warning('请先填写集号')
-    return
-  }
-
-  isCreatingEpisode.value = true
-  try {
-    const result = await projectBridge.createSeriesEpisode({
-      projectId: props.id,
-      episodeLabel,
-      episodeTitle: episodeForm.episodeTitle.trim() || undefined,
-    })
-
-    if (!result.ok) {
-      ElMessage.error(result.error.message)
-      return
-    }
-
-    applyWorkspace(result.data.workspace)
-    selectedEpisodeId.value = result.data.episode.id
-    episodeDialogVisible.value = false
-    variantDialogVisible.value = true
-    resetEpisodeForm()
-    ElMessage.success(`已建立第 ${result.data.episode.episodeLabel} 集`)
-  } finally {
-    isCreatingEpisode.value = false
-  }
-}
-
-async function createVariant() {
-  if (!selectedEpisode.value) {
-    ElMessage.warning('请先选择一集，再新增版本')
-    return
-  }
-
-  isCreatingVariant.value = true
-  try {
-    const result = await projectBridge.createSeriesVariant({
-      projectId: props.id,
-      episodeId: selectedEpisode.value.id,
-      name: variantForm.name.trim() || undefined,
-      videoProfile: variantForm.videoProfile,
-      subtitleProfile: variantForm.subtitleProfile,
-    })
-
-    if (!result.ok) {
-      ElMessage.error(result.error.message)
-      return
-    }
-
-    applyWorkspace(result.data.workspace)
-    variantDialogVisible.value = false
-    resetVariantForm()
-    await activateVariant(selectedEpisode.value, result.data.variant, {
-      skipAutoSave: true,
-      successMessage: `已切换到版本 ${result.data.variant.name}`,
-    })
-  } finally {
-    isCreatingVariant.value = false
-  }
-}
-
-function getPreviousEpisode(episodeId: number) {
-  const orderedEpisodes = [...episodes.value].sort((left, right) => left.sortIndex - right.sortIndex)
-  const index = orderedEpisodes.findIndex(episode => episode.id === episodeId)
-  if (index <= 0) {
-    return null
-  }
-  return orderedEpisodes[index - 1] ?? null
-}
-
-async function inheritPreviousEpisodeVariants() {
-  if (!selectedEpisode.value) {
-    ElMessage.warning('请先选择一集')
-    return
-  }
-  if (!getPreviousEpisode(selectedEpisode.value.id)) {
-    ElMessage.warning('当前这一集前面没有可继承的上一集')
-    return
-  }
-
-  isInheritingVariants.value = true
-  try {
-    const result = await projectBridge.inheritSeriesEpisodeVariants({
-      projectId: props.id,
-      episodeId: selectedEpisode.value.id,
-    })
-
-    if (!result.ok) {
-      ElMessage.error(result.error.message)
-      return
-    }
-
-    applyWorkspace(result.data.workspace)
-    ElMessage.success(`已从上一集继承 ${result.data.copiedCount} 个版本`)
-  } finally {
-    isInheritingVariants.value = false
-  }
-}
-
 async function duplicateVariant(episode: SeriesProjectEpisode, variant: SeriesProjectVariant) {
   duplicatingVariantKey.value = getVariantKey(episode.id, variant.id)
   try {
@@ -753,7 +799,7 @@ async function duplicateVariant(episode: SeriesProjectEpisode, variant: SeriesPr
     applyWorkspace(result.data.workspace)
     await activateVariant(episode, result.data.variant, {
       skipAutoSave: true,
-      successMessage: `已复制并切换到 ${result.data.variant.name}`,
+      successMessage: `已复制并切换�?${result.data.variant.name}`,
     })
   } finally {
     duplicatingVariantKey.value = ''
@@ -762,7 +808,7 @@ async function duplicateVariant(episode: SeriesProjectEpisode, variant: SeriesPr
 
 async function removeVariant(episode: SeriesProjectEpisode, variant: SeriesProjectVariant) {
   const confirmed = await ElMessageBox.confirm(
-    `确定删除第 ${episode.episodeLabel} 集的版本「${variant.name}」吗？`,
+    `确定删除�?${episode.episodeLabel} 集的版本�?{variant.name}」吗？`,
     '删除版本',
     {
       type: 'warning',
@@ -792,7 +838,7 @@ async function removeVariant(episode: SeriesProjectEpisode, variant: SeriesProje
     if (workspace.value?.activeVariantId) {
       await loadDraftConfig()
     }
-    ElMessage.success(`已删除版本 ${variant.name}`)
+    ElMessage.success(`已删除版�?${variant.name}`)
   } finally {
     removingVariantKey.value = ''
   }
@@ -800,15 +846,15 @@ async function removeVariant(episode: SeriesProjectEpisode, variant: SeriesProje
 
 async function prepareReview() {
   if (!activeVariant.value || !activeEpisode.value) {
-    ElMessage.warning('先打开一个版本，再进入检查发布')
+    ElMessage.warning('先打开一个版本，再进入检查发�?)
     return
   }
   if (!form.torrentPath.trim()) {
-    ElMessage.warning('请先选择当前版本的 .torrent 文件')
+    ElMessage.warning('请先选择当前版本�?.torrent 文件')
     return
   }
   if (!form.targetSites.length) {
-    ElMessage.warning('请先选择至少一个目标站点')
+    ElMessage.warning('请先选择至少一个目标站�?)
     return
   }
 
@@ -869,8 +915,8 @@ onMounted(() => {
             <h2 class="series-studio__hero-title">{{ props.project.name }}</h2>
             <div class="series-studio__hero-meta">
               <StatusChip tone="info">{{ currentStructureLabel }}</StatusChip>
-              <StatusChip tone="warning">{{ episodes.length }} 集</StatusChip>
-              <StatusChip tone="success">{{ totalVariantCount }} 个版本</StatusChip>
+              <StatusChip tone="warning">{{ episodes.length }} �?/StatusChip>
+              <StatusChip tone="success">{{ totalVariantCount }} 个版�?/StatusChip>
               <StatusChip v-if="currentProgress.publishedSiteIds.length" tone="success">
                 已发 {{ currentProgress.publishedSiteIds.length }}
               </StatusChip>
@@ -897,33 +943,115 @@ onMounted(() => {
               保存当前版本
             </el-button>
             <el-button type="primary" :disabled="!activeVariant" :loading="isPreparingReview" @click="prepareReview">
-              进入检查发布
-            </el-button>
+              进入检查发�?            </el-button>
           </div>
         </div>
+
+        <article class="series-studio__match-card">
+          <div class="series-studio__section-head">
+            <div>
+              <h3 class="series-studio__section-title">标题匹配自动识别</h3>
+              <p class="series-studio__match-text">
+                先把文件名里的关键信息映射成变量，后面导�?torrent 时就会自动建剧集、建版本并回填标题和参数�?              </p>
+            </div>
+            <div class="series-studio__hero-meta">
+              <StatusChip tone="info">�?OKPGUI 思路工作</StatusChip>
+              <StatusChip v-if="isTitleMatchDirty" tone="warning">匹配方案未保�?/StatusChip>
+            </div>
+          </div>
+
+          <div class="series-studio__match-grid">
+            <label class="series-studio__field series-studio__field--wide">
+              <span class="series-studio__field-label">文件名匹�?/span>
+              <el-input
+                v-model="titleMatchForm.fileNamePattern"
+                placeholder="[SweetSub] Oniichan ha Oshimai! - <ep> [<source>][<res>P][<video>][<sub>]"
+              />
+            </label>
+
+            <label class="series-studio__field">
+              <span class="series-studio__field-label">剧集匹配</span>
+              <el-input v-model="titleMatchForm.episodeTemplate" placeholder="<ep>" />
+            </label>
+            <label class="series-studio__field">
+              <span class="series-studio__field-label">版本匹配</span>
+              <el-input v-model="titleMatchForm.variantTemplate" placeholder="<res>p-<sub>" />
+            </label>
+            <label class="series-studio__field series-studio__field--wide">
+              <span class="series-studio__field-label">标题匹配</span>
+              <el-input
+                v-model="titleMatchForm.titleTemplate"
+                placeholder="[SweetSub][不当哥哥了！][Oniichan ha Oshimai!][<ep>][<source>][<res>P][<video>][简日双语]"
+              />
+            </label>
+
+            <label class="series-studio__field">
+              <span class="series-studio__field-label">来源匹配</span>
+              <el-input v-model="titleMatchForm.sourceTypeTemplate" placeholder="<source>" />
+            </label>
+            <label class="series-studio__field">
+              <span class="series-studio__field-label">分辨率匹�?/span>
+              <el-input v-model="titleMatchForm.resolutionTemplate" placeholder="<res>p" />
+            </label>
+            <label class="series-studio__field">
+              <span class="series-studio__field-label">视频编码匹配</span>
+              <el-input v-model="titleMatchForm.videoCodecTemplate" placeholder="<video>" />
+            </label>
+            <label class="series-studio__field">
+              <span class="series-studio__field-label">音频编码匹配</span>
+              <el-input v-model="titleMatchForm.audioCodecTemplate" placeholder="<audio>" />
+            </label>
+            <label class="series-studio__field">
+              <span class="series-studio__field-label">字幕匹配</span>
+              <el-input v-model="titleMatchForm.subtitleTemplate" placeholder="<sub>" />
+            </label>
+            <label class="series-studio__field">
+              <span class="series-studio__field-label">制作组匹�?/span>
+              <el-input v-model="titleMatchForm.releaseTeamTemplate" placeholder="<team>" />
+            </label>
+            <label class="series-studio__field series-studio__field--wide">
+              <span class="series-studio__field-label">Information 匹配</span>
+              <el-input v-model="titleMatchForm.informationTemplate" placeholder="可�? />
+            </label>
+          </div>
+
+          <div v-if="titleMatchPreview" class="series-studio__match-preview">
+            <template v-if="titleMatchPreview.matched">
+              <StatusChip tone="success">已匹配当�?torrent</StatusChip>
+              <span class="series-studio__match-text">
+                {{ titleMatchPreview.fileName }} �?�?{{ titleMatchPreview.episodeLabel || '??' }} �?/ {{ titleMatchPreview.variantName }}
+              </span>
+              <StatusChip v-if="titleMatchPreview.videoProfile" tone="info">{{ titleMatchPreview.videoProfile }}</StatusChip>
+              <StatusChip v-if="titleMatchPreview.subtitleProfile" tone="warning">{{ titleMatchPreview.subtitleProfile }}</StatusChip>
+              <span v-if="titleMatchPreview.title" class="series-studio__match-text">
+                标题预览：{{ titleMatchPreview.title }}
+              </span>
+            </template>
+            <template v-else>
+              <StatusChip tone="danger">当前 torrent 未匹�?/StatusChip>
+              <span class="series-studio__match-text">
+                {{ titleMatchPreview.fileName }} 没有命中上面的文件名规则�?              </span>
+            </template>
+          </div>
+
+          <div class="series-studio__match-actions">
+            <el-button plain :loading="isSavingTitleMatch" @click="saveTitleMatchConfig">保存匹配方案</el-button>
+            <el-button type="primary" :loading="isImportingMatchedTorrents" @click="importMatchedTorrents">
+              导入 .torrent 自动识别
+            </el-button>
+          </div>
+        </article>
 
         <div class="series-studio__workspace">
           <div class="series-studio__workspace-toolbar">
             <div class="series-studio__workspace-actions">
-              <el-button plain @click="episodeDialogVisible = true">
-                <el-icon><CirclePlus /></el-icon>
-                <span>新增剧集</span>
-              </el-button>
-              <el-button plain :disabled="!selectedEpisode" @click="variantDialogVisible = true">
-                <el-icon><Plus /></el-icon>
-                <span>新增版本</span>
-              </el-button>
-              <el-button
-                plain
-                :disabled="!selectedEpisode || !getPreviousEpisode(selectedEpisode.id)"
-                :loading="isInheritingVariants"
-                @click="inheritPreviousEpisodeVariants"
-              >
-                从上一集继承版本
+              <el-button type="primary" plain :loading="isImportingMatchedTorrents" @click="importMatchedTorrents">
+                <el-icon><UploadFilled /></el-icon>
+                <span>导入 .torrent 自动识别</span>
               </el-button>
             </div>
             <StatusChip v-if="selectedEpisode" tone="info">
-              {{ selectedEpisode.episodeTitle || `第 ${selectedEpisode.episodeLabel} 集` }}
+              {{ selectedEpisode.episodeTitle || `�?${selectedEpisode.episodeLabel} 集` }}
             </StatusChip>
           </div>
 
@@ -935,10 +1063,9 @@ onMounted(() => {
               :class="['series-studio__episode-chip', { 'is-active': selectedEpisode?.id === episode.id }]"
               @click="selectedEpisodeId = episode.id"
             >
-              <span class="series-studio__episode-chip-title">第 {{ episode.episodeLabel }} 集</span>
+              <span class="series-studio__episode-chip-title">�?{{ episode.episodeLabel }} �?/span>
               <span class="series-studio__episode-chip-text">
-                {{ episode.episodeTitle || '未填写分集标题' }} · {{ episode.variantCount }} 个版本
-              </span>
+                {{ episode.episodeTitle || '未填写分集标�? }} · {{ episode.variantCount }} 个版�?              </span>
             </button>
           </div>
 
@@ -986,7 +1113,7 @@ onMounted(() => {
 
               <div class="series-studio__variant-foot">
                 <div class="series-studio__variant-text">
-                  最近更新 {{ formatProjectTimestamp(variant.updatedAt) }}
+                  最近更�?{{ formatProjectTimestamp(variant.updatedAt) }}
                 </div>
                 <div class="series-studio__variant-buttons">
                   <el-button
@@ -1024,13 +1151,13 @@ onMounted(() => {
           </div>
 
           <div v-else class="series-studio__empty">
-            {{ selectedEpisode ? '这一集还没有版本，先给它新增一个版本。' : '还没有剧集，先新增一集。' }}
+            {{ selectedEpisode ? '这一集还没有版本，先给它新增一个版本�? : '还没有剧集，先新增一集�? }}
           </div>
 
           <div v-if="activeVariant" class="series-studio__details-grid">
             <label class="series-studio__field series-studio__field--wide">
               <span class="series-studio__field-label">.torrent 文件</span>
-              <el-input v-model="form.torrentPath" placeholder="选择当前版本对应的 .torrent 文件">
+              <el-input v-model="form.torrentPath" placeholder="选择当前版本对应�?.torrent 文件">
                 <template #append>
                   <el-button @click="pickTorrentFile">
                     <el-icon><UploadFilled /></el-icon>
@@ -1040,36 +1167,36 @@ onMounted(() => {
             </label>
 
             <label class="series-studio__field">
-              <span class="series-studio__field-label">发布组</span>
-              <el-input v-model="form.releaseTeam" placeholder="可选" />
+              <span class="series-studio__field-label">发布�?/span>
+              <el-input v-model="form.releaseTeam" placeholder="可�? />
             </label>
             <label class="series-studio__field">
               <span class="series-studio__field-label">来源类型</span>
-              <el-select v-model="form.sourceType" clearable placeholder="可选">
+              <el-select v-model="form.sourceType" clearable placeholder="可�?>
                 <el-option v-for="option in SOURCE_OPTIONS" :key="option" :label="option" :value="option" />
               </el-select>
             </label>
             <label class="series-studio__field">
-              <span class="series-studio__field-label">分辨率</span>
-              <el-select v-model="form.resolution" clearable placeholder="可选">
+              <span class="series-studio__field-label">分辨�?/span>
+              <el-select v-model="form.resolution" clearable placeholder="可�?>
                 <el-option v-for="option in RESOLUTION_OPTIONS" :key="option" :label="option" :value="option" />
               </el-select>
             </label>
             <label class="series-studio__field">
               <span class="series-studio__field-label">视频编码</span>
-              <el-select v-model="form.videoCodec" clearable placeholder="可选">
+              <el-select v-model="form.videoCodec" clearable placeholder="可�?>
                 <el-option v-for="option in VIDEO_CODEC_OPTIONS" :key="option" :label="option" :value="option" />
               </el-select>
             </label>
             <label class="series-studio__field">
               <span class="series-studio__field-label">音频编码</span>
-              <el-select v-model="form.audioCodec" clearable placeholder="可选">
+              <el-select v-model="form.audioCodec" clearable placeholder="可�?>
                 <el-option v-for="option in AUDIO_CODEC_OPTIONS" :key="option" :label="option" :value="option" />
               </el-select>
             </label>
             <label class="series-studio__field">
               <span class="series-studio__field-label">Information 链接</span>
-              <el-input v-model="form.information" placeholder="可选" />
+              <el-input v-model="form.information" placeholder="可�? />
             </label>
           </div>
 
@@ -1079,7 +1206,7 @@ onMounted(() => {
       <section class="series-studio__section">
         <div class="series-studio__section-head">
           <h3 class="series-studio__section-title">选择站点</h3>
-          <StatusChip tone="info">{{ form.targetSites.length }} 个目标站点</StatusChip>
+          <StatusChip tone="info">{{ form.targetSites.length }} 个目标站�?/StatusChip>
         </div>
 
         <div v-if="activeVariant" class="series-studio__site-grid">
@@ -1093,7 +1220,7 @@ onMounted(() => {
               <div>
                 <div class="series-studio__site-name">{{ site.name }}</div>
                 <div class="series-studio__site-text">
-                  {{ site.accountMessage || '账号有效，可直接加入当前版本。' }}
+                  {{ site.accountMessage || '账号有效，可直接加入当前版本�? }}
                 </div>
               </div>
               <StatusChip :tone="form.targetSites.includes(site.id) ? 'success' : 'neutral'">
@@ -1119,7 +1246,7 @@ onMounted(() => {
           </article>
         </div>
 
-        <div v-else class="series-studio__empty">先打开一个版本，再选择站点。</div>
+        <div v-else class="series-studio__empty">先打开一个版本，再选择站点�?/div>
 
         <div v-if="unavailableSelectedSites.length" class="series-studio__tip">
           当前草稿里还有这些站点，但它们现在没有通过登录检查：{{
@@ -1130,7 +1257,7 @@ onMounted(() => {
 
       <section class="series-studio__section">
         <div class="series-studio__section-head">
-          <h3 class="series-studio__section-title">站点填写项</h3>
+          <h3 class="series-studio__section-title">站点填写�?/h3>
           <StatusChip tone="info">{{ selectedSiteFieldSections.length }} 个站点展开</StatusChip>
         </div>
 
@@ -1144,7 +1271,7 @@ onMounted(() => {
               <div>
                 <div class="series-studio__site-name">{{ section.site.name }}</div>
                 <div class="series-studio__site-text">
-                  {{ section.site.accountMessage || '当前版本会带着这些站点字段一起保存。' }}
+                  {{ section.site.accountMessage || '当前版本会带着这些站点字段一起保存�? }}
                 </div>
               </div>
               <div class="series-studio__site-actions">
@@ -1199,81 +1326,34 @@ onMounted(() => {
                     :model-value="Boolean(readSiteFieldValue(section.site.id, field))"
                     @update:model-value="value => updateSiteFieldValue(section.site.id, field, value)"
                   />
-                  <span class="series-studio__field-text">保存到当前版本</span>
+                  <span class="series-studio__field-text">保存到当前版�?/span>
                 </div>
 
                 <span class="series-studio__field-help">{{ resolveSiteFieldHelp(field) }}</span>
               </label>
             </div>
 
-            <div v-else class="series-studio__empty">这个站点没有额外填写项，直接发布即可。</div>
+            <div v-else class="series-studio__empty">这个站点没有额外填写项，直接发布即可�?/div>
           </article>
         </div>
 
-        <div v-else class="series-studio__empty">第二排选择几个站点，这里就展开几个站点的填写项。</div>
+        <div v-else class="series-studio__empty">第二排选择几个站点，这里就展开几个站点的填写项�?/div>
       </section>
 
       <section class="series-studio__section">
         <div class="series-studio__section-head">
-          <h3 class="series-studio__section-title">正文编辑器</h3>
-          <StatusChip tone="info">当前版本所有站点共用一份正文</StatusChip>
+          <h3 class="series-studio__section-title">正文编辑�?/h3>
+          <StatusChip tone="info">当前版本所有站点共用一份正�?/StatusChip>
         </div>
 
         <SeriesRichTextEditor
           v-if="activeVariant"
           v-model="form.bodyMarkdown"
-          placeholder="这里写当前版本的完整发布正文。"
+          placeholder="这里写当前版本的完整发布正文�?
         />
 
-        <div v-else class="series-studio__empty">先打开一个版本，正文编辑器才会绑定到这个版本。</div>
+        <div v-else class="series-studio__empty">先打开一个版本，正文编辑器才会绑定到这个版本�?/div>
       </section>
-      <el-dialog v-model="episodeDialogVisible" title="新增剧集" width="26rem" destroy-on-close>
-        <div class="series-studio__dialog-grid">
-          <label class="series-studio__field">
-            <span class="series-studio__field-label">集号</span>
-            <el-input v-model="episodeForm.episodeLabel" placeholder="例如 01 / 02 / SP1" />
-          </label>
-          <label class="series-studio__field">
-            <span class="series-studio__field-label">分集标题</span>
-            <el-input v-model="episodeForm.episodeTitle" placeholder="可选" />
-          </label>
-        </div>
-        <template #footer>
-          <el-button @click="episodeDialogVisible = false">取消</el-button>
-          <el-button type="primary" :loading="isCreatingEpisode" @click="createEpisode">建立剧集</el-button>
-        </template>
-      </el-dialog>
-
-      <el-dialog v-model="variantDialogVisible" title="新增版本分支" width="28rem" destroy-on-close>
-        <div class="series-studio__dialog-grid">
-          <label class="series-studio__field">
-            <span class="series-studio__field-label">版本名</span>
-            <el-input v-model="variantForm.name" placeholder="可选，不填则自动生成" />
-          </label>
-          <label class="series-studio__field">
-            <span class="series-studio__field-label">视频规格</span>
-            <el-select v-model="variantForm.videoProfile">
-              <el-option label="1080p" value="1080p" />
-              <el-option label="2160p" value="2160p" />
-              <el-option label="custom" value="custom" />
-            </el-select>
-          </label>
-          <label class="series-studio__field">
-            <span class="series-studio__field-label">字幕规格</span>
-            <el-select v-model="variantForm.subtitleProfile">
-              <el-option label="chs" value="chs" />
-              <el-option label="cht" value="cht" />
-              <el-option label="eng" value="eng" />
-              <el-option label="bilingual" value="bilingual" />
-              <el-option label="custom" value="custom" />
-            </el-select>
-          </label>
-        </div>
-        <template #footer>
-          <el-button @click="variantDialogVisible = false">取消</el-button>
-          <el-button type="primary" :loading="isCreatingVariant" @click="createVariant">建立版本</el-button>
-        </template>
-      </el-dialog>
     </template>
   </div>
 </template>
@@ -1302,6 +1382,17 @@ onMounted(() => {
     radial-gradient(circle at bottom left, color-mix(in srgb, var(--accent-soft) 80%, white 20%), transparent 34%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.42), transparent 42%),
     var(--bg-panel);
+}
+
+.series-studio__match-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border-soft));
+  border-radius: 1.35rem;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--brand-soft) 70%, white 30%), rgba(255, 255, 255, 0.64)),
+    color-mix(in srgb, var(--bg-panel) 94%, white 6%);
 }
 
 .series-studio__headline,
@@ -1349,6 +1440,7 @@ onMounted(() => {
 .series-studio__field-text,
 .series-studio__empty,
 .series-studio__tip,
+.series-studio__match-text,
 .series-studio__episode-chip-text,
 .series-studio__variant-text,
 .series-studio__site-count {
@@ -1360,6 +1452,8 @@ onMounted(() => {
 .series-studio__hero-meta,
 .series-studio__hero-actions,
 .series-studio__workspace-actions,
+.series-studio__match-actions,
+.series-studio__match-preview,
 .series-studio__variant-status,
 .series-studio__variant-buttons,
 .series-studio__site-actions,
@@ -1391,6 +1485,7 @@ onMounted(() => {
 }
 
 .series-studio__variant-grid,
+.series-studio__match-grid,
 .series-studio__details-grid,
 .series-studio__site-grid,
 .series-studio__site-field-stack,
@@ -1401,6 +1496,10 @@ onMounted(() => {
 
 .series-studio__variant-grid {
   grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+}
+
+.series-studio__match-grid {
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
 }
 
 .series-studio__details-grid {
@@ -1571,3 +1670,4 @@ onMounted(() => {
   }
 }
 </style>
+

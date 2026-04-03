@@ -144,12 +144,30 @@ export interface SeriesPublishProfileSnapshot {
 
 export type SeriesVariantTemplate = SeriesPublishProfile
 
+export interface SeriesTitleMatchConfig {
+  fileNamePattern: string
+  episodeTemplate?: string
+  variantTemplate?: string
+  titleTemplate?: string
+  releaseTeamTemplate?: string
+  sourceTypeTemplate?: string
+  resolutionTemplate?: string
+  videoCodecTemplate?: string
+  audioCodecTemplate?: string
+  subtitleTemplate?: string
+  informationTemplate?: string
+  targetSites?: SiteId[]
+  createdAt?: string
+  updatedAt?: string
+}
+
 export interface SeriesProjectWorkspace {
   projectId: number
   plannedEpisodeCount?: number
   episodes: SeriesProjectEpisode[]
   publishProfiles: SeriesPublishProfile[]
   variantTemplates?: SeriesVariantTemplate[]
+  titleMatchConfig?: SeriesTitleMatchConfig
   projectSiteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
   activeEpisodeId?: number
   activeVariantId?: number
@@ -157,33 +175,10 @@ export interface SeriesProjectWorkspace {
   updatedAt: string
 }
 
-export interface CreateSeriesEpisodeInput {
-  projectId: number
-  episodeLabel: string
-  episodeTitle?: string
-}
-
-export interface CreateSeriesVariantInput {
-  projectId: number
-  episodeId: number
-  name?: string
-  videoProfile?: SeriesVariantVideoProfile
-  subtitleProfile?: SeriesVariantSubtitleProfile
-  publishProfileId?: number
-  targetSites?: SiteId[]
-  titleTemplate?: string
-  summaryTemplate?: string
-}
-
 export interface SeriesVariantDraftInput {
   projectId: number
   episodeId: number
   variantId: number
-}
-
-export interface InheritSeriesEpisodeVariantsInput {
-  projectId: number
-  episodeId: number
 }
 
 export interface BatchCreateSeriesVariantsInput {
@@ -219,9 +214,15 @@ export interface RemoveSeriesPublishProfileInput {
   profileId: number
 }
 
-export interface SaveSeriesWorkspaceSettingsInput {
+export interface SaveSeriesTitleMatchConfigInput {
   projectId: number
-  plannedEpisodeCount?: number
+  config: SeriesTitleMatchConfig
+}
+
+export interface ImportSeriesMatchedTorrentsInput {
+  projectId: number
+  filePaths: string[]
+  activateFirst?: boolean
 }
 
 export interface ImportSeriesPublishProfileInput {
@@ -300,8 +301,28 @@ export interface SeriesPublishProfileRemovalPayload {
   workspace: SeriesProjectWorkspace
 }
 
-export interface SeriesWorkspaceSettingsPayload {
+export interface SeriesTitleMatchConfigPayload {
+  config: SeriesTitleMatchConfig
   workspace: SeriesProjectWorkspace
+}
+
+export interface SeriesMatchedTorrentImportIssue {
+  path: string
+  fileName: string
+  reason: string
+}
+
+export interface SeriesMatchedTorrentImportPayload {
+  workspace: SeriesProjectWorkspace
+  importedCount: number
+  createdEpisodeCount: number
+  createdVariantCount: number
+  updatedVariantCount: number
+  unmatchedFiles: SeriesMatchedTorrentImportIssue[]
+  activated?: {
+    episodeId: number
+    variantId: number
+  }
 }
 
 export interface SeriesPublishProfileExportPayload {
