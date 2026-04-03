@@ -22,7 +22,9 @@
     "build:linux": "npm run build && electron-builder -p never --linux --arm64"
   },
   "dependencies": {
+    "@tiptap/extension-image": "^3.22.1",
     "@tiptap/extension-placeholder": "^3.22.1",
+    "@tiptap/extension-text-align": "^3.22.1",
     "@tiptap/starter-kit": "^3.22.1",
     "@tiptap/vue-3": "^3.22.1",
     "@toast-ui/editor": "^3.2.2",

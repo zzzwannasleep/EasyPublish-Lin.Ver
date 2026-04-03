@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import { DocumentAdd, Files } from '@element-plus/icons-vue'
-import StarterKit from '@tiptap/starter-kit'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { DocumentAdd } from '@element-plus/icons-vue'
+import Image from '@tiptap/extension-image'
+import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
+import TextAlign from '@tiptap/extension-text-align'
+import StarterKit from '@tiptap/starter-kit'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
 import { marked } from 'marked'
 
@@ -28,9 +31,9 @@ const emit = defineEmits<{
   'update:modelValue': [value: string]
 }>()
 
-const activePane = ref<'current' | string>('current')
 const activeMode = ref<'rich' | 'source' | 'preview'>('rich')
 const importedDocMode = ref<'source' | 'preview'>('preview')
+const activeImportedDocumentId = ref<string | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const importedDocuments = ref<ImportedMarkdownDocument[]>([])
 const internalMarkdown = ref(normalizeMarkdown(props.modelValue))
@@ -60,11 +63,56 @@ function emitMarkdown(value: string) {
   emit('update:modelValue', normalizedValue)
 }
 
+function normalizeExternalLink(value: string) {
+  const nextValue = value.trim()
+  if (!nextValue) {
+    return ''
+  }
+
+  if (/^(https?:\/\/|mailto:|magnet:|ftp:\/\/|file:\/\/|data:)/i.test(nextValue)) {
+    return nextValue
+  }
+
+  if (nextValue.startsWith('//')) {
+    return `https:${nextValue}`
+  }
+
+  return `https://${nextValue}`
+}
+
+function normalizeMediaSource(value: string) {
+  const nextValue = value.trim()
+  if (!nextValue) {
+    return ''
+  }
+
+  if (/^(https?:\/\/|file:\/\/|data:)/i.test(nextValue)) {
+    return nextValue
+  }
+
+  if (/^[A-Za-z]:[\\/]/.test(nextValue)) {
+    return `file:///${nextValue.replace(/\\/g, '/')}`
+  }
+
+  return nextValue
+}
+
 const editor = useEditor({
   extensions: [
     StarterKit,
     Placeholder.configure({
       placeholder: props.placeholder,
+    }),
+    Link.configure({
+      openOnClick: false,
+      autolink: true,
+      defaultProtocol: 'https',
+    }),
+    Image.configure({
+      allowBase64: true,
+    }),
+    TextAlign.configure({
+      types: ['heading', 'paragraph'],
     }),
   ],
   content: markdownToHtml(internalMarkdown.value),
@@ -101,7 +149,7 @@ function syncEditorFromMarkdown(value: string) {
 }
 
 const activeImportedDocument = computed(
-  () => importedDocuments.value.find(document => document.id === activePane.value) ?? null,
+  () => importedDocuments.value.find(document => document.id === activeImportedDocumentId.value) ?? null,
 )
 
 const currentPreviewHtml = computed(() =>
@@ -152,7 +200,7 @@ async function handleFileChange(event: Event) {
     }
   })
 
-  activePane.value = nextDocuments[0]?.id ?? 'current'
+  activeImportedDocumentId.value = nextDocuments[0]?.id ?? activeImportedDocumentId.value
   input.value = ''
 }
 
@@ -161,15 +209,76 @@ function applyImportedDocument(document: ImportedMarkdownDocument) {
   if (activeMode.value === 'rich') {
     syncEditorFromMarkdown(document.content)
   }
-  activePane.value = 'current'
   ElMessage.success(`已载入 ${document.name}`)
 }
 
 function removeImportedDocument(documentId: string) {
-  importedDocuments.value = importedDocuments.value.filter(document => document.id !== documentId)
-  if (activePane.value === documentId) {
-    activePane.value = 'current'
+  const currentIndex = importedDocuments.value.findIndex(document => document.id === documentId)
+  if (currentIndex < 0) {
+    return
   }
+
+  importedDocuments.value = importedDocuments.value.filter(document => document.id !== documentId)
+
+  if (activeImportedDocumentId.value === documentId) {
+    const nextDocument = importedDocuments.value[currentIndex] ?? importedDocuments.value[currentIndex - 1] ?? null
+    activeImportedDocumentId.value = nextDocument?.id ?? null
+  }
+}
+
+async function promptForLink() {
+  if (!editor.value) {
+    return
+  }
+
+  const currentHref = (editor.value.getAttributes('link').href as string | undefined) ?? ''
+  const result = await ElMessageBox.prompt('输入链接地址', '插入超链接', {
+    inputValue: currentHref,
+    inputPlaceholder: 'https://example.com',
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+  }).catch(() => null)
+
+  if (!result || typeof result !== 'object' || !('value' in result)) {
+    return
+  }
+
+  const nextHref = normalizeExternalLink(result.value)
+  const chain = editor.value.chain().focus().extendMarkRange('link')
+
+  if (!nextHref) {
+    chain.unsetLink().run()
+    return
+  }
+
+  chain.setLink({ href: nextHref }).run()
+}
+
+async function promptForImage() {
+  if (!editor.value) {
+    return
+  }
+
+  const result = await ElMessageBox.prompt('输入图片地址或本地绝对路径', '插入图片', {
+    inputPlaceholder: 'https://example.com/image.png',
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+  }).catch(() => null)
+
+  if (!result || typeof result !== 'object' || !('value' in result)) {
+    return
+  }
+
+  const nextSource = normalizeMediaSource(result.value)
+  if (!nextSource) {
+    return
+  }
+
+  editor.value.chain().focus().setImage({ src: nextSource }).run()
+}
+
+function insertHardBreak() {
+  editor.value?.chain().focus().setHardBreak().run()
 }
 
 watch(
@@ -201,34 +310,20 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="series-rich-text-editor">
-    <div class="series-rich-text-editor__tabbar">
-      <button
-        type="button"
-        :class="['series-rich-text-editor__tab', { 'is-active': activePane === 'current' }]"
-        @click="activePane = 'current'"
-      >
-        <span class="series-rich-text-editor__tab-icon">
-          <el-icon><Files /></el-icon>
-        </span>
-        <span>当前正文</span>
-      </button>
+    <div class="series-rich-text-editor__topbar">
+      <el-button-group>
+        <el-button :type="activeMode === 'rich' ? 'primary' : 'default'" @click="activeMode = 'rich'">
+          富文本
+        </el-button>
+        <el-button :type="activeMode === 'source' ? 'primary' : 'default'" @click="activeMode = 'source'">
+          源码
+        </el-button>
+        <el-button :type="activeMode === 'preview' ? 'primary' : 'default'" @click="activeMode = 'preview'">
+          预览
+        </el-button>
+      </el-button-group>
 
-      <button
-        v-for="document in importedDocuments"
-        :key="document.id"
-        type="button"
-        :class="['series-rich-text-editor__tab', { 'is-active': activePane === document.id }]"
-        @click="activePane = document.id"
-      >
-        <span class="series-rich-text-editor__tab-icon">
-          <el-icon><DocumentAdd /></el-icon>
-        </span>
-        <span class="series-rich-text-editor__tab-name">{{ document.name }}</span>
-      </button>
-
-      <el-button plain class="series-rich-text-editor__import" @click="openFilePicker">
-        导入本地 Markdown
-      </el-button>
+      <el-button plain @click="openFilePicker">导入 Markdown</el-button>
       <input
         ref="fileInput"
         class="series-rich-text-editor__file-input"
@@ -239,63 +334,102 @@ onBeforeUnmount(() => {
       />
     </div>
 
-    <template v-if="activePane === 'current'">
-      <div class="series-rich-text-editor__toolbar">
-        <div class="series-rich-text-editor__toolbar-copy">
-          <div class="series-rich-text-editor__eyebrow">版本正文</div>
-          <div class="series-rich-text-editor__text">
-            富文本编辑使用 Tiptap，底层始终保存为 Markdown，方便源码切换和预览。
-          </div>
+    <div v-if="activeMode === 'rich'" class="series-rich-text-editor__formatbar">
+      <button
+        type="button"
+        :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('bold') }]"
+        :disabled="!editor"
+        @click="editor?.chain().focus().toggleBold().run()"
+      >
+        粗体
+      </button>
+      <button
+        type="button"
+        :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('italic') }]"
+        :disabled="!editor"
+        @click="editor?.chain().focus().toggleItalic().run()"
+      >
+        斜体
+      </button>
+      <button
+        type="button"
+        :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('bulletList') }]"
+        :disabled="!editor"
+        @click="editor?.chain().focus().toggleBulletList().run()"
+      >
+        列表
+      </button>
+      <button
+        type="button"
+        :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('blockquote') }]"
+        :disabled="!editor"
+        @click="editor?.chain().focus().toggleBlockquote().run()"
+      >
+        引用
+      </button>
+      <button
+        type="button"
+        :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('link') }]"
+        :disabled="!editor"
+        @click="promptForLink"
+      >
+        超链接
+      </button>
+      <button type="button" class="series-rich-text-editor__tool" :disabled="!editor" @click="promptForImage">
+        插入图片
+      </button>
+      <button
+        type="button"
+        :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive({ textAlign: 'left' }) }]"
+        :disabled="!editor"
+        @click="editor?.chain().focus().setTextAlign('left').run()"
+      >
+        居左
+      </button>
+      <button
+        type="button"
+        :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive({ textAlign: 'center' }) }]"
+        :disabled="!editor"
+        @click="editor?.chain().focus().setTextAlign('center').run()"
+      >
+        居中
+      </button>
+      <button
+        type="button"
+        :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive({ textAlign: 'right' }) }]"
+        :disabled="!editor"
+        @click="editor?.chain().focus().setTextAlign('right').run()"
+      >
+        居右
+      </button>
+      <button type="button" class="series-rich-text-editor__tool" :disabled="!editor" @click="insertHardBreak">
+        换行
+      </button>
+    </div>
+
+    <div v-if="importedDocuments.length" class="series-rich-text-editor__imports">
+      <button
+        v-for="document in importedDocuments"
+        :key="document.id"
+        type="button"
+        :class="['series-rich-text-editor__tab', { 'is-active': activeImportedDocumentId === document.id }]"
+        @click="activeImportedDocumentId = document.id"
+      >
+        <span class="series-rich-text-editor__tab-icon">
+          <el-icon><DocumentAdd /></el-icon>
+        </span>
+        <span class="series-rich-text-editor__tab-name">{{ document.name }}</span>
+      </button>
+    </div>
+
+    <section v-if="activeImportedDocument" class="series-rich-text-editor__import-panel">
+      <div class="series-rich-text-editor__import-head">
+        <div class="series-rich-text-editor__import-meta">
+          <div class="series-rich-text-editor__import-name">{{ activeImportedDocument.name }}</div>
+          <div class="series-rich-text-editor__import-size">{{ formatFileSize(activeImportedDocument.size) }}</div>
         </div>
 
-        <el-button-group>
-          <el-button :type="activeMode === 'rich' ? 'primary' : 'default'" @click="activeMode = 'rich'">
-            富文本
-          </el-button>
-          <el-button :type="activeMode === 'source' ? 'primary' : 'default'" @click="activeMode = 'source'">
-            源码
-          </el-button>
-          <el-button :type="activeMode === 'preview' ? 'primary' : 'default'" @click="activeMode = 'preview'">
-            预览
-          </el-button>
-        </el-button-group>
-      </div>
-
-      <section v-show="activeMode === 'rich'" class="series-rich-text-editor__surface">
-        <EditorContent :editor="editor" />
-      </section>
-
-      <section v-show="activeMode === 'source'" class="series-rich-text-editor__surface">
-        <el-input
-          :model-value="internalMarkdown"
-          type="textarea"
-          resize="none"
-          :rows="24"
-          placeholder="在这里直接编辑 Markdown 源码。"
-          @update:model-value="value => emitMarkdown(typeof value === 'string' ? value : '')"
-        />
-      </section>
-
-      <article v-show="activeMode === 'preview'" class="series-rich-text-editor__surface series-rich-text-editor__preview">
-        <div
-          v-if="currentPreviewHtml"
-          class="series-rich-text-editor__preview-copy"
-          v-html="currentPreviewHtml"
-        />
-        <div v-else class="series-rich-text-editor__empty">当前正文为空，预览区暂时没有内容。</div>
-      </article>
-    </template>
-
-    <template v-else-if="activeImportedDocument">
-      <div class="series-rich-text-editor__toolbar">
-        <div class="series-rich-text-editor__toolbar-copy">
-          <div class="series-rich-text-editor__eyebrow">本地文档</div>
-          <div class="series-rich-text-editor__text">
-            {{ activeImportedDocument.name }} · {{ formatFileSize(activeImportedDocument.size) }}
-          </div>
-        </div>
-
-        <div class="series-rich-text-editor__toolbar-actions">
+        <div class="series-rich-text-editor__import-actions">
           <el-button-group>
             <el-button
               :type="importedDocMode === 'source' ? 'primary' : 'default'"
@@ -310,30 +444,54 @@ onBeforeUnmount(() => {
               预览
             </el-button>
           </el-button-group>
-          <el-button plain @click="removeImportedDocument(activeImportedDocument.id)">移除标签</el-button>
-          <el-button type="primary" @click="applyImportedDocument(activeImportedDocument)">载入当前正文</el-button>
+          <el-button plain @click="removeImportedDocument(activeImportedDocument.id)">移除</el-button>
+          <el-button type="primary" @click="applyImportedDocument(activeImportedDocument)">载入到正文</el-button>
         </div>
       </div>
 
       <section
         v-show="importedDocMode === 'source'"
-        class="series-rich-text-editor__surface series-rich-text-editor__surface--readonly"
+        class="series-rich-text-editor__surface series-rich-text-editor__surface--compact series-rich-text-editor__surface--readonly"
       >
         <pre class="series-rich-text-editor__source">{{ activeImportedDocument.content }}</pre>
       </section>
 
       <article
         v-show="importedDocMode === 'preview'"
-        class="series-rich-text-editor__surface series-rich-text-editor__preview"
+        class="series-rich-text-editor__surface series-rich-text-editor__surface--compact series-rich-text-editor__preview"
       >
         <div
           v-if="importedPreviewHtml"
           class="series-rich-text-editor__preview-copy"
           v-html="importedPreviewHtml"
         />
-        <div v-else class="series-rich-text-editor__empty">这个本地文档没有可预览的正文内容。</div>
+        <div v-else class="series-rich-text-editor__empty">这个 Markdown 文件没有可预览的内容。</div>
       </article>
-    </template>
+    </section>
+
+    <section v-show="activeMode === 'rich'" class="series-rich-text-editor__surface">
+      <EditorContent :editor="editor" />
+    </section>
+
+    <section v-show="activeMode === 'source'" class="series-rich-text-editor__surface">
+      <el-input
+        :model-value="internalMarkdown"
+        type="textarea"
+        resize="none"
+        :rows="24"
+        placeholder="在这里直接编辑 Markdown 源码。"
+        @update:model-value="value => emitMarkdown(typeof value === 'string' ? value : '')"
+      />
+    </section>
+
+    <article v-show="activeMode === 'preview'" class="series-rich-text-editor__surface series-rich-text-editor__preview">
+      <div
+        v-if="currentPreviewHtml"
+        class="series-rich-text-editor__preview-copy"
+        v-html="currentPreviewHtml"
+      />
+      <div v-else class="series-rich-text-editor__empty">当前正文为空，预览区暂时没有内容。</div>
+    </article>
   </div>
 </template>
 
@@ -343,19 +501,35 @@ onBeforeUnmount(() => {
   gap: 14px;
 }
 
-.series-rich-text-editor__tabbar {
+.series-rich-text-editor__topbar,
+.series-rich-text-editor__formatbar,
+.series-rich-text-editor__imports,
+.series-rich-text-editor__import-head,
+.series-rich-text-editor__import-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
 }
 
+.series-rich-text-editor__topbar,
+.series-rich-text-editor__import-head {
+  justify-content: space-between;
+}
+
+.series-rich-text-editor__formatbar {
+  padding: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 1.2rem;
+  background: color-mix(in srgb, var(--bg-panel) 92%, white 8%);
+}
+
+.series-rich-text-editor__tool,
 .series-rich-text-editor__tab {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 42px;
-  max-width: 20rem;
+  min-height: 40px;
   padding: 0 14px;
   border: 1px solid var(--border-soft);
   border-radius: 999px;
@@ -369,17 +543,25 @@ onBeforeUnmount(() => {
     transform 160ms ease;
 }
 
+.series-rich-text-editor__tool:hover,
 .series-rich-text-editor__tab:hover {
   transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--accent) 26%, var(--border-soft));
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border-soft));
 }
 
+.series-rich-text-editor__tool.is-active,
 .series-rich-text-editor__tab.is-active {
   border-color: color-mix(in srgb, var(--accent) 38%, var(--border-soft));
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--brand-soft) 74%, white 26%), rgba(255, 255, 255, 0.66)),
     color-mix(in srgb, var(--bg-panel) 92%, white 8%);
   color: var(--text-primary);
+}
+
+.series-rich-text-editor__tool:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none;
 }
 
 .series-rich-text-editor__tab-icon {
@@ -400,47 +582,31 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.series-rich-text-editor__import {
-  margin-left: auto;
-}
-
-.series-rich-text-editor__file-input {
-  display: none;
-}
-
-.series-rich-text-editor__toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
+.series-rich-text-editor__import-panel {
+  display: grid;
   gap: 12px;
 }
 
-.series-rich-text-editor__toolbar-copy {
+.series-rich-text-editor__import-meta {
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
-.series-rich-text-editor__toolbar-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-}
-
-.series-rich-text-editor__eyebrow {
-  color: var(--accent);
-  font-size: 11px;
+.series-rich-text-editor__import-name {
+  color: var(--text-primary);
+  font-size: 15px;
   font-weight: 700;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
 }
 
-.series-rich-text-editor__text,
+.series-rich-text-editor__import-size,
 .series-rich-text-editor__empty {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.7;
+}
+
+.series-rich-text-editor__file-input {
+  display: none;
 }
 
 .series-rich-text-editor__surface {
@@ -452,6 +618,10 @@ onBeforeUnmount(() => {
     linear-gradient(180deg, rgba(255, 255, 255, 0.4), transparent 42%),
     color-mix(in srgb, var(--bg-panel) 92%, white 8%);
   box-shadow: var(--shadow-sm);
+}
+
+.series-rich-text-editor__surface--compact {
+  min-height: 14rem;
 }
 
 .series-rich-text-editor__surface :deep(.el-textarea__inner) {
@@ -519,6 +689,19 @@ onBeforeUnmount(() => {
   color: var(--text-secondary);
 }
 
+.series-rich-text-editor__surface :deep(.tiptap img),
+.series-rich-text-editor__preview-copy :deep(img) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 1rem;
+}
+
+.series-rich-text-editor__surface :deep(.tiptap a),
+.series-rich-text-editor__preview-copy :deep(a) {
+  color: var(--accent);
+}
+
 .series-rich-text-editor__preview-copy {
   color: var(--text-primary);
   font-size: 14px;
@@ -540,20 +723,23 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 720px) {
-  .series-rich-text-editor__import {
-    margin-left: 0;
-    width: 100%;
-  }
-
-  .series-rich-text-editor__toolbar,
-  .series-rich-text-editor__toolbar-actions {
+  .series-rich-text-editor__topbar,
+  .series-rich-text-editor__import-head,
+  .series-rich-text-editor__import-actions {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .series-rich-text-editor__toolbar-actions :deep(.el-button),
-  .series-rich-text-editor__toolbar-actions :deep(.el-button-group) {
+  .series-rich-text-editor__topbar :deep(.el-button),
+  .series-rich-text-editor__import-actions :deep(.el-button),
+  .series-rich-text-editor__import-actions :deep(.el-button-group) {
     width: 100%;
+  }
+
+  .series-rich-text-editor__tool,
+  .series-rich-text-editor__tab {
+    width: 100%;
+    justify-content: center;
   }
 }
 </style>

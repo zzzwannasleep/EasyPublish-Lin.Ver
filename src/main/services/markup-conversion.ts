@@ -21,6 +21,29 @@ export function markdownToBbcode(markdown: string) {
 
 export function htmlToMarkdown(html: string) {
   const converter = new html2md()
+  converter.addRule('alignedBlocks', {
+    filter(node) {
+      const tagName = node.nodeName.toLowerCase()
+      if (!['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tagName)) {
+        return false
+      }
+
+      const style = typeof node.getAttribute === 'function' ? node.getAttribute('style') ?? '' : ''
+      return /text-align\s*:\s*(left|center|right)/i.test(style)
+    },
+    replacement(_content, node) {
+      const tagName = node.nodeName.toLowerCase()
+      const style = typeof node.getAttribute === 'function' ? node.getAttribute('style') ?? '' : ''
+      const alignMatch = style.match(/text-align\s*:\s*(left|center|right)/i)
+      const innerHtml = typeof node.innerHTML === 'string' ? node.innerHTML.trim() : ''
+
+      if (!alignMatch || !innerHtml) {
+        return ''
+      }
+
+      return `\n<${tagName} style="text-align: ${alignMatch[1].toLowerCase()}">${innerHtml}</${tagName}>\n`
+    },
+  })
   return converter.turndown(html)
 }
 
