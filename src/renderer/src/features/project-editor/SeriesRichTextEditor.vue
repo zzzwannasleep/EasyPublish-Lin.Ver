@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { DocumentAdd } from '@element-plus/icons-vue'
 import Image from '@tiptap/extension-image'
@@ -39,8 +39,6 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const importedDocuments = ref<ImportedMarkdownDocument[]>([])
 const internalMarkdown = ref(normalizeMarkdown(props.modelValue))
 const isSyncingEditor = ref(false)
-const isExpanded = ref(false)
-const initialBodyOverflow = ref('')
 
 function normalizeMarkdown(value: string | undefined) {
   return typeof value === 'string' ? value.replace(/\r\n/g, '\n') : ''
@@ -307,24 +305,6 @@ function insertHardBreak() {
   editor.value?.chain().focus().setHardBreak().run()
 }
 
-function toggleExpanded() {
-  isExpanded.value = !isExpanded.value
-}
-
-function syncBodyOverflow(isLocked: boolean) {
-  if (typeof document === 'undefined') {
-    return
-  }
-
-  document.body.style.overflow = isLocked ? 'hidden' : initialBodyOverflow.value
-}
-
-function handleWindowKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape' && isExpanded.value) {
-    isExpanded.value = false
-  }
-}
-
 watch(
   () => props.modelValue,
   value => {
@@ -347,24 +327,13 @@ watch(activeMode, mode => {
   }
 })
 
-watch(isExpanded, value => {
-  syncBodyOverflow(value)
-})
-
-onMounted(() => {
-  initialBodyOverflow.value = document.body.style.overflow
-  window.addEventListener('keydown', handleWindowKeydown)
-})
-
 onBeforeUnmount(() => {
-  syncBodyOverflow(false)
-  window.removeEventListener('keydown', handleWindowKeydown)
   editor.value?.destroy()
 })
 </script>
 
 <template>
-  <div :class="['series-rich-text-editor', { 'is-expanded': isExpanded }]">
+  <div class="series-rich-text-editor">
     <div class="series-rich-text-editor__topbar">
       <div class="series-rich-text-editor__mode-switch">
         <button
@@ -397,15 +366,6 @@ onBeforeUnmount(() => {
         <button type="button" class="series-rich-text-editor__action-button" @click="openFilePicker">
           <span class="series-rich-text-editor__tool-icon">IN</span>
           <span class="series-rich-text-editor__tool-label">导入 Markdown</span>
-        </button>
-        <button
-          v-if="activeMode === 'rich'"
-          type="button"
-          class="series-rich-text-editor__action-button"
-          @click="toggleExpanded"
-        >
-          <span class="series-rich-text-editor__tool-icon">{{ isExpanded ? 'MIN' : 'MAX' }}</span>
-          <span class="series-rich-text-editor__tool-label">{{ isExpanded ? '收起编辑器' : '放大编辑器' }}</span>
         </button>
       </div>
 
@@ -758,17 +718,6 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
-.series-rich-text-editor.is-expanded {
-  position: fixed;
-  inset: 18px;
-  z-index: 3000;
-  padding: 18px;
-  border-radius: 1rem;
-  background: color-mix(in srgb, var(--bg-panel) 94%, white 6%);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
-  overflow: auto;
-}
-
 .series-rich-text-editor__topbar,
 .series-rich-text-editor__mode-switch,
 .series-rich-text-editor__topbar-actions,
@@ -952,10 +901,6 @@ onBeforeUnmount(() => {
     0 12px 28px rgba(15, 23, 42, 0.04);
 }
 
-.series-rich-text-editor.is-expanded .series-rich-text-editor__surface {
-  min-height: calc(100vh - 17rem);
-}
-
 .series-rich-text-editor__surface--compact {
   min-height: 14rem;
 }
@@ -981,10 +926,6 @@ onBeforeUnmount(() => {
   line-height: 1.8;
 }
 
-.series-rich-text-editor.is-expanded .series-rich-text-editor__surface :deep(.el-textarea__inner) {
-  min-height: calc(100vh - 19rem) !important;
-}
-
 .series-rich-text-editor__surface :deep(.el-textarea__inner:focus) {
   box-shadow: none;
 }
@@ -995,10 +936,6 @@ onBeforeUnmount(() => {
   color: var(--text-primary);
   font-size: 15px;
   line-height: 1.85;
-}
-
-.series-rich-text-editor.is-expanded .series-rich-text-editor__surface :deep(.tiptap) {
-  min-height: calc(100vh - 19rem);
 }
 
 .series-rich-text-editor__surface :deep(.tiptap p.is-editor-empty:first-child::before) {
@@ -1117,13 +1054,6 @@ onBeforeUnmount(() => {
   line-height: 1.8;
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-@media (max-width: 860px) {
-  .series-rich-text-editor.is-expanded {
-    inset: 10px;
-    padding: 14px;
-  }
 }
 
 @media (max-width: 720px) {
