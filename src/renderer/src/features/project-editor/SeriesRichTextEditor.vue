@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { DocumentAdd } from '@element-plus/icons-vue'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import TextAlign from '@tiptap/extension-text-align'
+import Underline from '@tiptap/extension-underline'
 import StarterKit from '@tiptap/starter-kit'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
 import { marked } from 'marked'
@@ -38,6 +39,8 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const importedDocuments = ref<ImportedMarkdownDocument[]>([])
 const internalMarkdown = ref(normalizeMarkdown(props.modelValue))
 const isSyncingEditor = ref(false)
+const isExpanded = ref(false)
+const initialBodyOverflow = ref('')
 
 function normalizeMarkdown(value: string | undefined) {
   return typeof value === 'string' ? value.replace(/\r\n/g, '\n') : ''
@@ -99,7 +102,12 @@ function normalizeMediaSource(value: string) {
 
 const editor = useEditor({
   extensions: [
-    StarterKit,
+    StarterKit.configure({
+      heading: {
+        levels: [1, 2, 3],
+      },
+    }),
+    Underline,
     Placeholder.configure({
       placeholder: props.placeholder,
     }),
@@ -113,6 +121,8 @@ const editor = useEditor({
     }),
     TextAlign.configure({
       types: ['heading', 'paragraph'],
+      alignments: ['left', 'center', 'right', 'justify'],
+      defaultAlignment: null,
     }),
   ],
   content: markdownToHtml(internalMarkdown.value),
@@ -226,6 +236,22 @@ function removeImportedDocument(documentId: string) {
   }
 }
 
+function setParagraph() {
+  editor.value?.chain().focus().setParagraph().run()
+}
+
+function setHeading(level: 1 | 2 | 3) {
+  editor.value?.chain().focus().toggleHeading({ level }).run()
+}
+
+function clearFormatting() {
+  editor.value?.chain().focus().unsetAllMarks().clearNodes().run()
+}
+
+function insertHorizontalRule() {
+  editor.value?.chain().focus().setHorizontalRule().run()
+}
+
 async function promptForLink() {
   if (!editor.value) {
     return
@@ -281,6 +307,24 @@ function insertHardBreak() {
   editor.value?.chain().focus().setHardBreak().run()
 }
 
+function toggleExpanded() {
+  isExpanded.value = !isExpanded.value
+}
+
+function syncBodyOverflow(isLocked: boolean) {
+  if (typeof document === 'undefined') {
+    return
+  }
+
+  document.body.style.overflow = isLocked ? 'hidden' : initialBodyOverflow.value
+}
+
+function handleWindowKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && isExpanded.value) {
+    isExpanded.value = false
+  }
+}
+
 watch(
   () => props.modelValue,
   value => {
@@ -303,27 +347,68 @@ watch(activeMode, mode => {
   }
 })
 
+watch(isExpanded, value => {
+  syncBodyOverflow(value)
+})
+
+onMounted(() => {
+  initialBodyOverflow.value = document.body.style.overflow
+  window.addEventListener('keydown', handleWindowKeydown)
+})
+
 onBeforeUnmount(() => {
+  syncBodyOverflow(false)
+  window.removeEventListener('keydown', handleWindowKeydown)
   editor.value?.destroy()
 })
 </script>
 
 <template>
-  <div class="series-rich-text-editor">
+  <div :class="['series-rich-text-editor', { 'is-expanded': isExpanded }]">
     <div class="series-rich-text-editor__topbar">
-      <el-button-group>
-        <el-button :type="activeMode === 'rich' ? 'primary' : 'default'" @click="activeMode = 'rich'">
-          富文本
-        </el-button>
-        <el-button :type="activeMode === 'source' ? 'primary' : 'default'" @click="activeMode = 'source'">
-          源码
-        </el-button>
-        <el-button :type="activeMode === 'preview' ? 'primary' : 'default'" @click="activeMode = 'preview'">
-          预览
-        </el-button>
-      </el-button-group>
+      <div class="series-rich-text-editor__mode-switch">
+        <button
+          type="button"
+          :class="['series-rich-text-editor__mode-button', { 'is-active': activeMode === 'rich' }]"
+          @click="activeMode = 'rich'"
+        >
+          <span class="series-rich-text-editor__tool-icon">Aa</span>
+          <span class="series-rich-text-editor__tool-label">富文本</span>
+        </button>
+        <button
+          type="button"
+          :class="['series-rich-text-editor__mode-button', { 'is-active': activeMode === 'source' }]"
+          @click="activeMode = 'source'"
+        >
+          <span class="series-rich-text-editor__tool-icon">MD</span>
+          <span class="series-rich-text-editor__tool-label">源码</span>
+        </button>
+        <button
+          type="button"
+          :class="['series-rich-text-editor__mode-button', { 'is-active': activeMode === 'preview' }]"
+          @click="activeMode = 'preview'"
+        >
+          <span class="series-rich-text-editor__tool-icon">Eye</span>
+          <span class="series-rich-text-editor__tool-label">预览</span>
+        </button>
+      </div>
 
-      <el-button plain @click="openFilePicker">导入 Markdown</el-button>
+      <div class="series-rich-text-editor__topbar-actions">
+        <button type="button" class="series-rich-text-editor__action-button" @click="openFilePicker">
+          <span class="series-rich-text-editor__tool-icon">IN</span>
+          <span class="series-rich-text-editor__tool-label">导入 Markdown</span>
+        </button>
+        <button
+          v-if="activeMode === 'rich'"
+          type="button"
+          class="series-rich-text-editor__action-button"
+          @click="toggleExpanded"
+        >
+          <span class="series-rich-text-editor__tool-icon">{{ isExpanded ? 'MIN' : 'MAX' }}</span>
+          <span class="series-rich-text-editor__tool-label">{{ isExpanded ? '收起编辑器' : '放大编辑器' }}</span>
+        </button>
+      </div>
+
       <input
         ref="fileInput"
         class="series-rich-text-editor__file-input"
@@ -335,76 +420,231 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="activeMode === 'rich'" class="series-rich-text-editor__formatbar">
-      <button
-        type="button"
-        :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('bold') }]"
-        :disabled="!editor"
-        @click="editor?.chain().focus().toggleBold().run()"
-      >
-        粗体
-      </button>
-      <button
-        type="button"
-        :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('italic') }]"
-        :disabled="!editor"
-        @click="editor?.chain().focus().toggleItalic().run()"
-      >
-        斜体
-      </button>
-      <button
-        type="button"
-        :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('bulletList') }]"
-        :disabled="!editor"
-        @click="editor?.chain().focus().toggleBulletList().run()"
-      >
-        列表
-      </button>
-      <button
-        type="button"
-        :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('blockquote') }]"
-        :disabled="!editor"
-        @click="editor?.chain().focus().toggleBlockquote().run()"
-      >
-        引用
-      </button>
-      <button
-        type="button"
-        :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('link') }]"
-        :disabled="!editor"
-        @click="promptForLink"
-      >
-        超链接
-      </button>
-      <button type="button" class="series-rich-text-editor__tool" :disabled="!editor" @click="promptForImage">
-        插入图片
-      </button>
-      <button
-        type="button"
-        :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive({ textAlign: 'left' }) }]"
-        :disabled="!editor"
-        @click="editor?.chain().focus().setTextAlign('left').run()"
-      >
-        居左
-      </button>
-      <button
-        type="button"
-        :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive({ textAlign: 'center' }) }]"
-        :disabled="!editor"
-        @click="editor?.chain().focus().setTextAlign('center').run()"
-      >
-        居中
-      </button>
-      <button
-        type="button"
-        :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive({ textAlign: 'right' }) }]"
-        :disabled="!editor"
-        @click="editor?.chain().focus().setTextAlign('right').run()"
-      >
-        居右
-      </button>
-      <button type="button" class="series-rich-text-editor__tool" :disabled="!editor" @click="insertHardBreak">
-        换行
-      </button>
+      <div class="series-rich-text-editor__toolgroup">
+        <span class="series-rich-text-editor__group-label">结构</span>
+        <button
+          type="button"
+          :class="[
+            'series-rich-text-editor__tool',
+            {
+              'is-active':
+                editor?.isActive('paragraph') && !editor?.isActive('blockquote') && !editor?.isActive('codeBlock'),
+            },
+          ]"
+          :disabled="!editor"
+          @click="setParagraph"
+        >
+          <span class="series-rich-text-editor__tool-icon">P</span>
+          <span class="series-rich-text-editor__tool-label">正文</span>
+        </button>
+        <button
+          type="button"
+          :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('heading', { level: 1 }) }]"
+          :disabled="!editor"
+          @click="setHeading(1)"
+        >
+          <span class="series-rich-text-editor__tool-icon">H1</span>
+          <span class="series-rich-text-editor__tool-label">标题 1</span>
+        </button>
+        <button
+          type="button"
+          :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('heading', { level: 2 }) }]"
+          :disabled="!editor"
+          @click="setHeading(2)"
+        >
+          <span class="series-rich-text-editor__tool-icon">H2</span>
+          <span class="series-rich-text-editor__tool-label">标题 2</span>
+        </button>
+        <button
+          type="button"
+          :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('heading', { level: 3 }) }]"
+          :disabled="!editor"
+          @click="setHeading(3)"
+        >
+          <span class="series-rich-text-editor__tool-icon">H3</span>
+          <span class="series-rich-text-editor__tool-label">标题 3</span>
+        </button>
+        <button
+          type="button"
+          :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('blockquote') }]"
+          :disabled="!editor"
+          @click="editor?.chain().focus().toggleBlockquote().run()"
+        >
+          <span class="series-rich-text-editor__tool-icon">""</span>
+          <span class="series-rich-text-editor__tool-label">引用</span>
+        </button>
+        <button
+          type="button"
+          :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('codeBlock') }]"
+          :disabled="!editor"
+          @click="editor?.chain().focus().toggleCodeBlock().run()"
+        >
+          <span class="series-rich-text-editor__tool-icon">{ }</span>
+          <span class="series-rich-text-editor__tool-label">代码块</span>
+        </button>
+      </div>
+
+      <div class="series-rich-text-editor__toolgroup">
+        <span class="series-rich-text-editor__group-label">文字</span>
+        <button
+          type="button"
+          :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('bold') }]"
+          :disabled="!editor"
+          @click="editor?.chain().focus().toggleBold().run()"
+        >
+          <span class="series-rich-text-editor__tool-icon">B</span>
+          <span class="series-rich-text-editor__tool-label">粗体</span>
+        </button>
+        <button
+          type="button"
+          :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('italic') }]"
+          :disabled="!editor"
+          @click="editor?.chain().focus().toggleItalic().run()"
+        >
+          <span class="series-rich-text-editor__tool-icon">I</span>
+          <span class="series-rich-text-editor__tool-label">斜体</span>
+        </button>
+        <button
+          type="button"
+          :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('underline') }]"
+          :disabled="!editor"
+          @click="editor?.chain().focus().toggleUnderline().run()"
+        >
+          <span class="series-rich-text-editor__tool-icon">U</span>
+          <span class="series-rich-text-editor__tool-label">下划线</span>
+        </button>
+        <button
+          type="button"
+          :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('strike') }]"
+          :disabled="!editor"
+          @click="editor?.chain().focus().toggleStrike().run()"
+        >
+          <span class="series-rich-text-editor__tool-icon">S</span>
+          <span class="series-rich-text-editor__tool-label">删除线</span>
+        </button>
+        <button
+          type="button"
+          :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('code') }]"
+          :disabled="!editor"
+          @click="editor?.chain().focus().toggleCode().run()"
+        >
+          <span class="series-rich-text-editor__tool-icon">&lt;/&gt;</span>
+          <span class="series-rich-text-editor__tool-label">行内代码</span>
+        </button>
+        <button type="button" class="series-rich-text-editor__tool" :disabled="!editor" @click="clearFormatting">
+          <span class="series-rich-text-editor__tool-icon">Tx</span>
+          <span class="series-rich-text-editor__tool-label">清除格式</span>
+        </button>
+      </div>
+
+      <div class="series-rich-text-editor__toolgroup">
+        <span class="series-rich-text-editor__group-label">列表</span>
+        <button
+          type="button"
+          :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('bulletList') }]"
+          :disabled="!editor"
+          @click="editor?.chain().focus().toggleBulletList().run()"
+        >
+          <span class="series-rich-text-editor__tool-icon">[]</span>
+          <span class="series-rich-text-editor__tool-label">无序列表</span>
+        </button>
+        <button
+          type="button"
+          :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('orderedList') }]"
+          :disabled="!editor"
+          @click="editor?.chain().focus().toggleOrderedList().run()"
+        >
+          <span class="series-rich-text-editor__tool-icon">1.</span>
+          <span class="series-rich-text-editor__tool-label">有序列表</span>
+        </button>
+        <button type="button" class="series-rich-text-editor__tool" :disabled="!editor" @click="insertHorizontalRule">
+          <span class="series-rich-text-editor__tool-icon">HR</span>
+          <span class="series-rich-text-editor__tool-label">分割线</span>
+        </button>
+        <button type="button" class="series-rich-text-editor__tool" :disabled="!editor" @click="insertHardBreak">
+          <span class="series-rich-text-editor__tool-icon">BR</span>
+          <span class="series-rich-text-editor__tool-label">换行</span>
+        </button>
+      </div>
+
+      <div class="series-rich-text-editor__toolgroup">
+        <span class="series-rich-text-editor__group-label">对齐</span>
+        <button
+          type="button"
+          :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive({ textAlign: 'left' }) }]"
+          :disabled="!editor"
+          @click="editor?.chain().focus().setTextAlign('left').run()"
+        >
+          <span class="series-rich-text-editor__tool-icon">L</span>
+          <span class="series-rich-text-editor__tool-label">居左</span>
+        </button>
+        <button
+          type="button"
+          :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive({ textAlign: 'center' }) }]"
+          :disabled="!editor"
+          @click="editor?.chain().focus().setTextAlign('center').run()"
+        >
+          <span class="series-rich-text-editor__tool-icon">C</span>
+          <span class="series-rich-text-editor__tool-label">居中</span>
+        </button>
+        <button
+          type="button"
+          :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive({ textAlign: 'right' }) }]"
+          :disabled="!editor"
+          @click="editor?.chain().focus().setTextAlign('right').run()"
+        >
+          <span class="series-rich-text-editor__tool-icon">R</span>
+          <span class="series-rich-text-editor__tool-label">居右</span>
+        </button>
+        <button
+          type="button"
+          :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive({ textAlign: 'justify' }) }]"
+          :disabled="!editor"
+          @click="editor?.chain().focus().setTextAlign('justify').run()"
+        >
+          <span class="series-rich-text-editor__tool-icon">J</span>
+          <span class="series-rich-text-editor__tool-label">两端对齐</span>
+        </button>
+      </div>
+
+      <div class="series-rich-text-editor__toolgroup">
+        <span class="series-rich-text-editor__group-label">插入</span>
+        <button
+          type="button"
+          :class="['series-rich-text-editor__tool', { 'is-active': editor?.isActive('link') }]"
+          :disabled="!editor"
+          @click="promptForLink"
+        >
+          <span class="series-rich-text-editor__tool-icon">URL</span>
+          <span class="series-rich-text-editor__tool-label">超链接</span>
+        </button>
+        <button type="button" class="series-rich-text-editor__tool" :disabled="!editor" @click="promptForImage">
+          <span class="series-rich-text-editor__tool-icon">IMG</span>
+          <span class="series-rich-text-editor__tool-label">插入图片</span>
+        </button>
+      </div>
+
+      <div class="series-rich-text-editor__toolgroup">
+        <span class="series-rich-text-editor__group-label">操作</span>
+        <button
+          type="button"
+          class="series-rich-text-editor__tool"
+          :disabled="!editor || !editor.can().chain().focus().undo().run()"
+          @click="editor?.chain().focus().undo().run()"
+        >
+          <span class="series-rich-text-editor__tool-icon">Z-</span>
+          <span class="series-rich-text-editor__tool-label">撤销</span>
+        </button>
+        <button
+          type="button"
+          class="series-rich-text-editor__tool"
+          :disabled="!editor || !editor.can().chain().focus().redo().run()"
+          @click="editor?.chain().focus().redo().run()"
+        >
+          <span class="series-rich-text-editor__tool-icon">Z+</span>
+          <span class="series-rich-text-editor__tool-label">重做</span>
+        </button>
+      </div>
     </div>
 
     <div v-if="importedDocuments.length" class="series-rich-text-editor__imports">
@@ -430,22 +670,38 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="series-rich-text-editor__import-actions">
-          <el-button-group>
-            <el-button
-              :type="importedDocMode === 'source' ? 'primary' : 'default'"
-              @click="importedDocMode = 'source'"
-            >
-              源码
-            </el-button>
-            <el-button
-              :type="importedDocMode === 'preview' ? 'primary' : 'default'"
-              @click="importedDocMode = 'preview'"
-            >
-              预览
-            </el-button>
-          </el-button-group>
-          <el-button plain @click="removeImportedDocument(activeImportedDocument.id)">移除</el-button>
-          <el-button type="primary" @click="applyImportedDocument(activeImportedDocument)">载入到正文</el-button>
+          <button
+            type="button"
+            :class="['series-rich-text-editor__action-button', { 'is-active': importedDocMode === 'source' }]"
+            @click="importedDocMode = 'source'"
+          >
+            <span class="series-rich-text-editor__tool-icon">MD</span>
+            <span class="series-rich-text-editor__tool-label">源码</span>
+          </button>
+          <button
+            type="button"
+            :class="['series-rich-text-editor__action-button', { 'is-active': importedDocMode === 'preview' }]"
+            @click="importedDocMode = 'preview'"
+          >
+            <span class="series-rich-text-editor__tool-icon">Eye</span>
+            <span class="series-rich-text-editor__tool-label">预览</span>
+          </button>
+          <button
+            type="button"
+            class="series-rich-text-editor__action-button"
+            @click="removeImportedDocument(activeImportedDocument.id)"
+          >
+            <span class="series-rich-text-editor__tool-icon">DEL</span>
+            <span class="series-rich-text-editor__tool-label">移除</span>
+          </button>
+          <button
+            type="button"
+            class="series-rich-text-editor__action-button is-primary"
+            @click="applyImportedDocument(activeImportedDocument)"
+          >
+            <span class="series-rich-text-editor__tool-icon">USE</span>
+            <span class="series-rich-text-editor__tool-label">载入到正文</span>
+          </button>
         </div>
       </div>
 
@@ -499,10 +755,24 @@ onBeforeUnmount(() => {
 .series-rich-text-editor {
   display: grid;
   gap: 14px;
+  min-width: 0;
+}
+
+.series-rich-text-editor.is-expanded {
+  position: fixed;
+  inset: 18px;
+  z-index: 3000;
+  padding: 18px;
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--bg-panel) 94%, white 6%);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+  overflow: auto;
 }
 
 .series-rich-text-editor__topbar,
-.series-rich-text-editor__formatbar,
+.series-rich-text-editor__mode-switch,
+.series-rich-text-editor__topbar-actions,
+.series-rich-text-editor__toolgroup,
 .series-rich-text-editor__imports,
 .series-rich-text-editor__import-head,
 .series-rich-text-editor__import-actions {
@@ -518,62 +788,123 @@ onBeforeUnmount(() => {
 }
 
 .series-rich-text-editor__formatbar {
-  padding: 14px;
-  border: 1px solid var(--border-soft);
-  border-radius: 1.2rem;
-  background: color-mix(in srgb, var(--bg-panel) 92%, white 8%);
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 1rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(248, 250, 255, 0.72)),
+    color-mix(in srgb, var(--bg-panel) 94%, white 6%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 8px 24px rgba(15, 23, 42, 0.04);
 }
 
+.series-rich-text-editor__group-label {
+  flex: none;
+  margin-right: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.series-rich-text-editor__mode-button,
+.series-rich-text-editor__action-button,
 .series-rich-text-editor__tool,
 .series-rich-text-editor__tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 0 14px;
-  border: 1px solid var(--border-soft);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-panel) 90%, white 10%);
+  appearance: none;
+  border: 0;
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.82);
   color: var(--text-secondary);
   cursor: pointer;
   transition:
-    border-color 160ms ease,
+    transform 160ms ease,
     background 160ms ease,
     color 160ms ease,
-    transform 160ms ease;
+    box-shadow 160ms ease;
 }
 
+.series-rich-text-editor__mode-button,
+.series-rich-text-editor__action-button,
+.series-rich-text-editor__tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 14px;
+}
+
+.series-rich-text-editor__tool {
+  background: transparent;
+}
+
+.series-rich-text-editor__mode-button:hover,
+.series-rich-text-editor__action-button:hover,
 .series-rich-text-editor__tool:hover,
 .series-rich-text-editor__tab:hover {
   transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--border-soft));
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text-primary);
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.06);
 }
 
+.series-rich-text-editor__mode-button.is-active,
+.series-rich-text-editor__action-button.is-active,
+.series-rich-text-editor__action-button.is-primary,
 .series-rich-text-editor__tool.is-active,
 .series-rich-text-editor__tab.is-active {
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--border-soft));
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--brand-soft) 74%, white 26%), rgba(255, 255, 255, 0.66)),
-    color-mix(in srgb, var(--bg-panel) 92%, white 8%);
+    linear-gradient(135deg, color-mix(in srgb, var(--brand-soft) 74%, white 26%), rgba(255, 255, 255, 0.78)),
+    rgba(255, 255, 255, 0.98);
   color: var(--text-primary);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent),
+    0 10px 24px rgba(15, 23, 42, 0.08);
 }
 
 .series-rich-text-editor__tool:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
-  opacity: 0.6;
   transform: none;
+  box-shadow: none;
 }
 
+.series-rich-text-editor__tool-icon,
 .series-rich-text-editor__tab-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent-soft) 78%, white 22%);
+  min-width: 28px;
+  height: 28px;
+  padding: 0 7px;
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--accent-soft) 72%, white 28%);
   color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
   flex: none;
+}
+
+.series-rich-text-editor__tool-label,
+.series-rich-text-editor__tab-name {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.series-rich-text-editor__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  max-width: 100%;
+  padding: 0 14px;
 }
 
 .series-rich-text-editor__tab-name {
@@ -611,17 +942,31 @@ onBeforeUnmount(() => {
 
 .series-rich-text-editor__surface {
   min-height: 32rem;
-  padding: 18px;
-  border: 1px solid var(--border-soft);
-  border-radius: 1.5rem;
+  padding: 22px 24px;
+  border-radius: 1rem;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.4), transparent 42%),
-    color-mix(in srgb, var(--bg-panel) 92%, white 8%);
-  box-shadow: var(--shadow-sm);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(249, 250, 252, 0.94)),
+    white;
+  box-shadow:
+    inset 0 0 0 1px rgba(148, 163, 184, 0.12),
+    0 12px 28px rgba(15, 23, 42, 0.04);
+}
+
+.series-rich-text-editor.is-expanded .series-rich-text-editor__surface {
+  min-height: calc(100vh - 17rem);
 }
 
 .series-rich-text-editor__surface--compact {
   min-height: 14rem;
+}
+
+.series-rich-text-editor__surface--readonly {
+  overflow: auto;
+}
+
+.series-rich-text-editor__surface :deep(.el-textarea),
+.series-rich-text-editor__surface :deep(.el-textarea__inner) {
+  height: 100%;
 }
 
 .series-rich-text-editor__surface :deep(.el-textarea__inner) {
@@ -636,6 +981,10 @@ onBeforeUnmount(() => {
   line-height: 1.8;
 }
 
+.series-rich-text-editor.is-expanded .series-rich-text-editor__surface :deep(.el-textarea__inner) {
+  min-height: calc(100vh - 19rem) !important;
+}
+
 .series-rich-text-editor__surface :deep(.el-textarea__inner:focus) {
   box-shadow: none;
 }
@@ -646,6 +995,10 @@ onBeforeUnmount(() => {
   color: var(--text-primary);
   font-size: 15px;
   line-height: 1.85;
+}
+
+.series-rich-text-editor.is-expanded .series-rich-text-editor__surface :deep(.tiptap) {
+  min-height: calc(100vh - 19rem);
 }
 
 .series-rich-text-editor__surface :deep(.tiptap p.is-editor-empty:first-child::before) {
@@ -689,6 +1042,38 @@ onBeforeUnmount(() => {
   color: var(--text-secondary);
 }
 
+.series-rich-text-editor__surface :deep(.tiptap pre),
+.series-rich-text-editor__preview-copy :deep(pre) {
+  margin: 0 0 1em;
+  padding: 14px 16px;
+  border-radius: 0.9rem;
+  background: color-mix(in srgb, var(--accent-soft) 22%, #0f172a 78%);
+  color: #e2e8f0;
+  overflow: auto;
+}
+
+.series-rich-text-editor__surface :deep(.tiptap code),
+.series-rich-text-editor__preview-copy :deep(code) {
+  padding: 0.12rem 0.35rem;
+  border-radius: 0.4rem;
+  background: rgba(15, 23, 42, 0.08);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.series-rich-text-editor__surface :deep(.tiptap pre code),
+.series-rich-text-editor__preview-copy :deep(pre code) {
+  padding: 0;
+  background: transparent;
+}
+
+.series-rich-text-editor__surface :deep(.tiptap hr),
+.series-rich-text-editor__preview-copy :deep(hr) {
+  margin: 1.4rem 0;
+  border: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--border-soft) 88%, var(--accent) 12%);
+}
+
 .series-rich-text-editor__surface :deep(.tiptap img),
 .series-rich-text-editor__preview-copy :deep(img) {
   display: block;
@@ -708,8 +1093,20 @@ onBeforeUnmount(() => {
   line-height: 1.8;
 }
 
-.series-rich-text-editor__surface--readonly {
-  overflow: auto;
+.series-rich-text-editor__surface :deep(.tiptap table),
+.series-rich-text-editor__preview-copy :deep(table) {
+  width: 100%;
+  margin: 0 0 1rem;
+  border-collapse: collapse;
+}
+
+.series-rich-text-editor__surface :deep(.tiptap th),
+.series-rich-text-editor__surface :deep(.tiptap td),
+.series-rich-text-editor__preview-copy :deep(th),
+.series-rich-text-editor__preview-copy :deep(td) {
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  text-align: left;
 }
 
 .series-rich-text-editor__source {
@@ -722,6 +1119,13 @@ onBeforeUnmount(() => {
   word-break: break-word;
 }
 
+@media (max-width: 860px) {
+  .series-rich-text-editor.is-expanded {
+    inset: 10px;
+    padding: 14px;
+  }
+}
+
 @media (max-width: 720px) {
   .series-rich-text-editor__topbar,
   .series-rich-text-editor__import-head,
@@ -730,16 +1134,16 @@ onBeforeUnmount(() => {
     align-items: stretch;
   }
 
-  .series-rich-text-editor__topbar :deep(.el-button),
-  .series-rich-text-editor__import-actions :deep(.el-button),
-  .series-rich-text-editor__import-actions :deep(.el-button-group) {
-    width: 100%;
-  }
-
+  .series-rich-text-editor__mode-button,
+  .series-rich-text-editor__action-button,
   .series-rich-text-editor__tool,
   .series-rich-text-editor__tab {
     width: 100%;
     justify-content: center;
+  }
+
+  .series-rich-text-editor__surface {
+    padding: 18px;
   }
 }
 </style>

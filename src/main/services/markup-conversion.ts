@@ -29,12 +29,12 @@ export function htmlToMarkdown(html: string) {
       }
 
       const style = typeof node.getAttribute === 'function' ? node.getAttribute('style') ?? '' : ''
-      return /text-align\s*:\s*(left|center|right)/i.test(style)
+      return /text-align\s*:\s*(left|center|right|justify)/i.test(style)
     },
     replacement(_content, node) {
       const tagName = node.nodeName.toLowerCase()
       const style = typeof node.getAttribute === 'function' ? node.getAttribute('style') ?? '' : ''
-      const alignMatch = style.match(/text-align\s*:\s*(left|center|right)/i)
+      const alignMatch = style.match(/text-align\s*:\s*(left|center|right|justify)/i)
       const innerHtml = typeof node.innerHTML === 'string' ? node.innerHTML.trim() : ''
 
       if (!alignMatch || !innerHtml) {
@@ -42,6 +42,14 @@ export function htmlToMarkdown(html: string) {
       }
 
       return `\n<${tagName} style="text-align: ${alignMatch[1].toLowerCase()}">${innerHtml}</${tagName}>\n`
+    },
+  })
+  converter.addRule('underlinedText', {
+    filter(node) {
+      return node.nodeName.toLowerCase() === 'u'
+    },
+    replacement(content) {
+      return `<u>${content}</u>`
     },
   })
   return converter.turndown(html)

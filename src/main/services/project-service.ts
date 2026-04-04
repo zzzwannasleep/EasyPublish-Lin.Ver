@@ -29,11 +29,13 @@ import type {
 } from '../../shared/types/project'
 import type { SiteId } from '../../shared/types/site'
 import {
+  applySeriesTitleTagTemplateVariables,
+  composeSeriesPublishTitle,
   matchSeriesTitlePattern,
   normalizeMatchedSubtitleProfile,
   normalizeMatchedVideoProfile,
   normalizeSeriesTitleMatchConfig,
-  renderSeriesTitleCustomTags,
+  resolveSeriesTitleMappedTagBindings,
   renderSeriesTitleTemplate,
   stripTorrentExtension,
 } from '../../shared/utils/series-title-match'
@@ -938,6 +940,32 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     return JSON.parse(fs.readFileSync(configPath, { encoding: 'utf-8' })) as Config.PublishConfig
   }
 
+  function buildTitleTagSourceTexts(payload: {
+    fileName?: string
+    variables?: Record<string, string>
+    episodeLabel?: string
+    variantName?: string
+    releaseTeam?: string
+    sourceType?: string
+    resolution?: string
+    videoCodec?: string
+    audioCodec?: string
+    subtitle?: string
+  }) {
+    return [
+      payload.fileName,
+      ...Object.values(payload.variables ?? {}),
+      payload.episodeLabel,
+      payload.variantName,
+      payload.releaseTeam,
+      payload.sourceType,
+      payload.resolution,
+      payload.videoCodec,
+      payload.audioCodec,
+      payload.subtitle,
+    ]
+  }
+
   function buildTitleMatchValues(config: SeriesTitleMatchConfig, filePath: string) {
     const fileName = basename(filePath)
     const matched = matchSeriesTitlePattern(config.fileNamePattern, fileName)
@@ -952,20 +980,39 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     const videoCodec = renderSeriesTitleTemplate(config.videoCodecTemplate, matched)
     const audioCodec = renderSeriesTitleTemplate(config.audioCodecTemplate, matched)
     const subtitle = renderSeriesTitleTemplate(config.subtitleTemplate, matched)
+    const releaseTeam = renderSeriesTitleTemplate(config.releaseTeamTemplate, matched)
+    const titleTagBindings = resolveSeriesTitleMappedTagBindings(
+      config.titleTagMappings,
+      buildTitleTagSourceTexts({
+        fileName,
+        variables: matched,
+        episodeLabel,
+        variantName,
+        releaseTeam,
+        sourceType,
+        resolution,
+        videoCodec,
+        audioCodec,
+        subtitle,
+      }),
+    )
+    const titleVariables = applySeriesTitleTagTemplateVariables(matched, titleTagBindings)
+    const title = renderSeriesTitleTemplate(config.titleTemplate, titleVariables)
 
     return {
       fileName,
       variables: matched,
       episodeLabel,
       variantName,
-      title: renderSeriesTitleTemplate(config.titleTemplate, matched),
-      releaseTeam: renderSeriesTitleTemplate(config.releaseTeamTemplate, matched),
+      title,
+      releaseTeam,
       sourceType,
       resolution,
       videoCodec,
       audioCodec,
       subtitle,
-      customTags: renderSeriesTitleCustomTags(config.customTemplate, matched),
+      titleTags: titleTagBindings.flatMap(binding => binding.labels),
+      titleTagBindings,
       videoProfile: normalizeMatchedVideoProfile(resolution),
       subtitleProfile: normalizeMatchedSubtitleProfile(subtitle),
     }
@@ -981,17 +1028,6 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     const targetSites = normalizeSiteIds(titleMatchConfig.targetSites)
     nextConfig.torrentPath = filePath
     nextConfig.torrentName = basename(filePath)
-
-    if (values.title) {
-      nextConfig.title = values.title
-    }
-
-    if (titleMatchConfig.customTemplate) {
-      nextConfig.tags = values.customTags.map(tag => ({
-        label: tag,
-        value: tag,
-      }))
-    }
 
     if (targetSites.length > 0) {
       nextConfig.targetSites = [...targetSites]
@@ -1021,6 +1057,33 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         content.targetSites = [...targetSites]
       }
     }
+
+    if (values.title) {
+      nextConfig.title = values.title
+      return nextConfig
+    }
+
+    const content =
+      nextConfig.content && typeof nextConfig.content === 'object' && !Array.isArray(nextConfig.content)
+        ? (nextConfig.content as Partial<Config.Content_episode>)
+        : undefined
+    const mainTitle =
+      normalizeOptionalString(content?.seriesTitleEN) ??
+      normalizeOptionalString(content?.seriesTitleCN) ??
+      normalizeOptionalString(content?.seriesTitleJP) ??
+      stripTorrentExtension(basename(filePath))
+
+    nextConfig.title = composeSeriesPublishTitle({
+      releaseTeam: values.releaseTeam || normalizeOptionalString(content?.releaseTeam),
+      mainTitle,
+      seasonLabel: normalizeOptionalString(content?.seasonLabel),
+      episodeLabel: values.episodeLabel || normalizeOptionalString(content?.episodeLabel),
+      sourceType: values.sourceType || normalizeOptionalString(content?.sourceType),
+      resolution: values.resolution || normalizeOptionalString(content?.resolution),
+      videoCodec: values.videoCodec || normalizeOptionalString(content?.videoCodec),
+      audioCodec: values.audioCodec || normalizeOptionalString(content?.audioCodec),
+      variantName: values.variantName,
+    })
 
     return nextConfig
   }

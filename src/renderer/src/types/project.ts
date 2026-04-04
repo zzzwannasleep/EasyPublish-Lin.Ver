@@ -28,6 +28,7 @@ export type {
   SeriesProjectVariant,
   SeriesVariantTemplate,
   SeriesTitleMatchConfig,
+  SeriesTitleTagMapping,
   SeriesTitleMatchConfigPayload,
   SeriesProjectWorkspace,
   SeriesVariantSubtitleProfile,

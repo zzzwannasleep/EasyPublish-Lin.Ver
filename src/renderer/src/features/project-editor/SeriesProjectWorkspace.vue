@@ -23,16 +23,20 @@ import type {
   PublishProject,
   SeriesProjectEpisode,
   SeriesTitleMatchConfig,
+  SeriesTitleTagMapping,
   SeriesProjectVariant,
   SeriesProjectWorkspace,
 } from '../../types/project'
 import type { BangumiSubjectSearchItem, SiteCatalogEntry, SiteFieldSchemaEntry, SiteId } from '../../types/site'
 import {
+  applySeriesTitleTagTemplateVariables,
+  composeSeriesPublishTitle,
+  getDefaultSeriesTitleTagTemplate,
   matchSeriesTitlePattern,
   normalizeMatchedSubtitleProfile,
   normalizeMatchedVideoProfile,
   normalizeSeriesTitleMatchConfig,
-  renderSeriesTitleCustomTags,
+  resolveSeriesTitleMappedTagBindings,
   renderSeriesTitleTemplate,
   stripTorrentExtension,
 } from '../../../../shared/utils/series-title-match'
@@ -41,9 +45,11 @@ import SeriesRichTextEditor from './SeriesRichTextEditor.vue'
 const SITE_ORDER: SiteId[] = ['bangumi', 'mikan', 'miobt', 'nyaa', 'acgrip', 'dmhy', 'acgnx_a', 'acgnx_g']
 const DEFAULT_BANGUMI_CATEGORY = '549ef207fe682f7549f1ea90'
 const DEFAULT_NYAA_CATEGORY = '1_3'
+const DEFAULT_TITLE_TAG_TEMPLATE = getDefaultSeriesTitleTagTemplate()
 
 type SiteFieldValue = string | number | boolean | undefined
 type SiteFieldForm = Partial<Record<SiteId, Record<string, SiteFieldValue>>>
+let titleTagMappingSeed = 0
 
 const props = defineProps<{
   id: number
@@ -86,7 +92,7 @@ const titleMatchForm = reactive<SeriesTitleMatchConfig>({
   videoCodecTemplate: '<video>',
   audioCodecTemplate: '<audio>',
   subtitleTemplate: '<sub>',
-  customTemplate: '',
+  titleTagMappings: [],
   targetSites: [],
 })
 const savedTitleMatchFingerprint = ref('')
@@ -128,6 +134,20 @@ function normalizeOptionalString(value: unknown) {
 
 function normalizeMarkdown(value: string | undefined) {
   return typeof value === 'string' ? value.replace(/\r\n/g, '\n') : ''
+}
+
+function createTitleTagMapping(value?: Partial<SeriesTitleTagMapping>): SeriesTitleTagMapping {
+  titleTagMappingSeed += 1
+  return {
+    id: value?.id?.trim() || `title-tag-${Date.now()}-${titleTagMappingSeed}`,
+    keyword: value?.keyword?.trim() || '',
+    templateToken: value?.templateToken?.trim() || DEFAULT_TITLE_TAG_TEMPLATE,
+    label: value?.label?.trim() || '',
+  }
+}
+
+function normalizeTitleTagMappings(value: SeriesTitleTagMapping[] | undefined) {
+  return (value ?? []).map(item => createTitleTagMapping(item))
 }
 
 function sortSiteIds(siteIds: SiteId[]) {
@@ -306,11 +326,15 @@ function normalizeTitleMatchForm(config?: SeriesTitleMatchConfig | null) {
     fileNamePattern: '',
     episodeTemplate: '<ep>',
     variantTemplate: '<res>p-<sub>',
+    titleTemplate: '',
+    releaseTeamTemplate: '',
     sourceTypeTemplate: '<source>',
     resolutionTemplate: '<res>p',
     videoCodecTemplate: '<video>',
     audioCodecTemplate: '<audio>',
     subtitleTemplate: '<sub>',
+    titleTagMappings: [],
+    targetSites: [],
   }
 
   titleMatchForm.fileNamePattern = normalized.fileNamePattern
@@ -323,9 +347,17 @@ function normalizeTitleMatchForm(config?: SeriesTitleMatchConfig | null) {
   titleMatchForm.videoCodecTemplate = normalized.videoCodecTemplate || '<video>'
   titleMatchForm.audioCodecTemplate = normalized.audioCodecTemplate || '<audio>'
   titleMatchForm.subtitleTemplate = normalized.subtitleTemplate || '<sub>'
-  titleMatchForm.customTemplate = normalized.customTemplate || ''
+  titleMatchForm.titleTagMappings = normalizeTitleTagMappings(normalized.titleTagMappings)
   titleMatchForm.targetSites = sortSiteIds(normalized.targetSites ?? [])
   savedTitleMatchFingerprint.value = buildTitleMatchFingerprint()
+}
+
+function addTitleTagMapping() {
+  titleMatchForm.titleTagMappings = [...(titleMatchForm.titleTagMappings ?? []), createTitleTagMapping()]
+}
+
+function removeTitleTagMapping(mappingId: string | undefined) {
+  titleMatchForm.titleTagMappings = (titleMatchForm.titleTagMappings ?? []).filter(item => item.id !== mappingId)
 }
 
 function buildTitleMatchPayload() {
@@ -388,6 +420,33 @@ const currentStructureLabel = computed(() =>
 
 const isDirty = computed(() => Boolean(draftConfig.value && activeVariant.value && buildDirtyFingerprint() !== savedFingerprint.value))
 const isTitleMatchDirty = computed(() => buildTitleMatchFingerprint() !== savedTitleMatchFingerprint.value)
+
+function buildTitleTagSourceTexts(payload: {
+  fileName?: string
+  variables?: Record<string, string>
+  episodeLabel?: string
+  variantName?: string
+  releaseTeam?: string
+  sourceType?: string
+  resolution?: string
+  videoCodec?: string
+  audioCodec?: string
+  subtitle?: string
+}) {
+  return [
+    payload.fileName,
+    ...Object.values(payload.variables ?? {}),
+    payload.episodeLabel,
+    payload.variantName,
+    payload.releaseTeam,
+    payload.sourceType,
+    payload.resolution,
+    payload.videoCodec,
+    payload.audioCodec,
+    payload.subtitle,
+  ]
+}
+
 const titleMatchPreview = computed(() => {
   const config = buildTitleMatchPayload()
   const currentFileName = form.torrentPath.trim() ? getFileName(form.torrentPath.trim()) : ''
@@ -410,7 +469,37 @@ const titleMatchPreview = computed(() => {
   const videoCodec = renderSeriesTitleTemplate(config.videoCodecTemplate, variables)
   const audioCodec = renderSeriesTitleTemplate(config.audioCodecTemplate, variables)
   const subtitle = renderSeriesTitleTemplate(config.subtitleTemplate, variables)
-  const customTags = renderSeriesTitleCustomTags(config.customTemplate, variables)
+  const releaseTeam = renderSeriesTitleTemplate(config.releaseTeamTemplate, variables)
+  const titleTagBindings = resolveSeriesTitleMappedTagBindings(
+    config.titleTagMappings,
+    buildTitleTagSourceTexts({
+      fileName: currentFileName,
+      variables,
+      episodeLabel,
+      variantName,
+      releaseTeam,
+      sourceType,
+      resolution,
+      videoCodec,
+      audioCodec,
+      subtitle,
+    }),
+  )
+  const titleVariables = applySeriesTitleTagTemplateVariables(variables, titleTagBindings)
+  const title = renderSeriesTitleTemplate(config.titleTemplate, titleVariables)
+  const suggestedTitle =
+    title ||
+    composeSeriesPublishTitle({
+      releaseTeam: releaseTeam || form.releaseTeam.trim(),
+      mainTitle: form.seriesTitleEN.trim() || form.seriesTitleCN.trim() || form.seriesTitleJP.trim() || props.project.name,
+      seasonLabel: form.seasonLabel.trim(),
+      episodeLabel,
+      sourceType,
+      resolution,
+      videoCodec,
+      audioCodec,
+      variantName,
+    })
 
   return {
     fileName: currentFileName,
@@ -418,13 +507,15 @@ const titleMatchPreview = computed(() => {
     variables,
     episodeLabel,
     variantName: variantName || stripTorrentExtension(currentFileName),
-    title: renderSeriesTitleTemplate(config.titleTemplate, variables),
+    title,
+    titleTags: titleTagBindings.flatMap(binding => binding.labels),
+    titleTagBindings,
+    suggestedTitle,
     sourceType,
     resolution,
     videoCodec,
     audioCodec,
     subtitle,
-    customTags,
     videoProfile: normalizeMatchedVideoProfile(resolution),
     subtitleProfile: normalizeMatchedSubtitleProfile(subtitle),
   }
@@ -473,30 +564,26 @@ function readEpisodeContent(config?: Config.PublishConfig | null) {
   return config.content as Partial<Config.Content_episode>
 }
 
-function composePublishTitle() {
-  const team = form.releaseTeam.trim()
-  const mainTitle =
-    form.seriesTitleEN.trim() || form.seriesTitleCN.trim() || form.seriesTitleJP.trim() || props.project.name
-  const seasonLabel = form.seasonLabel.trim()
-  const episodeLabel = activeEpisode.value?.episodeLabel?.trim() ?? ''
-  const techLabel = [
-    form.sourceType.trim(),
-    form.resolution.trim(),
-    form.videoCodec.trim(),
-    form.audioCodec.trim(),
-    activeVariant.value?.name?.trim() ?? '',
-  ]
-    .filter(Boolean)
-    .join(' / ')
-
-  let title = [team ? `[${team}]` : '', mainTitle, seasonLabel].filter(Boolean).join(' ')
-  if (episodeLabel) {
-    title = title ? `${title} - ${episodeLabel}` : episodeLabel
-  }
-  if (techLabel) {
-    title = title ? `${title} [${techLabel}]` : `[${techLabel}]`
-  }
-  return title.slice(0, 128)
+function composePublishTitle(options?: {
+  releaseTeam?: string
+  episodeLabel?: string
+  sourceType?: string
+  resolution?: string
+  videoCodec?: string
+  audioCodec?: string
+  variantName?: string
+}) {
+  return composeSeriesPublishTitle({
+    releaseTeam: options?.releaseTeam ?? form.releaseTeam.trim(),
+    mainTitle: form.seriesTitleEN.trim() || form.seriesTitleCN.trim() || form.seriesTitleJP.trim() || props.project.name,
+    seasonLabel: form.seasonLabel.trim(),
+    episodeLabel: options?.episodeLabel ?? activeEpisode.value?.episodeLabel?.trim() ?? '',
+    sourceType: options?.sourceType ?? form.sourceType.trim(),
+    resolution: options?.resolution ?? form.resolution.trim(),
+    videoCodec: options?.videoCodec ?? form.videoCodec.trim(),
+    audioCodec: options?.audioCodec ?? form.audioCodec.trim(),
+    variantName: options?.variantName ?? activeVariant.value?.name?.trim() ?? '',
+  })
 }
 
 function buildConfigFromForm() {
@@ -1093,14 +1180,38 @@ onMounted(() => {
               <span class="series-studio__field-label">{{ '\u5236\u4f5c\u7ec4\u6a21\u677f' }}</span>
               <el-input v-model="titleMatchForm.releaseTeamTemplate" placeholder="<team>" />
             </label>
-            <label class="series-studio__field series-studio__field--wide">
-              <span class="series-studio__field-label">{{ 'Custom \u6a21\u677f' }}</span>
-              <el-input
-                v-model="titleMatchForm.customTemplate"
-                :placeholder="'\u53ef\u9009\uff0c\u53ef\u7528\u82f1\u6587\u9017\u53f7\u5206\u9694\u591a\u4e2a\u81ea\u5b9a\u4e49\u6807\u7b7e'"
-              />
-            </label>
           </div>
+
+          <article class="series-studio__mapping-card">
+            <div class="series-studio__site-fields-head">
+              <div>
+                <div class="series-studio__site-name">{{ '\u6807\u9898\u6807\u7b7e\u6620\u5c04' }}</div>
+                <div class="series-studio__site-text">
+                  {{ '\u6bcf\u6761\u89c4\u5219\u90fd\u53ef\u4ee5\u81ea\u5df1\u6307\u5b9a\u4e00\u4e2a\u6a21\u677f\u8bcd\u3002\u68c0\u6d4b\u5230\u88ab\u6620\u5c04\u8bcd\u540e\uff0c\u5c31\u4f1a\u628a\u6620\u5c04\u7ed3\u679c\u5199\u8fdb\u5bf9\u5e94\u7684\u6a21\u677f\u8bcd\uff0c\u4f60\u53ea\u9700\u5728\u4e3b\u6807\u9898\u6a21\u677f\u91cc\u81ea\u5df1\u6446\u653e\u4f4d\u7f6e\u3002' }}
+                </div>
+              </div>
+              <div class="series-studio__site-actions">
+                <el-button plain size="small" @click="addTitleTagMapping">{{ '\u65b0\u589e\u6620\u5c04' }}</el-button>
+              </div>
+            </div>
+
+            <div v-if="titleMatchForm.titleTagMappings?.length" class="series-studio__mapping-stack">
+              <div
+                v-for="mapping in titleMatchForm.titleTagMappings"
+                :key="mapping.id"
+                class="series-studio__mapping-row"
+              >
+                <el-input v-model="mapping.keyword" :placeholder="'\u68c0\u6d4b\u8bcd\uff0c\u4f8b\u5982 ASSx2'" />
+                <el-input v-model="mapping.templateToken" :placeholder="'\u6a21\u677f\u8bcd\uff0c\u4f8b\u5982 <subtag>'" />
+                <el-input v-model="mapping.label" :placeholder="'\u6807\u9898\u6807\u7b7e\uff0c\u4f8b\u5982 \u7b80\u7e41\u65e5\u5185\u5c01'" />
+                <el-button text type="danger" @click="removeTitleTagMapping(mapping.id)">{{ '\u5220\u9664' }}</el-button>
+              </div>
+            </div>
+
+            <div v-else class="series-studio__empty">
+              {{ '\u6682\u65f6\u8fd8\u6ca1\u6709\u6620\u5c04\u89c4\u5219\uff0c\u53ef\u4ee5\u5148\u52a0\u4e00\u6761\uff0c\u6bd4\u5982 ASSx2 -> <subtag> -> \u7b80\u7e41\u65e5\u5185\u5c01\u3002' }}
+            </div>
+          </article>
 
           <div v-if="titleMatchPreview" class="series-studio__match-preview">
             <template v-if="matchedTitleMatchPreview">
@@ -1115,14 +1226,21 @@ onMounted(() => {
               <StatusChip v-if="matchedTitleMatchPreview.videoProfile" tone="info">{{ matchedTitleMatchPreview.videoProfile }}</StatusChip>
               <StatusChip v-if="matchedTitleMatchPreview.subtitleProfile" tone="warning">{{ matchedTitleMatchPreview.subtitleProfile }}</StatusChip>
               <StatusChip
-                v-for="customTag in matchedTitleMatchPreview.customTags"
-                :key="customTag"
+                v-for="titleTag in matchedTitleMatchPreview.titleTags"
+                :key="`${matchedTitleMatchPreview.fileName}-${titleTag}`"
                 tone="success"
               >
-                {{ customTag }}
+                {{ titleTag }}
               </StatusChip>
-              <span v-if="matchedTitleMatchPreview.title" class="series-studio__match-text">
-                {{ '\u751f\u6210\u6807\u9898\uff1a' }}{{ matchedTitleMatchPreview.title }}
+              <span
+                v-for="binding in matchedTitleMatchPreview.titleTagBindings"
+                :key="`${matchedTitleMatchPreview.fileName}-${binding.templateToken}`"
+                class="series-studio__match-text"
+              >
+                {{ '\u6a21\u677f\u8bcd\uff1a' }}{{ binding.templateToken }} {{ '\u2192' }} {{ binding.value }}
+              </span>
+              <span v-if="matchedTitleMatchPreview.suggestedTitle" class="series-studio__match-text">
+                {{ matchedTitleMatchPreview.title ? '\u6a21\u677f\u6807\u9898\uff1a' : '\u9884\u89c8\u6807\u9898\uff1a' }}{{ matchedTitleMatchPreview.suggestedTitle }}
               </span>
             </template>
             <template v-else-if="unmatchedTitleMatchPreview">
@@ -1520,10 +1638,20 @@ onMounted(() => {
     color-mix(in srgb, var(--bg-panel) 94%, white 6%);
 }
 
+.series-studio__mapping-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 24%, var(--border-soft));
+  border-radius: 1.2rem;
+  background: color-mix(in srgb, var(--bg-panel) 94%, white 6%);
+}
+
 .series-studio__headline,
 .series-studio__workspace,
 .series-studio__title-block,
-.series-studio__dialog-grid {
+.series-studio__dialog-grid,
+.series-studio__mapping-stack {
   display: grid;
   gap: 16px;
 }
@@ -1615,7 +1743,8 @@ onMounted(() => {
 .series-studio__site-grid,
 .series-studio__site-field-stack,
 .series-studio__bangumi-results,
-.series-studio__field-grid {
+.series-studio__field-grid,
+.series-studio__mapping-stack {
   display: grid;
   gap: 14px;
 }
@@ -1738,6 +1867,13 @@ onMounted(() => {
   gap: 8px;
 }
 
+.series-studio__mapping-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
 .series-studio__bangumi-result {
   display: flex;
   gap: 12px;
@@ -1810,6 +1946,11 @@ onMounted(() => {
   .series-studio__headline,
   .series-studio__details-grid {
     grid-template-columns: 1fr;
+  }
+
+  .series-studio__mapping-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
   }
 
   .series-studio__field--wide {

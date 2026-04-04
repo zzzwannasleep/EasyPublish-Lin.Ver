@@ -144,6 +144,13 @@ export interface SeriesPublishProfileSnapshot {
 
 export type SeriesVariantTemplate = SeriesPublishProfile
 
+export interface SeriesTitleTagMapping {
+  id?: string
+  keyword: string
+  templateToken: string
+  label: string
+}
+
 export interface SeriesTitleMatchConfig {
   fileNamePattern: string
   episodeTemplate?: string
@@ -155,7 +162,7 @@ export interface SeriesTitleMatchConfig {
   videoCodecTemplate?: string
   audioCodecTemplate?: string
   subtitleTemplate?: string
-  customTemplate?: string
+  titleTagMappings?: SeriesTitleTagMapping[]
   targetSites?: SiteId[]
   createdAt?: string
   updatedAt?: string
