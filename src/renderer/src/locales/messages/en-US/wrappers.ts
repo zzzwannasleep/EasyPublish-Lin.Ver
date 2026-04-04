@@ -111,6 +111,8 @@ const wrappers = {
   'accounts.actions.manualLogin': 'Manual Login',
   'accounts.actions.import': 'Import Cookies',
   'accounts.actions.export': 'Export Cookies',
+  'accounts.messages.acgripBrowserLogin':
+    'AcgRip is not logged in. Complete the sign-in flow in the popup browser window, then close it, or import cookies from JSON.',
   'accounts.messages.nyaaBrowserLogin': 'Nyaa is not logged in. Complete the sign-in flow in the popup browser window, then close it.',
   'accounts.actions.switchConfig': 'Switch Config',
   'accounts.actions.createConfig': 'Create Config',

@@ -368,6 +368,11 @@ async function checkLoginStatus(type: LegacyAccountType | 'all') {
     ElMessage.info(t('accounts.messages.nyaaBrowserLogin'))
     return
   }
+  if (type === 'acgrip' && normalizedStatus === 'loggedOut') {
+    openLoginWindow(type)
+    ElMessage.info(t('accounts.messages.acgripBrowserLogin'))
+    return
+  }
   if (normalizedStatus === 'failed' || normalizedStatus === 'passwordError') {
     ElMessage.error(`${toastSiteLabel}: ${result.status}`)
     return

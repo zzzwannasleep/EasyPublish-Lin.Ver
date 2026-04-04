@@ -111,6 +111,7 @@ const wrappers = {
   'accounts.actions.manualLogin': '手动登录',
   'accounts.actions.import': '导入 Cookie',
   'accounts.actions.export': '导出 Cookie',
+  'accounts.messages.acgripBrowserLogin': 'AcgRip 未登录，请在弹出的网页登录页完成登录后关闭窗口，或直接导入 Cookie。',
   'accounts.messages.nyaaBrowserLogin': 'Nyaa 未登录，请在弹出的网页登录页完成登录后关闭窗口。',
   'accounts.actions.switchConfig': '切换配置文件',
   'accounts.actions.createConfig': '新建配置文件',

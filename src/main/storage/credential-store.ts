@@ -200,9 +200,15 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
 
     const info = getSiteLoginInfo(siteId)
     const apiToken = getSiteApiToken(siteId)
+    const hasCookies = Boolean(info.cookies?.length)
     return {
       siteId,
-      authMode: siteId === 'mikan' || siteId === 'anibt' || siteId === 'miobt' || apiToken ? 'api_token' : 'username_password',
+      authMode:
+        siteId === 'mikan' || siteId === 'anibt' || siteId === 'miobt' || apiToken
+          ? 'api_token'
+          : hasCookies
+            ? 'cookie'
+            : 'username_password',
       username: info.username,
       enabled: info.enable,
       lastCheckAt: info.time,

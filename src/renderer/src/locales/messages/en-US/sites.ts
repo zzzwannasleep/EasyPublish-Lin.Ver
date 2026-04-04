@@ -128,6 +128,8 @@ const sites = {
   'nexus.site.manualCategoryId': 'Category ID',
   'nexus.site.manualResolutionId': 'Resolution ID',
   'nexus.site.manualTypeHint': 'If metadata is unavailable, you can still enter the required site IDs manually.',
+  'nexus.site.acgripManualHint':
+    'AcgRip publishes through the web upload form. Choose the AcgRip category here; title, description, and torrent file come from the current draft only.',
   'nexus.site.dmhyManualHint':
     'If metadata is unavailable, you can still choose a built-in DMHY category here. After login, load metadata to get the publish-team dropdown. Use team ID 0 for personal publishing.',
   'nexus.actions.validateAccount': 'Validate account',

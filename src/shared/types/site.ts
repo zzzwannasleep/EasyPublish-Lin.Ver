@@ -6,7 +6,17 @@ export type BuiltInSiteId = (typeof builtinSiteIds)[number]
 
 export type SiteId = string
 
-export type SiteAdapterKind = 'bangumi' | 'mikan' | 'anibt' | 'miobt' | 'nyaa' | 'dmhy' | 'nexusphp' | 'unit3d' | 'wordpress'
+export type SiteAdapterKind =
+  | 'bangumi'
+  | 'mikan'
+  | 'anibt'
+  | 'miobt'
+  | 'nyaa'
+  | 'acgrip'
+  | 'dmhy'
+  | 'nexusphp'
+  | 'unit3d'
+  | 'wordpress'
 
 export type SiteCapability =
   | 'torrent_publish'
@@ -305,19 +315,9 @@ export const defaultSiteProfiles: SiteProfile[] = [
   {
     id: 'acgrip',
     name: 'AcgRip',
-    adapter: 'nexusphp',
+    adapter: 'acgrip',
     baseUrl: 'https://acg.rip',
-    capabilities: [
-      'torrent_publish',
-      'cookie_auth',
-      'username_password_auth',
-      'metadata_sections',
-      'metadata_tags',
-      'metadata_sub_categories',
-      'content_preview',
-      'raw_response',
-      'nfo_upload',
-    ],
+    capabilities: ['torrent_publish', 'cookie_auth', 'browser_login', 'content_preview', 'raw_response'],
   },
   {
     id: 'dmhy',

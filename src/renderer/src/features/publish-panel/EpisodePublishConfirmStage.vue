@@ -752,6 +752,10 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
     }
   }
 
+  if (site?.adapter === 'acgrip') {
+    return baseInput
+  }
+
   if (site?.adapter === 'nyaa') {
     return {
       ...baseInput,

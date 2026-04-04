@@ -223,6 +223,10 @@ function isNyaaSite(site: SiteCatalogEntry) {
   return site.adapter === 'nyaa'
 }
 
+function isAcgripSite(site: SiteCatalogEntry) {
+  return site.adapter === 'acgrip'
+}
+
 function supportsMetadata(site: SiteCatalogEntry) {
   return site.capabilitySet.metadata.sections
 }
@@ -817,6 +821,10 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
     }
   }
 
+  if (site?.adapter === 'acgrip') {
+    return baseInput
+  }
+
   if (site?.adapter === 'nyaa') {
     return {
       ...baseInput,
@@ -1008,6 +1016,7 @@ async function bootstrap() {
         site.adapter === 'mikan' ||
         site.adapter === 'anibt' ||
         site.adapter === 'miobt' ||
+        site.adapter === 'acgrip' ||
         site.adapter === 'nexusphp' ||
         site.adapter === 'unit3d',
     )
@@ -1297,6 +1306,28 @@ onMounted(() => {
               <el-input-number v-model="ensureDraft(site.id).bangumiId" :controls="false" :min="1" />
             </el-form-item>
             <div />
+          </div>
+
+          <div v-else-if="isAcgripSite(site)" class="nexus-site-card__manual">
+            <div class="nexus-site-card__hint">
+              {{ t('nexus.site.acgripManualHint') }}
+            </div>
+            <div class="nexus-form__grid">
+              <el-form-item :label="t('sites.form.category')">
+                <el-select
+                  v-if="getSiteFieldOptions(site.id, 'typeId').length > 0"
+                  v-model="ensureDraft(site.id).typeId"
+                >
+                  <el-option
+                    v-for="option in getSiteFieldOptions(site.id, 'typeId')"
+                    :key="option.value"
+                    :label="option.label"
+                    :value="Number(option.value)"
+                  />
+                </el-select>
+                <el-input-number v-else v-model="ensureDraft(site.id).typeId" :controls="false" :min="1" />
+              </el-form-item>
+            </div>
           </div>
 
           <div v-else-if="isNyaaSite(site)" class="nexus-form__grid">

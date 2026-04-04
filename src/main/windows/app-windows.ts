@@ -34,6 +34,17 @@ function getLoginUrl(type: string) {
   return 'https://vcb-s.com'
 }
 
+function getCookieStorageUrl(type: string) {
+  if (type === 'bangumi') return 'https://bangumi.moe'
+  if (type === 'mikan') return 'https://mikanani.me'
+  if (type === 'nyaa') return 'https://nyaa.si'
+  if (type === 'acgrip') return 'https://acg.rip'
+  if (type === 'dmhy') return 'https://www.dmhy.org'
+  if (type === 'acgnx_g') return 'https://www.acgnx.se'
+  if (type === 'acgnx_a') return 'https://share.acgnx.se'
+  return 'https://vcb-s.com'
+}
+
 function parseMikanApiToken(data: unknown) {
   function normalizeCandidate(value: string) {
     const token = value.trim()
@@ -330,7 +341,7 @@ export async function openLoginWindow(options: OpenLoginWindowOptions) {
           })
         await userDB.write()
       } else {
-        await setCookies(type, url)
+        await setCookies(type, getCookieStorageUrl(type))
         if (type === 'mikan') {
           const apiToken = explicitMikanApiToken.trim() || (await fetchMikanApiToken())
           if (apiToken) {

@@ -501,6 +501,8 @@ const workflow = {
     '预填 MioBT 的主页地址字段，会映射到接口里的 discuss_url。',
   'seriesWorkspace.profileEditor.siteFields.dmhyCategoryHelp':
     '为 DMHY 预填默认分类。发布时如果成功加载元数据，也可以在面板里再改。',
+  'seriesWorkspace.profileEditor.siteFields.acgripCategoryHelp':
+    '为 AcgRip 预填默认分类。这个值只会交给新的 AcgRip 专用适配器，不再沿用其它站点的旧映射。',
   'seriesWorkspace.profileEditor.siteFields.dmhyTeamHelp':
     '这项和账号绑定。登录后，发布面板可以读取中文“发布方式”下拉；这里仅用于预填你已经知道的 ID。',
   'seriesWorkspace.profileEditor.siteFields.dmhyPosterUrlHelp':

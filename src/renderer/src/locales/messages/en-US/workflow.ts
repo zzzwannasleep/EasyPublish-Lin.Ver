@@ -521,6 +521,8 @@ const workflow = {
     'Prefill MioBT\'s homepage field. It will be sent as discuss_url in the API request.',
   'seriesWorkspace.profileEditor.siteFields.dmhyCategoryHelp':
     'Prefill the default DMHY category. You can still adjust it in the publish panel after metadata loads.',
+  'seriesWorkspace.profileEditor.siteFields.acgripCategoryHelp':
+    'Prefill the default AcgRip category. This value goes only to the dedicated AcgRip adapter and no longer inherits any legacy site mapping.',
   'seriesWorkspace.profileEditor.siteFields.dmhyTeamHelp':
     'This value is account-specific. After login, the publish panel can load a readable DMHY publish-team dropdown; this field is only for prefilling a known ID.',
   'seriesWorkspace.profileEditor.siteFields.dmhyPosterUrlHelp':

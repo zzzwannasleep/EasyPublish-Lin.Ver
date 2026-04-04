@@ -124,6 +124,7 @@ const sites = {
   'nexus.site.manualCategoryId': 'Category ID',
   'nexus.site.manualResolutionId': 'Resolution ID',
   'nexus.site.manualTypeHint': '如果暂时拿不到站点元数据，也可以先手动填写站点要求的 ID。',
+  'nexus.site.acgripManualHint': 'AcgRip 会按网页上传表单提交。这里明确选择 AcgRip 分类即可，其余字段只使用当前填写的标题、简介和种子文件。',
   'nexus.site.dmhyManualHint':
     '如果暂时拿不到 DMHY 元数据，也可以先在这里直接选择内置分类。登录后再加载元数据，就能读取中文“发布方式”下拉；填 0 表示个人发布。',
   'nexus.actions.validateAccount': '检测账号',

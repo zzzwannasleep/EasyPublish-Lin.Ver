@@ -1416,43 +1416,6 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
     }
   }
 
-  async function loginAcgripClean(info: Config.LoginInfo) {
-    try {
-      await clearSiteCookies(info, 'https://acg.rip')
-      await setStatusAndPersist(info, legacyAccountStatusText.loggingIn)
-
-      const url = 'https://acg.rip/users/sign_in'
-      const formData = new FormData()
-      const csrf = await axios.get(url, { responseType: 'text' })
-      await storeResponseCookies(info, 'https://acg.rip', csrf.headers['set-cookie'])
-      await persistUserData()
-
-      const token = (csrf.data as string).match(/name="csrf-token"\scontent="([\S]*?)"/)?.[1]
-      if (!token) {
-        throw new Error('Missing Acgrip CSRF token')
-      }
-
-      formData.append('authenticity_token', token)
-      formData.append('user[email]', info.username)
-      formData.append('user[password]', info.password)
-      formData.append('user[remember_me]', '1')
-      formData.append('commit', 'Log in')
-
-      const response = await axios.post(url, formData, { responseType: 'text' })
-      if (response.status != 302) {
-        await setStatusAndPersist(info, legacyAccountStatusText.passwordError)
-        return
-      }
-
-      await storeResponseCookies(info, 'https://acg.rip', response.headers['set-cookie'])
-      await verifyAuthenticated(info, checkAcgripLoginStatusClean)
-      await persistUserData()
-    } catch (err) {
-      log.error(err)
-      await setStatusAndPersist(info, legacyAccountStatusText.failed)
-    }
-  }
-
   async function loginNyaaClean(info: Config.LoginInfo, key: string) {
     try {
       await clearSiteCookies(info, 'https://nyaa.si')
@@ -1642,9 +1605,6 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
       if (type == 'acgrip') {
         await checkAcgripLoginStatusClean(info)
         await persistUserData()
-        if (info.status == legacyAccountStatusText.loggedOut && info.username && info.password) {
-          await loginAcgripClean(info)
-        }
       }
 
       if (type == 'mikan') {
