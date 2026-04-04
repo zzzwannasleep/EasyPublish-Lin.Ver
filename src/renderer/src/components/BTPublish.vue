@@ -19,7 +19,6 @@ type LegacySiteType =
   | 'bangumi'
   | 'mikan'
   | 'miobt'
-  | 'nyaa'
   | 'acgrip'
   | 'dmhy'
   | 'acgnx_g'
@@ -81,12 +80,6 @@ const baseRows: Array<Omit<LegacyPublishRow, 'index' | 'status' | 'lock' | 'rowC
     type: 'miobt',
     siteId: 'miobt',
     description: '通过 UID + API Key 发布。',
-  },
-  {
-    name: 'Nyaa',
-    type: 'nyaa',
-    siteId: 'nyaa',
-    description: '旧 Nyaa 上传链路，结果和失败记录统一进项目历史。',
   },
   {
     name: 'Acgrip',

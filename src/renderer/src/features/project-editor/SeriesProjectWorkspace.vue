@@ -282,7 +282,7 @@ function updateSiteFieldValue(siteId: SiteId, field: SiteFieldSchemaEntry, value
     form.categoryBangumi =
       (typeof normalizedValue === 'string' && normalizedValue.trim()) || DEFAULT_BANGUMI_CATEGORY
   }
-  if (siteId === 'nyaa' && field.key === 'category_nyaa') {
+  if (siteId === 'nyaa' && (field.key === 'category_nyaa' || field.key === 'categoryCode')) {
     form.categoryNyaa = (typeof normalizedValue === 'string' && normalizedValue.trim()) || DEFAULT_NYAA_CATEGORY
   }
 }
@@ -290,6 +290,7 @@ function updateSiteFieldValue(siteId: SiteId, field: SiteFieldSchemaEntry, value
 function syncCategoriesIntoSiteFields() {
   ensureSiteFieldEntry('bangumi').category_bangumi = form.categoryBangumi
   ensureSiteFieldEntry('nyaa').category_nyaa = form.categoryNyaa
+  ensureSiteFieldEntry('nyaa').categoryCode = form.categoryNyaa
 }
 
 function buildSiteFieldDefaultsPayload() {
@@ -653,6 +654,7 @@ function initializeFormFromConfig(config: Config.PublishConfig) {
     DEFAULT_BANGUMI_CATEGORY
   form.categoryNyaa =
     normalizeOptionalString(config.category_nyaa) ||
+    normalizeOptionalString(siteFieldDefaults.nyaa?.categoryCode) ||
     normalizeOptionalString(siteFieldDefaults.nyaa?.category_nyaa) ||
     DEFAULT_NYAA_CATEGORY
   form.completed = config.completed === true

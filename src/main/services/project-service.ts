@@ -515,6 +515,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       nextFieldDefaults.nyaa = {
         ...(nextFieldDefaults.nyaa ?? {}),
         category_nyaa: nyaaCategory,
+        categoryCode: nyaaCategory,
       }
     }
 
@@ -1340,6 +1341,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
               },
               nyaa: {
                 category_nyaa: nyaaCategory,
+                categoryCode: nyaaCategory,
               },
             }
           : undefined,

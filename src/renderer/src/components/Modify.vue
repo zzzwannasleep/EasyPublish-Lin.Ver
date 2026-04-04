@@ -44,7 +44,6 @@
     //设置表格数据
     let siteName = {
         bangumi: '萌番组',
-        nyaa: 'Nyaa',
         acgrip: 'Acgrip',
         dmhy: '动漫花园',
         acgnx_a: '末日动漫',

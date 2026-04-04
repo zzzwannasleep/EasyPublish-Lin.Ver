@@ -61,6 +61,7 @@ const sites = {
   'sites.form.publishGroupId': '发布组 ID',
   'sites.form.nfoFile': 'NFO 文件',
   'sites.form.posterUrl': '宣传海报',
+  'sites.form.information': 'Nyaa 信息栏',
   'sites.form.referenceUrl': '参考链接',
   'sites.form.ptgen': 'PT-Gen',
   'sites.form.technicalInfo': '技术信息',
@@ -74,6 +75,8 @@ const sites = {
   'sites.actions.pickNfo': '选择 NFO',
   'sites.actions.publishViaAdapter': '通过适配器发布',
   'sites.flags.anonymous': '匿名 / uplver=yes',
+  'sites.flags.complete': 'Complete',
+  'sites.flags.remake': 'Remake',
   'sites.values.none': '无',
   'sites.values.normal': 'normal',
   'sites.values.sticky': 'sticky',
@@ -108,6 +111,7 @@ const sites = {
   'nexus.site.sharedFieldsAnibt':
     '这个适配器会使用上方通用字段中的标题、简介和种子文件，并直接把 torrent 作为种子上传到 Anibt；通用简介会转成 Markdown 后作为 notes 发送。',
   'nexus.site.sharedFieldsDmhy': '这个适配器会使用上方通用字段中的标题、简介和种子文件，分类、发布方式与附加字段在下方填写。',
+  'nexus.site.sharedFieldsNyaa': '这个适配器会使用上方通用字段中的标题、简介、种子和匿名设置；Nyaa 分类、信息栏与标记在下方填写。',
   'nexus.site.requiredSection': '站点必填项',
   'nexus.site.optionalSection': '填写项目',
   'nexus.site.noRequiredFields': '这个适配器当前还没有站点专属必填字段。',
@@ -115,6 +119,7 @@ const sites = {
   'nexus.site.anibtOptionalHint':
     'Bangumi ID 为必填。适配器现在会直接上传种子文件；集数、分辨率、语言、字幕类型、封装格式、版本号和文件大小都可选。若 trackers 或 fileSize 留空，可由 Anibt 从已上传的 torrent 中自动提取。',
   'nexus.site.dmhyOptionalHint': '海报地址留空时，会尝试使用简介里的第一张图片。发布方式填 0 表示个人发布。',
+  'nexus.site.nyaaOptionalHint': 'Information 会写入 Nyaa 的信息栏。Complete 和 Remake 会按旧版 Nyaa 逻辑提交。',
   'nexus.site.manualTypeId': 'Type ID',
   'nexus.site.manualCategoryId': 'Category ID',
   'nexus.site.manualResolutionId': 'Resolution ID',

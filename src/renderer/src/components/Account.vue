@@ -363,6 +363,11 @@ async function checkLoginStatus(type: LegacyAccountType | 'all') {
 
   const account = siteAccounts.find(item => item.type === type)
   const normalizedStatus: string = getDisplayAccountStatus(result.status, account?.enable ?? true)
+  if (type === 'nyaa' && normalizedStatus === 'loggedOut') {
+    openLoginWindow(type)
+    ElMessage.info(t('accounts.messages.nyaaBrowserLogin'))
+    return
+  }
   if (normalizedStatus === 'failed' || normalizedStatus === 'passwordError') {
     ElMessage.error(`${toastSiteLabel}: ${result.status}`)
     return

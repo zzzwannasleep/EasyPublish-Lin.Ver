@@ -150,14 +150,12 @@ onMounted(async () => {
 })
 
 const imageDialogVisible = ref(false)
-const reCaptchaDialogVisibleNyaa = ref(false)
 const turnstileDialogVisibleAcgnxA = ref(false)
 const turnstileDialogVisibleAcgnxG = ref(false)
 const turnstileValidationAcgnxG = useTemplateRef('turnstileValidationAcgnxG')
 const turnstileValidationAcgnxA = useTemplateRef('turnstileValidationAcgnxA')
 const imgSrc = ref('')
 const imgCaptcha = ref('')
-let reCaptcha = ''
 
 async function refreshImage() {
   imageDialogVisible.value = true
@@ -168,11 +166,6 @@ window.BTAPI.loadImageCaptcha(refreshImage)
 
 async function setValidation(message: string) {
   const { type } = JSON.parse(message) as Message.BT.ValidationType
-  if (type === 'nyaa') {
-    reCaptchaDialogVisibleNyaa.value = true
-    return
-  }
-
   if (type === 'acgnx_g') {
     turnstileDialogVisibleAcgnxG.value = true
     return
@@ -182,10 +175,6 @@ async function setValidation(message: string) {
 }
 
 window.BTAPI.loadValidation(setValidation)
-
-window.addEventListener('message', (event) => {
-  reCaptcha = event.data
-})
 
 window.BTAPI.closeValidation(() => {
   turnstileDialogVisibleAcgnxG.value = false
@@ -199,14 +188,6 @@ async function submitCaptcha(type: string) {
     imageDialogVisible.value = false
     return
   }
-
-  const message: Message.BT.ValidationInfo = { type: 'nyaa', key: reCaptcha }
-  window.BTAPI.loginAccount(JSON.stringify(message))
-}
-
-async function confirmNyaaCaptcha() {
-  await submitCaptcha('nyaa')
-  reCaptchaDialogVisibleNyaa.value = false
 }
 
 async function setTurnstilePosition(type: 'acgnx_g' | 'acgnx_a') {
@@ -273,21 +254,6 @@ provideAppChrome({
         <el-input v-model="imgCaptcha" />
         <el-button type="primary" @click="submitCaptcha('dmhy')">{{
           t('app.captcha.submit')
-        }}</el-button>
-      </div>
-    </el-dialog>
-
-    <el-dialog
-      v-model="reCaptchaDialogVisibleNyaa"
-      align-center
-      destroy-on-close
-      :title="t('app.captcha.nyaaTitle')"
-      width="390"
-    >
-      <iframe class="h-[500px] w-full rounded-[14px] border-0" src="https://nyaa.si/grecaptcha" />
-      <div class="mt-[18px] flex justify-end">
-        <el-button type="primary" @click="confirmNyaaCaptcha">{{
-          t('app.captcha.confirm')
         }}</el-button>
       </div>
     </el-dialog>

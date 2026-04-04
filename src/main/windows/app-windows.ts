@@ -1,6 +1,5 @@
-import { app, shell, BrowserWindow, ipcMain, net, session } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, session } from 'electron'
 import { is } from '@electron-toolkit/utils'
-import fs from 'fs'
 import log from 'electron-log'
 import type { Low } from 'lowdb'
 import { join } from 'path'
@@ -11,7 +10,6 @@ type RefreshLoginDataHandler = () => void
 
 interface CreateMainAppWindowOptions {
   appIcon: string
-  nyaaResponse: string
   userAgent: string
   getUserDB: UserDbProvider
 }
@@ -102,7 +100,7 @@ function parseMikanApiTokenFromUrl(rawUrl: string) {
 }
 
 export function createMainAppWindow(options: CreateMainAppWindowOptions) {
-  const { appIcon, nyaaResponse, userAgent, getUserDB } = options
+  const { appIcon, userAgent, getUserDB } = options
   const partition = 'persist:mainWindow'
   const mainWindow = new BrowserWindow({
     width: 1150,
@@ -118,27 +116,6 @@ export function createMainAppWindow(options: CreateMainAppWindowOptions) {
       partition,
     },
     icon: appIcon,
-  })
-
-  const browserSession = session.fromPartition(partition)
-
-  browserSession.protocol.handle('https', async req => {
-    try {
-      const { host, pathname } = new URL(req.url)
-      if (pathname === '/grecaptcha' && host === 'nyaa.si') {
-        const data = fs.readFileSync(nyaaResponse, { encoding: 'utf-8' })
-        return new Response(data, {
-          headers: { 'content-type': 'text/html' },
-        })
-      }
-      return net.fetch(req, { bypassCustomProtocolHandlers: true })
-    } catch (err) {
-      log.error(err)
-      return new Response('bad', {
-        status: 400,
-        headers: { 'content-type': 'text/html' },
-      })
-    }
   })
 
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {

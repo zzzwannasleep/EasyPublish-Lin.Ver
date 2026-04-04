@@ -41,7 +41,6 @@ const common = {
   'app.proxy.port': 'Port',
   'app.proxy.saved': 'Proxy settings saved.',
   'app.captcha.dmhyTitle': 'Login to DMHY',
-  'app.captcha.nyaaTitle': 'Login to Nyaa',
   'app.captcha.acgnxGlobalTitle': 'Login to AcgnX Global',
   'app.captcha.acgnxAsiaTitle': 'Login to AcgnX Asia',
   'app.captcha.refresh': 'Refresh captcha',

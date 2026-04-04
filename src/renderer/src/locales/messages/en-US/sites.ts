@@ -61,6 +61,7 @@ const sites = {
   'sites.form.publishGroupId': 'Publish Group ID',
   'sites.form.nfoFile': 'NFO File',
   'sites.form.posterUrl': 'Poster URL',
+  'sites.form.information': 'Nyaa Information',
   'sites.form.referenceUrl': 'Reference URL',
   'sites.form.ptgen': 'PT-Gen',
   'sites.form.technicalInfo': 'Technical Info',
@@ -74,6 +75,8 @@ const sites = {
   'sites.actions.pickNfo': 'Pick NFO',
   'sites.actions.publishViaAdapter': 'Publish via adapter',
   'sites.flags.anonymous': 'Anonymous / uplver=yes',
+  'sites.flags.complete': 'Complete',
+  'sites.flags.remake': 'Remake',
   'sites.values.none': 'None',
   'sites.values.normal': 'normal',
   'sites.values.sticky': 'sticky',
@@ -109,6 +112,8 @@ const sites = {
     'This adapter uses the shared title, description, and torrent above, then uploads the torrent file directly to Anibt. The description is converted to Markdown and sent as notes.',
   'nexus.site.sharedFieldsDmhy':
     'This adapter uses the shared title, description, and torrent file above. Category, publish team, and DMHY-specific options are configured below.',
+  'nexus.site.sharedFieldsNyaa':
+    'This adapter uses the shared title, description, torrent, and anonymous option above. Nyaa category, information field, and release flags are configured below.',
   'nexus.site.requiredSection': 'Required Fields',
   'nexus.site.optionalSection': 'Fields to Fill',
   'nexus.site.noRequiredFields': 'This adapter does not require any site-specific fields yet.',
@@ -117,6 +122,8 @@ const sites = {
     'Bangumi ID is required. The adapter now uploads the torrent file directly. Episode, resolution, language, subtitle, format, version, and file size are optional. Leave trackers or file size empty if you want Anibt to derive them from the uploaded torrent.',
   'nexus.site.dmhyOptionalHint':
     'If poster URL is empty, the adapter will try to use the first image from the description. Team ID 0 means personal publishing.',
+  'nexus.site.nyaaOptionalHint':
+    'Information is sent to the Nyaa information field. Complete and Remake follow the legacy Nyaa flags.',
   'nexus.site.manualTypeId': 'Type ID',
   'nexus.site.manualCategoryId': 'Category ID',
   'nexus.site.manualResolutionId': 'Resolution ID',

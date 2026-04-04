@@ -265,7 +265,6 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
             refreshLoginData()
             if (info.status == '璐﹀彿鏈櫥褰?') {
               if (info.username != '' && info.password != '') {
-                notifyValidationRequired('nyaa')
               }
             }
           }
@@ -531,7 +530,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
   async function loginAccount(msg: string) {
     const { type, key, position }: Message.BT.ValidationInfo = JSON.parse(msg)
     const info = getLoginInfo(type)
-    if (type == 'nyaa') void loginNyaa(info, key!)
+    if (type == '__legacy_nyaa_removed__') void loginNyaa(info, key!)
     if (type == 'acgnx_a') void loginAcgnxA(info, position!)
     if (type == 'acgnx_g') void loginAcgnxG(info, position!)
     if (type == 'dmhy') void loginDmhy(info, key!)
@@ -1607,7 +1606,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
   async function loginAccountClean(msg: string) {
     const { type, key, position }: Message.BT.ValidationInfo = JSON.parse(msg)
     const info = getLoginInfo(type)
-    if (type == 'nyaa') await loginNyaaClean(info, key!)
+    if (type == '__legacy_nyaa_removed__') await loginNyaaClean(info, key!)
     if (type == 'acgnx_a') await loginAcgnxAClean(info, position!)
     if (type == 'acgnx_g') await loginAcgnxGClean(info, position!)
     if (type == 'dmhy') await loginDmhyClean(info, key!)
@@ -1666,9 +1665,6 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
       if (type == 'nyaa') {
         await checkNyaaLoginStatusClean(info)
         await persistUserData()
-        if (info.status == legacyAccountStatusText.loggedOut && info.username && info.password) {
-          notifyValidationRequired('nyaa')
-        }
       }
 
       if (type == 'acgnx_a') {

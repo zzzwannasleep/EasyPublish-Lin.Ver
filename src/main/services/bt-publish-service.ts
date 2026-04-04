@@ -83,7 +83,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
         return 'bangumi'
       case 'mikan':
       case 'miobt':
-      case 'nyaa':
       case 'acgrip':
       case 'dmhy':
       case 'acgnx_a':
@@ -104,8 +103,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
         return 'Mikan'
       case 'miobt':
         return 'MioBT'
-      case 'nyaa':
-        return 'Nyaa'
       case 'acgrip':
         return 'AcgRip'
       case 'dmhy':
@@ -213,7 +210,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
     if (type == 'bangumi') return await publishBangumi(task, config, false)
     if (type == 'mikan') return await publishMikan(task, config)
     if (type == 'miobt') return await publishMioBt(task, config)
-    if (type == 'nyaa') return await publishNyaa(task, config)
     if (type == 'dmhy') return await publishDmhy(task, config)
     if (type == 'acgnx_a') return await publishAcgnxA(task, config)
     if (type == 'acgnx_g') return await publishAcgnxG(task, config)
@@ -307,41 +303,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
         if (!task.bangumi) {
           const id = (response.data.message as string).slice(16)
           task.bangumi = `https://bangumi.moe/torrent/${id}`
-          await taskDB.write()
-        }
-        return 'exist'
-      }
-      log.error(response)
-      return 'failed'
-    } catch (err) {
-      log.error(err)
-      return 'failed'
-    }
-  }
-
-  async function publishNyaa(task: Config.Task, config: Config.PublishConfig) {
-    try {
-      const taskDB = getTaskDBOrThrow()
-      const torrent = fs.readFileSync(join(task.path, config.torrentName))
-      const md = fs.readFileSync(join(task.path, 'nyaa.md'), { encoding: 'utf-8' })
-      const formData = new FormData()
-      formData.append('torrent_file', new Blob([torrent], { type: 'application/x-bittorrent' }), config.torrentName)
-      formData.append('display_name', config.title)
-      formData.append('category', config.category_nyaa)
-      formData.append('information', config.information)
-      if (config.completed) formData.append('is_complete', 'y')
-      if (config.remake) formData.append('is_remake', 'y')
-      formData.append('description', md)
-      const response = await axios.post('https://nyaa.si/upload', formData, { responseType: 'text' })
-      if ((response.data as string).includes('You should be redirected automatically to target URL')) {
-        task.nyaa = response.headers.location
-        await taskDB.write()
-        return 'success'
-      }
-      if ((response.data as string).includes('This torrent already exists')) {
-        if (!task.nyaa) {
-          const id = (response.data as string).match(/This\storrent\salready\sexists\s\(#(\d+)\)/)![1]
-          task.nyaa = `https://nyaa.si/view/${id}`
           await taskDB.write()
         }
         return 'exist'
@@ -868,9 +829,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
     if (loginInfo.find(item => item.name == 'bangumi')!.enable) {
       mergeTorrentDetails(result.list, await getBangumiTorrentList(), 'bangumi')
     }
-    if (loginInfo.find(item => item.name == 'nyaa')!.enable) {
-      mergeTorrentDetails(result.list, await getNyaaTorrentList(), 'nyaa')
-    }
     if (loginInfo.find(item => item.name == 'acgrip')!.enable) {
       mergeTorrentDetails(result.list, await getAcgripTorrentList(), 'acgrip')
     }
@@ -889,7 +847,7 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
   function mergeTorrentDetails(
     list: Message.BT.TorrentList['list'],
     items: { title: string; detail: unknown }[],
-    key: 'bangumi' | 'nyaa' | 'acgrip' | 'dmhy' | 'acgnx_a' | 'acgnx_g',
+    key: 'bangumi' | 'acgrip' | 'dmhy' | 'acgnx_a' | 'acgnx_g',
   ) {
     items.forEach(item => {
       const torrent = list.find(element => element.title == item.title)
@@ -919,35 +877,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
               tag_ids: item.tag_ids,
               content: item.introduction,
             },
-          },
-        })
-      })
-      return result
-    } catch (err) {
-      log.error(err)
-      return []
-    }
-  }
-
-  async function getNyaaTorrentList() {
-    try {
-      const team = await axios.get('https://nyaa.si/profile', { responseType: 'text' })
-      const teamName = (team.data as string).match(/Profile\sof\s<strong\sclass="text-default">([\s\S]*?)<\/strong>/)![1]
-      const response = await axios.get(`https://nyaa.si/user/${teamName}`, { responseType: 'text' })
-      const torrents = (response.data as string).match(/<tr\s\S*?>[\s\S]*?<\/tr>/g) ?? []
-      const result: { title: string; detail: Message.BT.TorrentDetail.NyaaDetail }[] = []
-      torrents.forEach(item => {
-        const substr = item.match(/<td\scolspan="2">[\s\S]*?<\/td>/g)?.[0]
-        if (!substr) return
-        const matches = substr.match(/<a\shref="(\S*?)"\stitle="([\s\S]*?)">/)
-        if (!matches) return
-        const [, link, title] = matches
-        result.push({
-          title: unescapeHtml(title),
-          detail: {
-            id: link.slice(6),
-            url: `https://nyaa.si${link}`,
-            is_loaded: false,
           },
         })
       })
@@ -1041,35 +970,11 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
   async function getTorrentDetail(msg: string) {
     const { type, id }: Message.BT.TorrentInfo = JSON.parse(msg)
     let result
-    if (type == 'nyaa') result = await getNyaaTorrentDetail(id)
     if (type == 'acgrip') result = await getAcgripTorrentDetail(id)
     if (type == 'acgnx_a') result = await getAcgnxTorrentDetail(false, id)
     if (type == 'acgnx_g') result = await getAcgnxTorrentDetail(true, id)
     if (type == 'dmhy') result = await getDmhyTorrentDetail(id)
     return JSON.stringify(result)
-  }
-
-  async function getNyaaTorrentDetail(id: string) {
-    try {
-      const response = await axios.get(`https://nyaa.si/view/${id}/edit`, { responseType: 'text' })
-      const data = response.data as string
-      const content = data.match(/<textarea[\s\S]*?>([\s\S]*?)<\/textarea>/)![1]
-      const category = data.match(/<option\sselected\svalue="([\s\S]*?)">/)![1]
-      const information = data.match(/<input[\s\S]*?id="information"[\s\S]*?value="([\s\S]*?)"/)![1]
-      const isRemake = data.includes('<input checked id="is_remake"')
-      const isComplete = data.includes('<input checked id="is_complete"')
-      const result: Message.BT.TorrentDetail.NyaaContent = {
-        content,
-        category,
-        information,
-        is_complete: isComplete,
-        is_remake: isRemake,
-      }
-      return result
-    } catch (err) {
-      log.error(err)
-      return
-    }
   }
 
   async function getAcgripTorrentDetail(id: string) {
@@ -1148,7 +1053,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
     const { type, id, config, title }: Message.BT.UpdatedContent = JSON.parse(msg)
     let result
     if (type == 'bangumi') result = await updateBangumiTorrent(title, id, config as Message.BT.TorrentDetail.BangumiContent)
-    if (type == 'nyaa') result = await updateNyaaTorrent(title, id, config as Message.BT.TorrentDetail.NyaaContent)
     if (type == 'acgnx_a') result = await updateAcgnxTorrent(false, title, id, config as Message.BT.TorrentDetail.AcgnxContent)
     if (type == 'acgnx_g') result = await updateAcgnxTorrent(true, title, id, config as Message.BT.TorrentDetail.AcgnxContent)
     if (type == 'dmhy') result = await updateDmhyTorrent(title, id, config as Message.BT.TorrentDetail.DmhyContent)
@@ -1172,25 +1076,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
       }
       const response = await axios.post('https://bangumi.moe/api/torrent/update', data, { responseType: 'json' })
       if (response.status == 200 && response.data.success) return 'success'
-      return 'failed'
-    } catch (err) {
-      log.error(err)
-      return 'failed'
-    }
-  }
-
-  async function updateNyaaTorrent(title: string, id: string, config: Message.BT.TorrentDetail.NyaaContent) {
-    try {
-      const formData = new FormData()
-      formData.append('display_name', title)
-      formData.append('category', config.category)
-      formData.append('information', config.information)
-      formData.append('description', config.content)
-      if (config.is_complete) formData.append('is_complete', 'y')
-      if (config.is_remake) formData.append('is_remake', 'y')
-      formData.append('submit', 'Save Changes')
-      const response = await axios.post(`https://nyaa.si/view/${id}/edit`, formData, { responseType: 'text' })
-      if ((response.data as string).includes('You should be redirected automatically to target URL')) return 'success'
       return 'failed'
     } catch (err) {
       log.error(err)

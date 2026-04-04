@@ -6,6 +6,7 @@ import { createDmhyAdapter } from './dmhy/adapter'
 import { createMikanAdapter } from './mikan/adapter'
 import { createMiobtAdapter } from './miobt/adapter'
 import { createNexusphpAdapter } from './nexusphp/adapter'
+import { createNyaaAdapter } from './nyaa/adapter'
 import { createUnit3dAdapter } from './unit3d/adapter'
 import { createWordpressAdapter } from './wordpress/adapter'
 
@@ -45,24 +46,6 @@ const BANGUMI_FIELD_SCHEMAS: SiteFieldSchemaEntry[] = [
   },
 ]
 
-const NYAA_FIELD_SCHEMAS: SiteFieldSchemaEntry[] = [
-  {
-    key: 'category_nyaa',
-    labelKey: 'seriesWorkspace.profileEditor.siteFields.nyaaCategory',
-    helpKey: 'seriesWorkspace.profileEditor.siteFields.nyaaHelp',
-    control: 'select',
-    mode: 'required',
-    options: [
-      { label: 'Anime - English-translated', value: '1_2' },
-      { label: 'Anime - Non-English-translated', value: '1_3' },
-      { label: 'Anime - Raw', value: '1_4' },
-      { label: 'Live Action - English-translated', value: '4_1' },
-      { label: 'Live Action - Non-English-translated', value: '4_3' },
-      { label: 'Live Action - Raw', value: '4_4' },
-    ],
-  },
-]
-
 function cloneSiteFieldSchemas(fieldSchemas: SiteFieldSchemaEntry[] = []): SiteFieldSchemaEntry[] {
   return fieldSchemas.map(field => ({
     ...field,
@@ -71,7 +54,7 @@ function cloneSiteFieldSchemas(fieldSchemas: SiteFieldSchemaEntry[] = []): SiteF
 }
 
 function createStaticAdapter(
-  id: Exclude<SiteAdapterKind, 'mikan' | 'anibt' | 'miobt' | 'dmhy' | 'nexusphp' | 'unit3d'>,
+  id: Exclude<SiteAdapterKind, 'mikan' | 'anibt' | 'miobt' | 'dmhy' | 'nyaa' | 'nexusphp' | 'unit3d'>,
   displayName: string,
   note: string,
   fieldSchemas: SiteFieldSchemaEntry[] = [],
@@ -114,12 +97,7 @@ export function createSiteRegistry(options: CreateSiteRegistryOptions = {}) {
     createAnibtAdapter(),
     createMiobtAdapter(),
     createDmhyAdapter(),
-    createStaticAdapter(
-      'nyaa',
-      'Nyaa',
-      'Legacy Nyaa workflow remains bridged through the existing BT service.',
-      NYAA_FIELD_SCHEMAS,
-    ),
+    createNyaaAdapter(),
     createNexusphpAdapter(),
     createUnit3dAdapter(),
     createWordpressAdapter(),

@@ -41,7 +41,6 @@ const common = {
   'app.proxy.port': '端口',
   'app.proxy.saved': '代理设置已保存。',
   'app.captcha.dmhyTitle': '登录动漫花园',
-  'app.captcha.nyaaTitle': '登录 Nyaa',
   'app.captcha.acgnxGlobalTitle': '登录 AcgnX Global',
   'app.captcha.acgnxAsiaTitle': '登录 AcgnX Asia',
   'app.captcha.refresh': '刷新验证码',

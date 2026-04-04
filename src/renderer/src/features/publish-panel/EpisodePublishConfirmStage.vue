@@ -25,6 +25,7 @@ interface SitePublishDraftForm {
   title: string
   description: string
   torrentPath: string
+  categoryCode: string
   trackersText: string
   episodeKey: string
   resolution: string
@@ -43,6 +44,8 @@ interface SitePublishDraftForm {
   posState: string
   posStateUntil: string
   pickType: string
+  complete: boolean
+  remake: boolean
   anonymous: boolean
   personalRelease: boolean
   internal: boolean
@@ -107,7 +110,7 @@ interface PublishProgressRow {
   remoteUrl?: string
 }
 
-const LEGACY_SITE_IDS = new Set<SiteId>(['bangumi', 'nyaa'])
+const LEGACY_SITE_IDS = new Set<SiteId>(['bangumi'])
 
 const props = defineProps<{
   id: number
@@ -331,6 +334,7 @@ function createEmptyDraft(): SitePublishDraftForm {
     title: '',
     description: '',
     torrentPath: '',
+    categoryCode: '',
     trackersText: '',
     episodeKey: '',
     resolution: '',
@@ -349,6 +353,8 @@ function createEmptyDraft(): SitePublishDraftForm {
     posState: 'normal',
     posStateUntil: '',
     pickType: 'normal',
+    complete: false,
+    remake: false,
     anonymous: false,
     personalRelease: false,
     internal: false,
@@ -453,7 +459,8 @@ function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefa
   }
 
   draft.smallDescription = readStoredString(siteFieldDefaults.smallDescription)
-  draft.url = readStoredString(siteFieldDefaults.url)
+  draft.categoryCode = readStoredString(siteFieldDefaults.categoryCode ?? siteFieldDefaults.category_nyaa)
+  draft.url = readStoredString(siteFieldDefaults.information ?? siteFieldDefaults.url)
   draft.technicalInfo = readStoredString(siteFieldDefaults.technicalInfo)
   draft.ptGen = readStoredString(siteFieldDefaults.ptGen)
   draft.mediaInfo = readStoredString(siteFieldDefaults.mediaInfo)
@@ -479,6 +486,8 @@ function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefa
   draft.version = readStoredString(siteFieldDefaults.version)
   draft.fileSize = readStoredNumber(siteFieldDefaults.fileSize)
   draft.trackersText = readStoredTrackersText(siteFieldDefaults.trackers ?? siteFieldDefaults.trackersText)
+  draft.complete = readStoredBoolean(siteFieldDefaults.complete ?? siteFieldDefaults.completed)
+  draft.remake = readStoredBoolean(siteFieldDefaults.remake)
   draft.bangumiId = readStoredNumber(siteFieldDefaults.bangumiId)
   draft.subtitleGroupId = readStoredNumber(siteFieldDefaults.subtitleGroupId)
   draft.publishGroupId = readStoredNumber(siteFieldDefaults.publishGroupId)
@@ -520,7 +529,10 @@ function createInitialDraft(currentConfig: Config.PublishConfig, content: Messag
   const draft = createEmptyDraft()
   draft.title = currentConfig.title ?? content.title ?? ''
   draft.description = content.html ?? ''
+  draft.categoryCode = currentConfig.category_nyaa ?? ''
   draft.url = currentConfig.information ?? ''
+  draft.complete = currentConfig.completed === true
+  draft.remake = currentConfig.remake === true
   draft.torrentPath =
     currentConfig.torrentName && project.value?.workingDirectory
       ? joinProjectPath(project.value.workingDirectory, currentConfig.torrentName)
@@ -740,6 +752,16 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
     }
   }
 
+  if (site?.adapter === 'nyaa') {
+    return {
+      ...baseInput,
+      categoryCode: draft.categoryCode.trim() || undefined,
+      url: draft.url.trim() || undefined,
+      complete: draft.complete,
+      remake: draft.remake,
+    }
+  }
+
   return {
     ...baseInput,
     smallDescription: draft.smallDescription.trim() || undefined,
@@ -762,9 +784,6 @@ async function buildLegacyReviewSite(site: SiteCatalogEntry, latestResult?: Publ
   } else {
     if (site.id === 'bangumi' && !currentConfig.category_bangumi?.trim()) {
       issues.push(t('stage.review.confirm.legacy.bangumiCategoryMissing'))
-    }
-    if (site.id === 'nyaa' && !currentConfig.category_nyaa?.trim()) {
-      issues.push(t('stage.review.confirm.legacy.nyaaCategoryMissing'))
     }
   }
 
@@ -922,8 +941,6 @@ function getLegacyPublishType(siteId: SiteId) {
   switch (siteId) {
     case 'bangumi':
       return 'bangumi'
-    case 'nyaa':
-      return 'nyaa'
     default:
       return null
   }

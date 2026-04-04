@@ -23,6 +23,7 @@ export interface SitePublishDraft {
   projectId?: number
   siteId: SiteId
   typeId: number
+  categoryCode?: string
   teamId?: number
   title: string
   description: string
@@ -66,6 +67,8 @@ export interface SitePublishDraft {
   emuleResource?: string
   syncKey?: string
   anonymous?: boolean
+  complete?: boolean
+  remake?: boolean
   personalRelease?: boolean
   internal?: boolean
   refundable?: boolean

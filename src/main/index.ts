@@ -31,8 +31,6 @@ import { mergeUserDataWithDefaults, SecureUserDataFile } from './storage/secure-
 import { createSettingsStore } from './storage/settings-store'
 import { createMainAppWindow, openLoginWindow } from './windows/app-windows'
 
-//闂傚倸鍊搁崐鎼佹偋婵犲洦鍋￠柨鏇炲€搁悞鍨亜閹寸偛顕滅紒浣瑰缁辨帗绗熼崶褌绨婚梺?
-import nyaaResponse from '../renderer/src/assets/nyaa.html?asset'
 import appIcon from '../../build/icon.ico?asset'
 
 /*
@@ -118,7 +116,6 @@ let window: BrowserWindow
 function createWindow(): void {
   const mainWindow = createMainAppWindow({
     appIcon,
-    nyaaResponse,
     userAgent,
     getUserDB: () => userDB,
   })

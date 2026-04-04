@@ -7,7 +7,7 @@ import ProjectStageAside from '../project-detail/ProjectStageAside.vue'
 import { useProjectContext } from '../project-detail/project-context'
 import NexusProjectPublishPanel from './NexusProjectPublishPanel.vue'
 
-type LegacyStageSiteType = 'bangumi_all' | 'bangumi' | 'miobt' | 'nyaa'
+type LegacyStageSiteType = 'bangumi_all' | 'bangumi' | 'miobt'
 
 const props = defineProps<{
   id: number
@@ -22,20 +22,20 @@ const shouldShowAdapterPanel = computed(() => {
   }
 
   return (
-    project.value.projectMode !== 'episode' ||
-    project.value.targetSites.includes('miobt') ||
-    project.value.targetSites.includes('mikan') ||
-    project.value.targetSites.includes('dmhy')
+      project.value.projectMode !== 'episode' ||
+      project.value.targetSites.includes('miobt') ||
+      project.value.targetSites.includes('mikan') ||
+      project.value.targetSites.includes('dmhy') ||
+      project.value.targetSites.includes('nyaa')
   )
 })
 const legacySiteTypes = computed<LegacyStageSiteType[]>(() => {
   if (!project.value || project.value.projectMode !== 'episode') {
-    return ['bangumi_all', 'bangumi', 'miobt', 'nyaa']
+    return ['bangumi_all', 'bangumi', 'miobt']
   }
 
   const siteMap: Partial<Record<string, LegacyStageSiteType>> = {
     bangumi: 'bangumi',
-    nyaa: 'nyaa',
   }
 
   const targetRows = project.value.targetSites
@@ -43,7 +43,7 @@ const legacySiteTypes = computed<LegacyStageSiteType[]>(() => {
     .filter((siteType): siteType is LegacyStageSiteType => Boolean(siteType))
 
   if (project.value.targetSites.length === 0) {
-    return ['bangumi', 'nyaa']
+    return ['bangumi']
   }
 
   return [...new Set(targetRows)]

@@ -28,6 +28,7 @@ interface SitePublishDraftForm {
   title: string
   description: string
   torrentPath: string
+  categoryCode: string
   trackersText: string
   episodeKey: string
   resolution: string
@@ -48,6 +49,8 @@ interface SitePublishDraftForm {
   posState: string
   posStateUntil: string
   pickType: string
+  complete: boolean
+  remake: boolean
   anonymous: boolean
   personalRelease: boolean
   internal: boolean
@@ -216,6 +219,10 @@ function isDmhySite(site: SiteCatalogEntry) {
   return site.adapter === 'dmhy'
 }
 
+function isNyaaSite(site: SiteCatalogEntry) {
+  return site.adapter === 'nyaa'
+}
+
 function supportsMetadata(site: SiteCatalogEntry) {
   return site.capabilitySet.metadata.sections
 }
@@ -225,7 +232,14 @@ function hasSiteSpecificRequiredFields(site: SiteCatalogEntry) {
 }
 
 function hasOptionalSiteFields(site: SiteCatalogEntry) {
-  return supportsMetadata(site) || isUnit3dSite(site) || isMikanSite(site) || isAnibtSite(site)
+  return (
+    supportsMetadata(site) ||
+    isUnit3dSite(site) ||
+    isMikanSite(site) ||
+    isAnibtSite(site) ||
+    isDmhySite(site) ||
+    isNyaaSite(site)
+  )
 }
 
 function isSiteSelected(siteId: SiteId) {
@@ -300,6 +314,10 @@ function getSharedFieldText(site: SiteCatalogEntry) {
 
   if (isDmhySite(site)) {
     return t('nexus.site.sharedFieldsDmhy')
+  }
+
+  if (isNyaaSite(site)) {
+    return t('nexus.site.sharedFieldsNyaa')
   }
 
   return t('nexus.site.sharedFields')
@@ -388,6 +406,7 @@ function createEmptyDraft(): SitePublishDraftForm {
     title: '',
     description: '',
     torrentPath: '',
+    categoryCode: '',
     trackersText: '',
     episodeKey: '',
     resolution: '',
@@ -408,6 +427,8 @@ function createEmptyDraft(): SitePublishDraftForm {
     posState: 'normal',
     posStateUntil: '',
     pickType: 'normal',
+    complete: false,
+    remake: false,
     anonymous: false,
     personalRelease: false,
     internal: false,
@@ -513,7 +534,8 @@ function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefa
   }
 
   draft.smallDescription = readStoredString(siteFieldDefaults.smallDescription)
-  draft.url = readStoredString(siteFieldDefaults.url)
+  draft.categoryCode = readStoredString(siteFieldDefaults.categoryCode ?? siteFieldDefaults.category_nyaa)
+  draft.url = readStoredString(siteFieldDefaults.information ?? siteFieldDefaults.url)
   draft.technicalInfo = readStoredString(siteFieldDefaults.technicalInfo)
   draft.ptGen = readStoredString(siteFieldDefaults.ptGen)
   draft.mediaInfo = readStoredString(siteFieldDefaults.mediaInfo)
@@ -542,6 +564,8 @@ function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefa
   draft.trackersText = readStoredTrackersText(siteFieldDefaults.trackers ?? siteFieldDefaults.trackersText)
   draft.posterUrl = readStoredString(siteFieldDefaults.posterUrl)
   draft.emuleResource = readStoredString(siteFieldDefaults.emuleResource)
+  draft.complete = readStoredBoolean(siteFieldDefaults.complete ?? siteFieldDefaults.completed)
+  draft.remake = readStoredBoolean(siteFieldDefaults.remake)
   draft.bangumiId = readStoredNumber(siteFieldDefaults.bangumiId)
   draft.subtitleGroupId = readStoredNumber(siteFieldDefaults.subtitleGroupId)
   draft.publishGroupId = readStoredNumber(siteFieldDefaults.publishGroupId)
@@ -583,7 +607,10 @@ function createInitialDraft(config: Config.PublishConfig, content: Message.Task.
   const draft = createEmptyDraft()
   draft.title = config.title ?? content.title ?? ''
   draft.description = content.html ?? ''
+  draft.categoryCode = config.category_nyaa ?? ''
   draft.url = config.information ?? ''
+  draft.complete = config.completed === true
+  draft.remake = config.remake === true
   draft.torrentPath =
     config.torrentName && project.value?.workingDirectory
       ? joinProjectPath(project.value.workingDirectory, config.torrentName)
@@ -787,6 +814,16 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
       format: readOptionalString(draft.format),
       version: readOptionalString(draft.version),
       fileSize: draft.fileSize,
+    }
+  }
+
+  if (site?.adapter === 'nyaa') {
+    return {
+      ...baseInput,
+      categoryCode: draft.categoryCode.trim() || undefined,
+      url: draft.url.trim() || undefined,
+      complete: draft.complete,
+      remake: draft.remake,
     }
   }
 
@@ -1262,6 +1299,20 @@ onMounted(() => {
             <div />
           </div>
 
+          <div v-else-if="isNyaaSite(site)" class="nexus-form__grid">
+            <el-form-item :label="t('sites.form.category')">
+              <el-select v-model="ensureDraft(site.id).categoryCode">
+                <el-option
+                  v-for="option in getSiteFieldOptions(site.id, 'categoryCode')"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                />
+              </el-select>
+            </el-form-item>
+            <div />
+          </div>
+
           <div v-else-if="site.adapter === 'nexusphp'" class="nexus-site-card__manual">
             <div class="nexus-site-card__hint">
               {{ getMetadataError(site.id) || t('nexus.site.manualTypeHint') }}
@@ -1420,6 +1471,28 @@ onMounted(() => {
                 <el-form-item :label="t('sites.form.emuleResource')">
                   <el-input v-model="ensureDraft(site.id).emuleResource" type="textarea" :rows="4" />
                 </el-form-item>
+              </div>
+
+              <div v-if="isNyaaSite(site)" class="nexus-site-card__optional-stack">
+                <div class="nexus-site-card__hint">
+                  {{ t('nexus.site.nyaaOptionalHint') }}
+                </div>
+
+                <div class="nexus-form__grid">
+                  <el-form-item :label="t('sites.form.information')">
+                    <el-input v-model="ensureDraft(site.id).url" />
+                  </el-form-item>
+                  <div />
+                </div>
+
+                <div class="nexus-form__grid nexus-form__grid--meta">
+                  <el-form-item>
+                    <el-checkbox v-model="ensureDraft(site.id).complete">{{ t('sites.flags.complete') }}</el-checkbox>
+                  </el-form-item>
+                  <el-form-item>
+                    <el-checkbox v-model="ensureDraft(site.id).remake">{{ t('sites.flags.remake') }}</el-checkbox>
+                  </el-form-item>
+                </div>
               </div>
 
               <div v-if="isMikanSite(site)" class="nexus-site-card__optional-stack">

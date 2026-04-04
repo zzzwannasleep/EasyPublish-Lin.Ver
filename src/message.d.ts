@@ -38,7 +38,7 @@ declare namespace Message {
   namespace BT {
 
     interface ValidationType {
-      type: 'nyaa' | 'acgnx_a' | 'acgnx_g'
+      type: 'acgnx_a' | 'acgnx_g'
     }
 
     interface TurnstilePosition {
