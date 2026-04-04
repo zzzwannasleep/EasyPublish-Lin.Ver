@@ -6,12 +6,8 @@ on:
       - 'v*'
   workflow_dispatch:
     inputs:
-      release_version:
-        description: 'Release version written into package.json, for example 0.1.0'
-        required: false
-        type: string
       release_tag:
-        description: 'Git tag to publish, for example v0.1.0. Defaults to v<release_version>.'
+        description: 'Git tag to publish, for example v0.1.0. Defaults to v<package.json version>.'
         required: false
         type: string
       release_name:
@@ -63,7 +59,6 @@ jobs:
           const semverPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
           const refName = (process.env.GITHUB_REF_NAME || '').trim()
           const refType = (process.env.GITHUB_REF_TYPE || '').trim()
-          const inputVersion = String(inputs.release_version || '').trim()
           const inputTag = String(inputs.release_tag || '').trim()
           const inputName = String(inputs.release_name || '').trim()
           const inputDraft = Object.prototype.hasOwnProperty.call(inputs, 'draft') ? String(inputs.draft).trim() : ''
@@ -72,7 +67,7 @@ jobs:
           let releaseVersion =
             refType === 'tag'
               ? refName.replace(/^v/, '')
-              : inputVersion || (releaseTag ? releaseTag.replace(/^v/, '') : '') || pkg.version
+              : (releaseTag ? releaseTag.replace(/^v/, '') : '') || pkg.version
 
           if (!releaseTag) {
             releaseTag = `v${releaseVersion}`
