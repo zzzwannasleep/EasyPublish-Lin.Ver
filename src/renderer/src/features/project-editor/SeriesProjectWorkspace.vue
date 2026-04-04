@@ -1315,7 +1315,7 @@ onMounted(() => {
           <StatusChip tone="info">{{ selectedSiteFieldSections.length }} {{ '\u4e2a\u7ad9\u70b9\u5c55\u5f00' }}</StatusChip>
         </div>
 
-        <article v-if="activeVariant && selectedBangumiSites.length" class="series-studio__bangumi-card">
+        <article v-if="selectedBangumiSites.length" class="series-studio__bangumi-card">
           <div class="series-studio__section-head">
             <div>
               <div class="series-studio__site-name">{{ 'Bangumi ID \u641c\u7d22' }}</div>
