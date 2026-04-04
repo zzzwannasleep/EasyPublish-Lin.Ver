@@ -28,8 +28,13 @@ import type {
 } from '../../types/project'
 import type { BangumiSubjectSearchItem, SiteCatalogEntry, SiteFieldSchemaEntry, SiteId } from '../../types/site'
 import {
-  buildSeriesTitleMatchPreview,
+  matchSeriesTitlePattern,
+  normalizeMatchedSubtitleProfile,
+  normalizeMatchedVideoProfile,
   normalizeSeriesTitleMatchConfig,
+  renderSeriesTitleCustomTags,
+  renderSeriesTitleTemplate,
+  stripTorrentExtension,
 } from '../../../../shared/utils/series-title-match'
 import SeriesRichTextEditor from './SeriesRichTextEditor.vue'
 
@@ -64,7 +69,6 @@ const switchingVariantKey = ref('')
 const duplicatingVariantKey = ref('')
 const removingVariantKey = ref('')
 const savedFingerprint = ref('')
-const titleMatchSampleInput = ref('')
 const bangumiSearchQuery = ref('')
 const bangumiSearchResults = ref<BangumiSubjectSearchItem[]>([])
 const bangumiSearchLoading = ref(false)
@@ -77,11 +81,11 @@ const titleMatchForm = reactive<SeriesTitleMatchConfig>({
   variantTemplate: '<res>p-<sub>',
   titleTemplate: '',
   releaseTeamTemplate: '',
-  sourceTypeTemplate: '',
-  resolutionTemplate: '',
-  videoCodecTemplate: '',
-  audioCodecTemplate: '',
-  subtitleTemplate: '',
+  sourceTypeTemplate: '<source>',
+  resolutionTemplate: '<res>p',
+  videoCodecTemplate: '<video>',
+  audioCodecTemplate: '<audio>',
+  subtitleTemplate: '<sub>',
   customTemplate: '',
   targetSites: [],
 })
@@ -302,11 +306,11 @@ function normalizeTitleMatchForm(config?: SeriesTitleMatchConfig | null) {
     fileNamePattern: '',
     episodeTemplate: '<ep>',
     variantTemplate: '<res>p-<sub>',
-    sourceTypeTemplate: '',
-    resolutionTemplate: '',
-    videoCodecTemplate: '',
-    audioCodecTemplate: '',
-    subtitleTemplate: '',
+    sourceTypeTemplate: '<source>',
+    resolutionTemplate: '<res>p',
+    videoCodecTemplate: '<video>',
+    audioCodecTemplate: '<audio>',
+    subtitleTemplate: '<sub>',
   }
 
   titleMatchForm.fileNamePattern = normalized.fileNamePattern
@@ -314,11 +318,11 @@ function normalizeTitleMatchForm(config?: SeriesTitleMatchConfig | null) {
   titleMatchForm.variantTemplate = normalized.variantTemplate || '<res>p-<sub>'
   titleMatchForm.titleTemplate = normalized.titleTemplate || ''
   titleMatchForm.releaseTeamTemplate = normalized.releaseTeamTemplate || ''
-  titleMatchForm.sourceTypeTemplate = normalized.sourceTypeTemplate || ''
-  titleMatchForm.resolutionTemplate = normalized.resolutionTemplate || ''
-  titleMatchForm.videoCodecTemplate = normalized.videoCodecTemplate || ''
-  titleMatchForm.audioCodecTemplate = normalized.audioCodecTemplate || ''
-  titleMatchForm.subtitleTemplate = normalized.subtitleTemplate || ''
+  titleMatchForm.sourceTypeTemplate = normalized.sourceTypeTemplate || '<source>'
+  titleMatchForm.resolutionTemplate = normalized.resolutionTemplate || '<res>p'
+  titleMatchForm.videoCodecTemplate = normalized.videoCodecTemplate || '<video>'
+  titleMatchForm.audioCodecTemplate = normalized.audioCodecTemplate || '<audio>'
+  titleMatchForm.subtitleTemplate = normalized.subtitleTemplate || '<sub>'
   titleMatchForm.customTemplate = normalized.customTemplate || ''
   titleMatchForm.targetSites = sortSiteIds(normalized.targetSites ?? [])
   savedTitleMatchFingerprint.value = buildTitleMatchFingerprint()
@@ -384,38 +388,54 @@ const currentStructureLabel = computed(() =>
 
 const isDirty = computed(() => Boolean(draftConfig.value && activeVariant.value && buildDirtyFingerprint() !== savedFingerprint.value))
 const isTitleMatchDirty = computed(() => buildTitleMatchFingerprint() !== savedTitleMatchFingerprint.value)
-const currentTorrentFileName = computed(() =>
-  form.torrentPath.trim() ? getFileName(form.torrentPath.trim()) : '',
-)
-const titleMatchSampleFileNames = computed(() => {
-  const sampleFileNames = [...new Set(
-    titleMatchSampleInput.value
-      .split(/\r?\n/)
-      .map(item => getFileName(item.trim()))
-      .filter(Boolean),
-  )]
-
-  if (sampleFileNames.length > 0) {
-    return sampleFileNames.slice(0, 24)
-  }
-
-  return currentTorrentFileName.value ? [currentTorrentFileName.value] : []
-})
-const titleMatchPreviewItems = computed(() => {
+const titleMatchPreview = computed(() => {
   const config = buildTitleMatchPayload()
-  if (!config?.fileNamePattern) {
-    return []
+  const currentFileName = form.torrentPath.trim() ? getFileName(form.torrentPath.trim()) : ''
+  if (!config?.fileNamePattern || !currentFileName) {
+    return null
   }
 
-  return titleMatchSampleFileNames.value
-    .map(fileName => buildSeriesTitleMatchPreview(config, fileName))
-    .filter((item): item is NonNullable<ReturnType<typeof buildSeriesTitleMatchPreview>> => Boolean(item))
+  const variables = matchSeriesTitlePattern(config.fileNamePattern, currentFileName)
+  if (!variables) {
+    return {
+      fileName: currentFileName,
+      matched: false as const,
+    }
+  }
+
+  const episodeLabel = renderSeriesTitleTemplate(config.episodeTemplate || '<ep>', variables)
+  const variantName = renderSeriesTitleTemplate(config.variantTemplate || '<res>p-<sub>', variables)
+  const sourceType = renderSeriesTitleTemplate(config.sourceTypeTemplate, variables)
+  const resolution = renderSeriesTitleTemplate(config.resolutionTemplate, variables)
+  const videoCodec = renderSeriesTitleTemplate(config.videoCodecTemplate, variables)
+  const audioCodec = renderSeriesTitleTemplate(config.audioCodecTemplate, variables)
+  const subtitle = renderSeriesTitleTemplate(config.subtitleTemplate, variables)
+  const customTags = renderSeriesTitleCustomTags(config.customTemplate, variables)
+
+  return {
+    fileName: currentFileName,
+    matched: true as const,
+    variables,
+    episodeLabel,
+    variantName: variantName || stripTorrentExtension(currentFileName),
+    title: renderSeriesTitleTemplate(config.titleTemplate, variables),
+    sourceType,
+    resolution,
+    videoCodec,
+    audioCodec,
+    subtitle,
+    customTags,
+    videoProfile: normalizeMatchedVideoProfile(resolution),
+    subtitleProfile: normalizeMatchedSubtitleProfile(subtitle),
+  }
 })
-const matchedTitleMatchPreviewCount = computed(() =>
-  titleMatchPreviewItems.value.filter(item => item.matched).length,
+
+const matchedTitleMatchPreview = computed(() =>
+  titleMatchPreview.value?.matched ? titleMatchPreview.value : null,
 )
-const unmatchedTitleMatchPreviewCount = computed(() =>
-  titleMatchPreviewItems.value.filter(item => !item.matched).length,
+
+const unmatchedTitleMatchPreview = computed(() =>
+  titleMatchPreview.value && !titleMatchPreview.value.matched ? titleMatchPreview.value : null,
 )
 
 watch(
@@ -425,6 +445,16 @@ watch(
   },
   { immediate: true },
 )
+
+watch(selectedBangumiSiteIds, (siteIds) => {
+  if (siteIds.length) {
+    return
+  }
+
+  bangumiSearchResults.value = []
+  bangumiSearchError.value = ''
+  selectedBangumiSubject.value = null
+})
 
 function applyWorkspace(nextWorkspace: SeriesProjectWorkspace) {
   workspace.value = nextWorkspace
@@ -683,16 +713,6 @@ async function importMatchedTorrents() {
   }
 }
 
-async function chooseTitleMatchSamples() {
-  const response = await window.globalAPI.getFilePaths(JSON.stringify({ type: 'torrent' }))
-  const payload = JSON.parse(response) as Message.Global.Paths
-  if (!payload.paths.length) {
-    return
-  }
-
-  titleMatchSampleInput.value = payload.paths.map(path => getFileName(path)).join('\n')
-}
-
 function writeBangumiIdToSite(siteId: SiteId, bangumiId: number) {
   const bangumiField = getEditableSiteFields(siteId).find(field => field.key === 'bangumiId')
   if (bangumiField) {
@@ -706,7 +726,7 @@ function writeBangumiIdToSite(siteId: SiteId, bangumiId: number) {
 async function searchBangumiSubjects() {
   const query = bangumiSearchQuery.value.trim()
   if (!query) {
-    ElMessage.warning('请先输入 Bangumi 条目名')
+    ElMessage.warning('\u8bf7\u5148\u8f93\u5165 Bangumi \u6761\u76ee\u540d')
     return
   }
 
@@ -723,7 +743,7 @@ async function searchBangumiSubjects() {
 
     bangumiSearchResults.value = result.data.items
     if (!result.data.items.length) {
-      bangumiSearchError.value = '没有找到匹配的 Bangumi 条目'
+      bangumiSearchError.value = '\u6ca1\u6709\u627e\u5230\u5339\u914d\u7684 Bangumi \u6761\u76ee'
     }
   } finally {
     bangumiSearchLoading.value = false
@@ -732,7 +752,7 @@ async function searchBangumiSubjects() {
 
 function applyBangumiSubject(subject: BangumiSubjectSearchItem) {
   if (!selectedBangumiSiteIds.value.length) {
-    ElMessage.warning('当前没有需要填写 Bangumi ID 的站点')
+    ElMessage.warning('\u5f53\u524d\u6ca1\u6709\u9700\u8981\u586b\u5199 Bangumi ID \u7684\u7ad9\u70b9')
     return
   }
 
@@ -743,7 +763,7 @@ function applyBangumiSubject(subject: BangumiSubjectSearchItem) {
   bangumiSearchQuery.value = subject.nameCn || subject.name
 
   const siteNames = selectedBangumiSites.value.map(site => site.name).join(' / ')
-  ElMessage.success(`已把 Bangumi ID #${subject.id} 回填到 ${siteNames}`)
+  ElMessage.success(`\u5df2\u628a Bangumi ID #${subject.id} \u56de\u586b\u5230 ${siteNames}`)
 }
 
 function addTargetSite(siteId: SiteId) {
@@ -1080,80 +1100,37 @@ onMounted(() => {
                 :placeholder="'\u53ef\u9009\uff0c\u53ef\u7528\u82f1\u6587\u9017\u53f7\u5206\u9694\u591a\u4e2a\u81ea\u5b9a\u4e49\u6807\u7b7e'"
               />
             </label>
-            <label class="series-studio__field series-studio__field--wide">
-              <span class="series-studio__field-label">{{ '\u6587\u4ef6\u540d\u6837\u4f8b' }}</span>
-              <el-input
-                v-model="titleMatchSampleInput"
-                type="textarea"
-                :rows="4"
-                :placeholder="'\u4e00\u884c\u4e00\u4e2a\u6587\u4ef6\u540d\uff0c\u53ef\u4ee5\u76f4\u63a5\u7c98\u8d34\u591a\u4e2a\u79cd\u5b50\u540d'"
-              />
-              <span class="series-studio__field-help">
-                {{ '\u7559\u7a7a\u65f6\u4f1a\u7528\u5f53\u524d\u7248\u672c\u7684 torrent \u6587\u4ef6\u540d\u9884\u89c8\u3002\u6765\u6e90/\u5206\u8fa8\u7387/\u89c6\u9891/\u97f3\u9891/\u5b57\u5e55\u6a21\u677f\u53ef\u4ee5\u5148\u4e0d\u586b\uff0c\u7cfb\u7edf\u4f1a\u4ece\u53d8\u91cf\u548c\u6587\u4ef6\u540d\u91cc\u81ea\u52a8\u5c1d\u8bd5\u8bc6\u522b\u3002' }}
+          </div>
+
+          <div v-if="titleMatchPreview" class="series-studio__match-preview">
+            <template v-if="matchedTitleMatchPreview">
+              <StatusChip tone="success">{{ '\u5f53\u524d torrent \u53ef\u5339\u914d' }}</StatusChip>
+              <span class="series-studio__match-text">
+                {{ matchedTitleMatchPreview.fileName }} -> {{ matchedTitleMatchPreview.episodeLabel || '??' }} / {{ matchedTitleMatchPreview.variantName }}
               </span>
-            </label>
-          </div>
-
-          <div class="series-studio__match-actions">
-            <el-button plain @click="chooseTitleMatchSamples">
-              {{ '\u9009\u62e9\u6837\u4f8b .torrent' }}
-            </el-button>
-            <el-button plain :disabled="!titleMatchSampleInput.trim()" @click="titleMatchSampleInput = ''">
-              {{ '\u6e05\u7a7a\u6837\u4f8b' }}
-            </el-button>
-          </div>
-
-          <div v-if="titleMatchPreviewItems.length" class="series-studio__match-preview">
-            <StatusChip tone="success">
-              {{ '\u547d\u4e2d' }} {{ matchedTitleMatchPreviewCount }}
-            </StatusChip>
-            <StatusChip v-if="unmatchedTitleMatchPreviewCount" tone="danger">
-              {{ '\u672a\u547d\u4e2d' }} {{ unmatchedTitleMatchPreviewCount }}
-            </StatusChip>
-            <StatusChip tone="info">
-              {{ titleMatchPreviewItems.length }} {{ titleMatchSampleInput.trim() ? '\u4e2a\u6837\u4f8b' : '\u4e2a\u5f53\u524d\u6587\u4ef6' }}
-            </StatusChip>
-          </div>
-
-          <div v-if="titleMatchPreviewItems.length" class="series-studio__match-list">
-            <article
-              v-for="preview in titleMatchPreviewItems"
-              :key="preview.fileName"
-              :class="['series-studio__match-item', { 'is-unmatched': !preview.matched }]"
-            >
-              <div class="series-studio__match-item-head">
-                <div class="series-studio__match-item-name">{{ preview.fileName }}</div>
-                <StatusChip :tone="preview.matched ? 'success' : 'danger'">
-                  {{ preview.matched ? '\u53ef\u5339\u914d' : '\u672a\u547d\u4e2d' }}
-                </StatusChip>
-              </div>
-
-              <template v-if="preview.matched">
-                <div class="series-studio__match-item-summary">
-                  {{ preview.episodeLabel || '??' }} / {{ preview.variantName || '\u672a\u751f\u6210\u7248\u672c\u540d' }}
-                </div>
-                <div class="series-studio__match-preview">
-                  <StatusChip v-if="preview.releaseTeam" tone="neutral">{{ preview.releaseTeam }}</StatusChip>
-                  <StatusChip v-if="preview.sourceType" tone="neutral">{{ preview.sourceType }}</StatusChip>
-                  <StatusChip v-if="preview.resolution" tone="info">{{ preview.resolution }}</StatusChip>
-                  <StatusChip v-if="preview.videoCodec" tone="info">{{ preview.videoCodec }}</StatusChip>
-                  <StatusChip v-if="preview.audioCodec" tone="neutral">{{ preview.audioCodec }}</StatusChip>
-                  <StatusChip v-if="preview.subtitle" tone="warning">{{ preview.subtitle }}</StatusChip>
-                  <StatusChip v-if="preview.videoProfile" tone="info">{{ preview.videoProfile }}</StatusChip>
-                  <StatusChip v-if="preview.subtitleProfile" tone="warning">{{ preview.subtitleProfile }}</StatusChip>
-                  <StatusChip v-for="customTag in preview.customTags" :key="customTag" tone="success">
-                    {{ customTag }}
-                  </StatusChip>
-                </div>
-                <div class="series-studio__match-item-title">
-                  {{ '\u9884\u89c8\u6807\u9898\uff1a' }}{{ preview.title || '\u5c1a\u672a\u914d\u7f6e\u4e3b\u6807\u9898\u6a21\u677f' }}
-                </div>
-              </template>
-
-              <div v-else class="series-studio__match-text">
-                {{ '\u6ca1\u6709\u547d\u4e2d\u6587\u4ef6\u540d\u5339\u914d\u89c4\u5219\u3002' }}
-              </div>
-            </article>
+              <StatusChip v-if="matchedTitleMatchPreview.sourceType" tone="neutral">{{ matchedTitleMatchPreview.sourceType }}</StatusChip>
+              <StatusChip v-if="matchedTitleMatchPreview.resolution" tone="info">{{ matchedTitleMatchPreview.resolution }}</StatusChip>
+              <StatusChip v-if="matchedTitleMatchPreview.videoCodec" tone="info">{{ matchedTitleMatchPreview.videoCodec }}</StatusChip>
+              <StatusChip v-if="matchedTitleMatchPreview.audioCodec" tone="neutral">{{ matchedTitleMatchPreview.audioCodec }}</StatusChip>
+              <StatusChip v-if="matchedTitleMatchPreview.videoProfile" tone="info">{{ matchedTitleMatchPreview.videoProfile }}</StatusChip>
+              <StatusChip v-if="matchedTitleMatchPreview.subtitleProfile" tone="warning">{{ matchedTitleMatchPreview.subtitleProfile }}</StatusChip>
+              <StatusChip
+                v-for="customTag in matchedTitleMatchPreview.customTags"
+                :key="customTag"
+                tone="success"
+              >
+                {{ customTag }}
+              </StatusChip>
+              <span v-if="matchedTitleMatchPreview.title" class="series-studio__match-text">
+                {{ '\u751f\u6210\u6807\u9898\uff1a' }}{{ matchedTitleMatchPreview.title }}
+              </span>
+            </template>
+            <template v-else-if="unmatchedTitleMatchPreview">
+              <StatusChip tone="danger">{{ '\u5f53\u524d torrent \u672a\u547d\u4e2d' }}</StatusChip>
+              <span class="series-studio__match-text">
+                {{ unmatchedTitleMatchPreview.fileName }} {{ '\u6ca1\u6709\u547d\u4e2d\u6587\u4ef6\u540d\u5339\u914d\u89c4\u5219\u3002' }}
+              </span>
+            </template>
           </div>
 
           <div class="series-studio__match-actions">
@@ -1338,7 +1315,7 @@ onMounted(() => {
           <StatusChip tone="info">{{ selectedSiteFieldSections.length }} {{ '\u4e2a\u7ad9\u70b9\u5c55\u5f00' }}</StatusChip>
         </div>
 
-        <article v-if="selectedBangumiSites.length" class="series-studio__bangumi-card">
+        <article v-if="activeVariant && selectedBangumiSites.length" class="series-studio__bangumi-card">
           <div class="series-studio__section-head">
             <div>
               <div class="series-studio__site-name">{{ 'Bangumi ID \u641c\u7d22' }}</div>
@@ -1634,7 +1611,6 @@ onMounted(() => {
 
 .series-studio__variant-grid,
 .series-studio__match-grid,
-.series-studio__match-list,
 .series-studio__details-grid,
 .series-studio__site-grid,
 .series-studio__site-field-stack,
@@ -1664,10 +1640,6 @@ onMounted(() => {
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
 }
 
-.series-studio__match-list {
-  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
-}
-
 .series-studio__bangumi-results {
   grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
 }
@@ -1676,7 +1648,6 @@ onMounted(() => {
 .series-studio__variant-card,
 .series-studio__episode-chip,
 .series-studio__site-fields-card,
-.series-studio__match-item,
 .series-studio__bangumi-card,
 .series-studio__bangumi-result {
   border: 1px solid var(--border-soft);
@@ -1687,7 +1658,6 @@ onMounted(() => {
 .series-studio__site-card,
 .series-studio__variant-card,
 .series-studio__site-fields-card,
-.series-studio__match-item,
 .series-studio__bangumi-card {
   display: grid;
   gap: 12px;
@@ -1746,6 +1716,12 @@ onMounted(() => {
   font-weight: 700;
 }
 
+.series-studio__bangumi-title {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .series-studio__variant-progress {
   display: flex;
   flex-wrap: wrap;
@@ -1762,35 +1738,11 @@ onMounted(() => {
   gap: 8px;
 }
 
-.series-studio__match-item.is-unmatched {
-  border-style: dashed;
-}
-
-.series-studio__match-item-head,
 .series-studio__bangumi-result {
   display: flex;
   gap: 12px;
   align-items: flex-start;
   justify-content: space-between;
-}
-
-.series-studio__match-item-name,
-.series-studio__bangumi-title {
-  color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.series-studio__match-item-summary,
-.series-studio__match-item-title,
-.series-studio__bangumi-meta,
-.series-studio__bangumi-id {
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.7;
-}
-
-.series-studio__bangumi-result {
   width: 100%;
   padding: 12px;
   text-align: left;
@@ -1812,6 +1764,13 @@ onMounted(() => {
   display: grid;
   gap: 4px;
   min-width: 0;
+}
+
+.series-studio__bangumi-meta,
+.series-studio__bangumi-id {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 .series-studio__field--wide {
@@ -1865,7 +1824,6 @@ onMounted(() => {
   .series-studio__section-head,
   .series-studio__site-head,
   .series-studio__site-fields-head,
-  .series-studio__match-item-head,
   .series-studio__site-actions,
   .series-studio__variant-head,
   .series-studio__variant-foot,

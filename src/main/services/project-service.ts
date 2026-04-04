@@ -29,8 +29,12 @@ import type {
 } from '../../shared/types/project'
 import type { SiteId } from '../../shared/types/site'
 import {
-  buildSeriesTitleMatchPreview,
+  matchSeriesTitlePattern,
+  normalizeMatchedSubtitleProfile,
+  normalizeMatchedVideoProfile,
   normalizeSeriesTitleMatchConfig,
+  renderSeriesTitleCustomTags,
+  renderSeriesTitleTemplate,
   stripTorrentExtension,
 } from '../../shared/utils/series-title-match'
 import { getNowFormatDate } from '../core/utils'
@@ -935,15 +939,35 @@ export function createProjectService(options: CreateProjectServiceOptions) {
   }
 
   function buildTitleMatchValues(config: SeriesTitleMatchConfig, filePath: string) {
-    const preview = buildSeriesTitleMatchPreview(config, basename(filePath))
-    if (!preview?.matched) {
+    const fileName = basename(filePath)
+    const matched = matchSeriesTitlePattern(config.fileNamePattern, fileName)
+    if (!matched) {
       return null
     }
 
+    const episodeLabel = renderSeriesTitleTemplate(config.episodeTemplate || '<ep>', matched)
+    const variantName = renderSeriesTitleTemplate(config.variantTemplate || '<res>p-<sub>', matched)
+    const sourceType = renderSeriesTitleTemplate(config.sourceTypeTemplate, matched)
+    const resolution = renderSeriesTitleTemplate(config.resolutionTemplate, matched)
+    const videoCodec = renderSeriesTitleTemplate(config.videoCodecTemplate, matched)
+    const audioCodec = renderSeriesTitleTemplate(config.audioCodecTemplate, matched)
+    const subtitle = renderSeriesTitleTemplate(config.subtitleTemplate, matched)
+
     return {
-      ...preview,
-      episodeLabel: preview.episodeLabel ?? '',
-      variantName: preview.variantName ?? stripTorrentExtension(preview.fileName),
+      fileName,
+      variables: matched,
+      episodeLabel,
+      variantName,
+      title: renderSeriesTitleTemplate(config.titleTemplate, matched),
+      releaseTeam: renderSeriesTitleTemplate(config.releaseTeamTemplate, matched),
+      sourceType,
+      resolution,
+      videoCodec,
+      audioCodec,
+      subtitle,
+      customTags: renderSeriesTitleCustomTags(config.customTemplate, matched),
+      videoProfile: normalizeMatchedVideoProfile(resolution),
+      subtitleProfile: normalizeMatchedSubtitleProfile(subtitle),
     }
   }
 
