@@ -1,7 +1,7 @@
 import { dialog, session, type BrowserWindow, type WebContentsView } from 'electron'
 import fs from 'fs'
 import { Low } from 'lowdb'
-import axios from 'axios'
+import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import log from 'electron-log'
 import CryptoJS from 'crypto-js'
 import { legacyApiStatusText, legacyAccountStatusText } from '../../shared/utils/legacy-account-status'
@@ -39,6 +39,8 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
   } = options
 
   let cfViewVisible = false
+  const FAST_CHECK_TIMEOUT_MS = 5000
+  const FAST_CHECK_MAX_ATTEMPTS = 2
 
   function getUserDBOrThrow() {
     const userDB = getUserDB()
@@ -198,6 +200,45 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
     }
 
     return 'Unknown request error'
+  }
+
+  type FastRequestConfig = AxiosRequestConfig & {
+    'axios-retry'?: {
+      retries?: number
+    }
+  }
+
+  function createFastRequestConfig(config: AxiosRequestConfig = {}): FastRequestConfig {
+    return {
+      timeout: FAST_CHECK_TIMEOUT_MS,
+      ...config,
+      'axios-retry': {
+        retries: 0,
+      },
+    }
+  }
+
+  async function requestFastCheck(url: string, expectedStatuses: number[]) {
+    let lastResponse: AxiosResponse<string> | undefined
+    let lastError: unknown
+
+    for (let attempt = 0; attempt < FAST_CHECK_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        const response = await axios.get<string>(url, createFastRequestConfig({ responseType: 'text' }))
+        lastResponse = response
+        if (expectedStatuses.includes(response.status)) {
+          return response
+        }
+      } catch (error) {
+        lastError = error
+      }
+    }
+
+    if (lastResponse) {
+      return lastResponse
+    }
+
+    throw lastError ?? new Error(`Request to ${url} failed`)
   }
 
   async function verifyAuthenticated(
@@ -1044,13 +1085,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
   async function checkBangumiLoginStatusClean(info: Config.LoginInfo) {
     try {
       const url = 'https://bangumi.moe/api/team/myteam'
-      let response = await axios.get(url, { responseType: 'text' })
-      for (let i = 0; i < 5; i++) {
-        if (response.status === 200) {
-          break
-        }
-        response = await axios.get(url, { responseType: 'text' })
-      }
+      const response = await requestFastCheck(url, [200])
 
       const { data, status } = response
       if (status !== 200) {
@@ -1075,13 +1110,13 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
       const response = await axios.post(
         'https://api.mikanani.me/api/episode',
         {},
-        {
+        createFastRequestConfig({
           responseType: 'text',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `MikanHash ${apiToken}`,
           },
-        },
+        }),
       )
 
       if ([200, 400, 415, 422].includes(response.status)) {
@@ -1139,13 +1174,13 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
       const response = await axios.post(
         'https://site.anibt.net/api/releases/publish',
         {},
-        {
+        createFastRequestConfig({
           responseType: 'text',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${apiToken}`,
           },
-        },
+        }),
       )
 
       if ([200, 400, 422].includes(response.status)) {
@@ -1204,9 +1239,9 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
       const formData = new FormData()
       formData.append('user_id', userId)
       formData.append('api_key', apiKey)
-      const response = await axios.post('https://www.miobt.com/addon.php?r=api/post/76cad81b', formData, {
+      const response = await axios.post('https://www.miobt.com/addon.php?r=api/post/76cad81b', formData, createFastRequestConfig({
         responseType: 'text',
-      })
+      }))
       const data = parseJsonObject(response.data)
       const responseCode =
         typeof data?.code === 'number' || typeof data?.code === 'string' ? String(data.code) : String(response.status)
@@ -1257,13 +1292,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
   async function checkNyaaLoginStatusClean(info: Config.LoginInfo) {
     try {
       const url = 'https://nyaa.si/profile'
-      let response = await axios.get(url, { responseType: 'text' })
-      for (let i = 0; i < 5; i++) {
-        if (response.status === 200 || response.status === 302) {
-          break
-        }
-        response = await axios.get(url, { responseType: 'text' })
-      }
+      const response = await requestFastCheck(url, [200, 302])
 
       if (response.status == 302) {
         setStatus(info, legacyAccountStatusText.loggedOut)
@@ -1281,13 +1310,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
   async function checkAcgripLoginStatusClean(info: Config.LoginInfo) {
     try {
       const url = 'https://acg.rip/cp'
-      let response = await axios.get(url, { responseType: 'text' })
-      for (let i = 0; i < 5; i++) {
-        if (response.status === 200 || response.status === 302) {
-          break
-        }
-        response = await axios.get(url, { responseType: 'text' })
-      }
+      const response = await requestFastCheck(url, [200, 302])
 
       if (response.status == 302) {
         setStatus(info, legacyAccountStatusText.loggedOut)
@@ -1305,13 +1328,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
   async function checkDmhyLoginStatusClean(info: Config.LoginInfo) {
     try {
       const url = 'https://www.dmhy.org/user'
-      let response = await axios.get(url, { responseType: 'text' })
-      for (let i = 0; i < 5; i++) {
-        if (response.status === 200 || response.status === 302) {
-          break
-        }
-        response = await axios.get(url, { responseType: 'text' })
-      }
+      const response = await requestFastCheck(url, [200, 302])
 
       if (response.status == 302) {
         setStatus(info, legacyAccountStatusText.loggedOut)
@@ -1329,13 +1346,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
   async function checkAcgnxGLoginStatusClean(info: Config.LoginInfo) {
     try {
       const url = 'https://www.acgnx.se/user.php'
-      let response = await axios.get(url, { responseType: 'text' })
-      for (let i = 0; i < 5; i++) {
-        if (response.status === 200 || response.status === 302 || response.status === 403) {
-          break
-        }
-        response = await axios.get(url, { responseType: 'text' })
-      }
+      const response = await requestFastCheck(url, [200, 302, 403])
 
       const { data, status } = response
       if (status == 302) {
@@ -1362,13 +1373,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
   async function checkAcgnxALoginStatusClean(info: Config.LoginInfo) {
     try {
       const url = 'https://share.acgnx.se/user.php'
-      let response = await axios.get(url, { responseType: 'text' })
-      for (let i = 0; i < 5; i++) {
-        if (response.status === 200 || response.status === 302 || response.status === 403) {
-          break
-        }
-        response = await axios.get(url, { responseType: 'text' })
-      }
+      const response = await requestFastCheck(url, [200, 302, 403])
 
       const { data, status } = response
       if (status == 302) {
@@ -1579,7 +1584,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
     try {
       const { type }: Message.BT.AccountType = JSON.parse(msg)
       if (type == 'all') {
-        await Promise.all(
+        void Promise.all(
           ['bangumi', 'mikan', 'anibt', 'miobt', 'nyaa', 'dmhy', 'acgrip', 'acgnx_a', 'acgnx_g'].map(accountType =>
             checkLoginStatusClean(JSON.stringify({ type: accountType })),
           ),
@@ -1647,7 +1652,10 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
         await checkDmhyLoginStatusClean(info)
         await persistUserData()
         if (info.status == legacyAccountStatusText.loggedOut && info.username && info.password) {
-          const result = await axios.get('https://www.dmhy.org/common/generate-captcha?code=' + Date.now())
+          const result = await axios.get(
+            'https://www.dmhy.org/common/generate-captcha?code=' + Date.now(),
+            createFastRequestConfig(),
+          )
           if (result.headers['set-cookie']) {
             await storeResponseCookies(info, 'https://www.dmhy.org', result.headers['set-cookie'])
             await persistUserData()

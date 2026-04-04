@@ -311,9 +311,9 @@ export async function openLoginWindow(options: OpenLoginWindowOptions) {
     loginWindow.show()
   })
 
-  async function finalizeLoginWindow(explicitMikanApiToken = '') {
+  function closeLoginWindowImmediately() {
     if (loginWindowClosed) {
-      return
+      return false
     }
 
     loginWindowClosed = true
@@ -321,6 +321,20 @@ export async function openLoginWindow(options: OpenLoginWindowOptions) {
       clearInterval(mikanAutoCompleteTimer)
       mikanAutoCompleteTimer = undefined
     }
+
+    if (!loginWindow.isDestroyed()) {
+      loginWindow.hide()
+      setImmediate(() => {
+        if (!loginWindow.isDestroyed()) {
+          loginWindow.destroy()
+        }
+      })
+    }
+
+    return true
+  }
+
+  async function persistLoginWindowState(explicitMikanApiToken = '') {
     try {
       if (type === 'vcb') {
         await browserSession.cookies
@@ -355,9 +369,15 @@ export async function openLoginWindow(options: OpenLoginWindowOptions) {
       }
     } catch (err) {
       log.error(err)
-    } finally {
-      loginWindow.destroy()
     }
+  }
+
+  function finalizeLoginWindow(explicitMikanApiToken = '') {
+    if (!closeLoginWindowImmediately()) {
+      return
+    }
+
+    void persistLoginWindowState(explicitMikanApiToken)
   }
 
   async function tryAutoCompleteMikanLogin() {
@@ -374,7 +394,7 @@ export async function openLoginWindow(options: OpenLoginWindowOptions) {
           currentUrl,
           tokenLength: apiToken.length,
         })
-        await finalizeLoginWindow(apiToken)
+        finalizeLoginWindow(apiToken)
         return
       }
 
@@ -418,15 +438,19 @@ export async function openLoginWindow(options: OpenLoginWindowOptions) {
         return
       }
 
-      await finalizeLoginWindow(apiToken)
+      finalizeLoginWindow(apiToken)
     } catch (err) {
       log.error('[Mikan] Auto-complete login failed', err)
     }
   }
 
-  loginWindow.on('close', async event => {
+  loginWindow.on('close', event => {
+    if (loginWindowClosed) {
+      return
+    }
+
     event.preventDefault()
-    await finalizeLoginWindow()
+    finalizeLoginWindow()
   })
 
   if (type === 'mikan') {
