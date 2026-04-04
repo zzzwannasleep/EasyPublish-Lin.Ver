@@ -18,11 +18,6 @@ on:
         description: 'Release title shown in GitHub Releases'
         required: false
         type: string
-      prerelease:
-        description: 'Publish as prerelease'
-        required: false
-        default: false
-        type: boolean
       draft:
         description: 'Create release as draft'
         required: false
@@ -40,7 +35,6 @@ jobs:
       release_version: ${{ steps.meta.outputs.release_version }}
       release_tag: ${{ steps.meta.outputs.release_tag }}
       release_name: ${{ steps.meta.outputs.release_name }}
-      release_prerelease: ${{ steps.meta.outputs.release_prerelease }}
       release_draft: ${{ steps.meta.outputs.release_draft }}
 
     steps:
@@ -72,9 +66,6 @@ jobs:
           const inputVersion = String(inputs.release_version || '').trim()
           const inputTag = String(inputs.release_tag || '').trim()
           const inputName = String(inputs.release_name || '').trim()
-          const inputPrerelease = Object.prototype.hasOwnProperty.call(inputs, 'prerelease')
-            ? String(inputs.prerelease).trim()
-            : ''
           const inputDraft = Object.prototype.hasOwnProperty.call(inputs, 'draft') ? String(inputs.draft).trim() : ''
 
           let releaseTag = refType === 'tag' ? refName : inputTag
@@ -94,14 +85,11 @@ jobs:
           }
 
           const releaseName = inputName || `Nexus Publish ${releaseTag}`
-          const releasePrerelease =
-            inputPrerelease === 'true' ? 'true' : inputPrerelease === 'false' ? 'false' : String(releaseVersion.includes('-'))
           const releaseDraft = inputDraft === 'true' ? 'true' : 'false'
 
           fs.appendFileSync(outputPath, `release_version=${releaseVersion}\n`)
           fs.appendFileSync(outputPath, `release_tag=${releaseTag}\n`)
           fs.appendFileSync(outputPath, `release_name=${releaseName}\n`)
-          fs.appendFileSync(outputPath, `release_prerelease=${releasePrerelease}\n`)
           fs.appendFileSync(outputPath, `release_draft=${releaseDraft}\n`)
           NODE
 
@@ -115,7 +103,7 @@ jobs:
         include:
           - label: Windows
             os: windows-latest
-            build_command: npm run build:win
+            build_command: npm run prepare:win-output && npm run build && npx electron-builder -p never --win nsis portable zip
             artifact_name: release-windows
             artifact_paths: |
               dist/*.exe
@@ -247,7 +235,7 @@ jobs:
           target_commitish: ${{ github.sha }}
           body_path: release-notes.md
           draft: ${{ needs.prepare.outputs.release_draft }}
-          prerelease: ${{ needs.prepare.outputs.release_prerelease }}
+          prerelease: false
           files: release-assets/**
           overwrite_files: true
           fail_on_unmatched_files: true
