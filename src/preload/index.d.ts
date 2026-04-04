@@ -77,6 +77,7 @@ export interface SiteAPI {
   validateAccount: (msg: string) => Promise<string>
   validatePublish: (msg: string) => Promise<string>
   loadMetadata: (msg: string) => Promise<string>
+  searchBangumiSubjects: (msg: string) => Promise<string>
   publish: (msg: string) => Promise<string>
 }
 

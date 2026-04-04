@@ -303,30 +303,6 @@ onMounted(() => {
 
 <template>
   <div :class="['task-list', isPreviewMode ? 'task-list--preview' : 'task-list--full']" v-loading="isLoading">
-    <section v-if="!isPreviewMode" class="task-list__hero surface-hero">
-      <div class="task-list__hero-copy">
-        <div class="task-list__hero-chip">
-          <span class="task-list__hero-chip-dot" />
-          <span>{{ t('projects.hero.chip') }}</span>
-        </div>
-        <h2 class="task-list__hero-title">{{ t('projects.hero.title') }}</h2>
-        <p class="task-list__hero-summary">{{ t('projects.hero.summary') }}</p>
-      </div>
-
-      <div class="task-list__hero-actions">
-        <router-link to="/new-project">
-          <el-button type="primary">
-            <el-icon><Plus /></el-icon>
-            <span>{{ t('nav.newProject.label') }}</span>
-          </el-button>
-        </router-link>
-        <el-button plain @click="loadData">
-          <el-icon><RefreshRight /></el-icon>
-          <span>{{ t('taskList.actions.refresh') }}</span>
-        </el-button>
-      </div>
-    </section>
-
     <section v-if="!isPreviewMode" class="task-list__overview">
       <article
         v-for="item in overviewItems"
@@ -357,31 +333,32 @@ onMounted(() => {
       <div class="task-list__toolbar-copy">
         <div class="eyebrow-text">{{ t('projects.panel.eyebrow') }}</div>
         <h3 class="task-list__toolbar-title">{{ t('projects.panel.title') }}</h3>
-        <p class="task-list__toolbar-text">{{ t('projects.panel.description') }}</p>
       </div>
 
-      <div class="task-list__filters">
-        <label class="task-list__filter soft-pill">
-          <span class="task-list__filter-label">{{ t('taskList.filter.showPublished') }}</span>
-          <el-switch v-model="showPublished" />
-        </label>
+      <div class="task-list__toolbar-controls">
+        <div class="task-list__filters">
+          <label class="task-list__filter">
+            <span class="task-list__filter-label">{{ t('taskList.filter.showPublished') }}</span>
+            <el-switch v-model="showPublished" />
+          </label>
 
-        <label class="task-list__filter task-list__filter--select soft-pill">
-          <span class="task-list__filter-label">{{ t('taskList.filter.mode.label') }}</span>
-          <el-select v-model="projectModeFilter" class="task-list__mode-select" size="small">
-            <el-option
-              v-for="option in modeFilterOptions"
-              :key="option.value"
-              :label="option.label"
-              :value="option.value"
-            />
-          </el-select>
-        </label>
+          <label class="task-list__filter task-list__filter--select">
+            <span class="task-list__filter-label">{{ t('taskList.filter.mode.label') }}</span>
+            <el-select v-model="projectModeFilter" class="task-list__mode-select" size="small">
+              <el-option
+                v-for="option in modeFilterOptions"
+                :key="option.value"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
+          </label>
 
-        <label class="task-list__filter soft-pill">
-          <span class="task-list__filter-label">{{ t('taskList.filter.missingTargets') }}</span>
-          <el-switch v-model="showOnlyMissingTargets" />
-        </label>
+          <label class="task-list__filter">
+            <span class="task-list__filter-label">{{ t('taskList.filter.missingTargets') }}</span>
+            <el-switch v-model="showOnlyMissingTargets" />
+          </label>
+        </div>
       </div>
     </section>
 
@@ -613,95 +590,6 @@ onMounted(() => {
   gap: 12px;
 }
 
-.task-list__hero {
-  position: relative;
-  overflow: hidden;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 18px 24px;
-  padding: 28px;
-  background:
-    radial-gradient(circle at top right, color-mix(in srgb, var(--brand-soft) 90%, transparent), transparent 42%),
-    radial-gradient(circle at bottom left, color-mix(in srgb, var(--accent-soft) 86%, transparent), transparent 52%),
-    var(--surface-panel-wash-strong),
-    var(--bg-panel-strong);
-}
-
-.task-list__hero::after {
-  content: "";
-  position: absolute;
-  right: -24px;
-  bottom: -48px;
-  width: 188px;
-  height: 188px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--brand-soft) 72%, transparent);
-  filter: blur(10px);
-  opacity: 0.8;
-  pointer-events: none;
-}
-
-.task-list__hero-copy,
-.task-list__hero-actions {
-  position: relative;
-  z-index: 1;
-}
-
-.task-list__hero-copy {
-  max-width: 720px;
-}
-
-.task-list__hero-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border: 1px solid color-mix(in srgb, var(--accent-soft) 72%, var(--border-soft));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent-soft) 66%, var(--surface-soft-fill));
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-.task-list__hero-chip-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: currentColor;
-  box-shadow: 0 0 0 6px color-mix(in srgb, currentColor 20%, transparent);
-}
-
-.task-list__hero-title {
-  margin: 18px 0 0;
-  font-family: var(--font-display);
-  font-size: clamp(1.8rem, 3vw, 2.8rem);
-  line-height: 1.02;
-  letter-spacing: -0.05em;
-  color: var(--text-primary);
-}
-
-.task-list__hero-summary {
-  max-width: 640px;
-  margin: 14px 0 0;
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.75;
-}
-
-.task-list__hero-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.task-list__hero-actions > * {
-  display: inline-flex;
-}
-
 .task-list__overview {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -831,6 +719,11 @@ onMounted(() => {
   max-width: 680px;
 }
 
+.task-list__toolbar-controls {
+  display: grid;
+  justify-items: end;
+}
+
 .task-list__toolbar-title {
   margin: 10px 0 0;
   font-family: var(--font-display);
@@ -840,46 +733,53 @@ onMounted(() => {
   color: var(--text-primary);
 }
 
-.task-list__toolbar-text {
-  margin: 10px 0 0;
-  color: var(--text-secondary);
-  font-size: 14px;
-  line-height: 1.7;
-}
-
 .task-list__filters {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 12px 18px;
 }
 
 .task-list__filter {
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  min-height: 52px;
-  padding: 10px 14px;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-soft-fill) 88%, transparent);
   color: var(--text-secondary);
 }
 
 .task-list__filter--select {
   justify-content: space-between;
-  min-width: 238px;
+  min-width: 252px;
 }
 
 .task-list__filter-label {
   font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .task-list__mode-select {
-  min-width: 132px;
+  min-width: 144px;
 }
 
 .task-list__mode-select :deep(.el-select__wrapper) {
   min-height: 34px;
-  border-radius: 10px;
+  padding-inline: 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  box-shadow: none !important;
+}
+
+.task-list__mode-select :deep(.el-select__wrapper.is-hovering),
+.task-list__mode-select :deep(.el-select__wrapper.is-focused) {
+  background: color-mix(in srgb, var(--brand-soft) 65%, var(--bg-panel));
+  box-shadow: none !important;
 }
 
 .task-list__grid,
@@ -1255,15 +1155,18 @@ onMounted(() => {
 }
 
 @media (max-width: 960px) {
-  .task-list__hero,
   .task-list__toolbar,
   .task-list__preview-grid,
   .task-list__detail-grid {
     grid-template-columns: 1fr;
   }
 
-  .task-list__filters,
-  .task-list__hero-actions {
+  .task-list__toolbar-controls {
+    justify-items: start;
+    width: 100%;
+  }
+
+  .task-list__filters {
     justify-content: flex-start;
   }
 }
@@ -1273,7 +1176,6 @@ onMounted(() => {
     gap: 14px;
   }
 
-  .task-list__hero,
   .task-list__toolbar,
   .task-list__card,
   .task-list__preview-card,
@@ -1297,14 +1199,12 @@ onMounted(() => {
 
   .task-list__filter,
   .task-list__filter--select,
-  .task-list__hero-actions,
   .task-list__card-actions,
   .task-list__preview-actions,
   .task-list__empty-actions {
     width: 100%;
   }
 
-  .task-list__hero-actions,
   .task-list__card-actions,
   .task-list__preview-actions,
   .task-list__empty-actions {
@@ -1312,12 +1212,6 @@ onMounted(() => {
     align-items: stretch;
   }
 
-  .task-list__hero-actions > *,
-  .task-list__empty-actions > * {
-    width: 100%;
-  }
-
-  .task-list__hero-actions :deep(.el-button),
   .task-list__card-actions :deep(.el-button),
   .task-list__preview-actions :deep(.el-button),
   .task-list__empty-actions :deep(.el-button) {
@@ -1327,6 +1221,10 @@ onMounted(() => {
 
   .task-list__filter {
     justify-content: space-between;
+  }
+
+  .task-list__filter--select {
+    min-width: 0;
   }
 
   .task-list__mode-select {

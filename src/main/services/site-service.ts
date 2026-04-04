@@ -1,9 +1,10 @@
+import axios from 'axios'
 import fs from 'fs'
 import { join } from 'path'
 import { fail, ok } from '../../shared/types/api'
 import type { PublishResult, SitePublishBatchEntry } from '../../shared/types/publish'
 import type { PtSiteDraft } from '../../shared/types/pt-site'
-import type { SiteCatalogEntry, SiteId } from '../../shared/types/site'
+import type { BangumiSubjectSearchItem, SiteCatalogEntry, SiteId } from '../../shared/types/site'
 import { createSiteRegistry } from '../sites/registry'
 import { createCredentialStore } from '../storage/credential-store'
 import { createProjectStore } from '../storage/project-store'
@@ -22,6 +23,15 @@ export function createSiteService(options: CreateSiteServiceOptions) {
 
   function readOptionalString(value: unknown) {
     return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+  }
+
+  function readPositiveInteger(value: unknown, fallback: number) {
+    const nextValue = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
+    if (!Number.isFinite(nextValue) || nextValue <= 0) {
+      return fallback
+    }
+
+    return Math.floor(nextValue)
   }
 
   function normalizeBatchEntries(value: unknown) {
@@ -282,6 +292,95 @@ export function createSiteService(options: CreateSiteServiceOptions) {
     } catch (error) {
       return JSON.stringify(
         fail('SITE_METADATA_FAILED', 'Unable to load site metadata', (error as Error).message),
+      )
+    }
+  }
+
+  async function searchBangumiSubjects(msg: string) {
+    try {
+      const { query, limit } = JSON.parse(msg) as { query?: string; limit?: number }
+      const normalizedQuery = readOptionalString(query)
+      if (!normalizedQuery) {
+        return JSON.stringify(fail('BANGUMI_SEARCH_QUERY_REQUIRED', 'Please provide a Bangumi search keyword'))
+      }
+
+      const normalizedLimit = Math.min(readPositiveInteger(limit, 8), 12)
+      const response = await axios.post(
+        `https://api.bgm.tv/v0/search/subjects?limit=${normalizedLimit}&offset=0`,
+        {
+          keyword: normalizedQuery,
+          sort: 'match',
+          filter: {
+            type: [2],
+          },
+        },
+        {
+          headers: {
+            Accept: 'application/json',
+          },
+        },
+      )
+
+      if (response.status < 200 || response.status >= 300) {
+        return JSON.stringify(
+          fail(
+            'BANGUMI_SEARCH_FAILED',
+            'Unable to search Bangumi subjects',
+            typeof response.data === 'string' ? response.data : `HTTP ${response.status}`,
+          ),
+        )
+      }
+
+      const payload =
+        response.data && typeof response.data === 'object' ? (response.data as Record<string, unknown>) : {}
+      const items = Array.isArray(payload.data)
+        ? payload.data.reduce<BangumiSubjectSearchItem[]>((subjects, item) => {
+            if (!item || typeof item !== 'object' || Array.isArray(item)) {
+              return subjects
+            }
+
+            const raw = item as Record<string, unknown>
+            const id = typeof raw.id === 'number' ? raw.id : typeof raw.id === 'string' ? Number(raw.id) : NaN
+            const name = readOptionalString(raw.name)
+            if (!Number.isFinite(id) || !name) {
+              return subjects
+            }
+
+            const images =
+              raw.images && typeof raw.images === 'object' && !Array.isArray(raw.images)
+                ? {
+                    small: readOptionalString((raw.images as Record<string, unknown>).small),
+                    grid: readOptionalString((raw.images as Record<string, unknown>).grid),
+                    medium: readOptionalString((raw.images as Record<string, unknown>).medium),
+                    large: readOptionalString((raw.images as Record<string, unknown>).large),
+                    common: readOptionalString((raw.images as Record<string, unknown>).common),
+                  }
+                : undefined
+
+            subjects.push({
+              id,
+              name,
+              nameCn: readOptionalString(raw.name_cn),
+              summary: readOptionalString(raw.summary),
+              airDate: readOptionalString(raw.date),
+              rank: readPositiveInteger(raw.rank, 0) || undefined,
+              score:
+                typeof raw.score === 'number'
+                  ? raw.score
+                  : typeof raw.score === 'string' && Number.isFinite(Number(raw.score))
+                    ? Number(raw.score)
+                    : undefined,
+              url: readOptionalString(raw.url),
+              images,
+            })
+            return subjects
+          }, [])
+        : []
+
+      return JSON.stringify(ok({ query: normalizedQuery, items }))
+    } catch (error) {
+      return JSON.stringify(
+        fail('BANGUMI_SEARCH_FAILED', 'Unable to search Bangumi subjects', (error as Error).message),
       )
     }
   }
@@ -576,6 +675,7 @@ export function createSiteService(options: CreateSiteServiceOptions) {
     validateAccount,
     validatePublish,
     loadMetadata,
+    searchBangumiSubjects,
     publish,
   }
 }

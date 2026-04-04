@@ -2,6 +2,7 @@ import type { ApiResult } from '../../types/api'
 import type { SitePublishDraft, SitePublishPayload } from '../../types/publish'
 import type { PtSiteDraft, PtSiteListPayload, PtSitePayload } from '../../types/pt-site'
 import type {
+  BangumiSubjectSearchPayload,
   SiteAccountValidationPayload,
   SiteDetailPayload,
   SiteId,
@@ -45,6 +46,12 @@ export const siteBridge = {
 
   loadMetadata(id: SiteId) {
     return parseResult<SiteMetadataPayload>(window.siteAPI.loadMetadata(JSON.stringify({ id })))
+  },
+
+  searchBangumiSubjects(query: string, limit = 8) {
+    return parseResult<BangumiSubjectSearchPayload>(
+      window.siteAPI.searchBangumiSubjects(JSON.stringify({ query, limit })),
+    )
   },
 
   publish(input: SitePublishDraft) {

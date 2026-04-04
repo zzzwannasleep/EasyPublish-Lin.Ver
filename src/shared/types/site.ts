@@ -145,6 +145,31 @@ export interface SiteMetadataPayload {
   metadata: SiteMetadataRecord
 }
 
+export interface BangumiSubjectImageSet {
+  small?: string
+  grid?: string
+  medium?: string
+  large?: string
+  common?: string
+}
+
+export interface BangumiSubjectSearchItem {
+  id: number
+  name: string
+  nameCn?: string
+  summary?: string
+  airDate?: string
+  rank?: number
+  score?: number
+  url?: string
+  images?: BangumiSubjectImageSet
+}
+
+export interface BangumiSubjectSearchPayload {
+  query: string
+  items: BangumiSubjectSearchItem[]
+}
+
 export interface SiteValidationIssue {
   field: string
   message: string

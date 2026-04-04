@@ -9,5 +9,6 @@ export const siteAPI = {
   validateAccount: async (msg: string) => await ipcRenderer.invoke('site_validateAccount', msg),
   validatePublish: async (msg: string) => await ipcRenderer.invoke('site_validatePublish', msg),
   loadMetadata: async (msg: string) => await ipcRenderer.invoke('site_loadMetadata', msg),
+  searchBangumiSubjects: async (msg: string) => await ipcRenderer.invoke('site_searchBangumiSubjects', msg),
   publish: async (msg: string) => await ipcRenderer.invoke('site_publish', msg),
 }

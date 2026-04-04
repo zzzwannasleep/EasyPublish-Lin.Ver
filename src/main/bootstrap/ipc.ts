@@ -72,6 +72,7 @@ type SiteHandlers = {
   validateAccount: (msg: string) => Asyncish<unknown>
   validatePublish: (msg: string) => Asyncish<unknown>
   loadMetadata: (msg: string) => Asyncish<unknown>
+  searchBangumiSubjects: (msg: string) => Asyncish<unknown>
   publish: (msg: string) => Asyncish<unknown>
 }
 
@@ -157,6 +158,7 @@ export function registerIpcHandlers({ Global, BT, Forum, Project, Site, Log, Tas
   ipcMain.handle('site_validateAccount', (_event, msg) => Site.validateAccount(msg))
   ipcMain.handle('site_validatePublish', (_event, msg) => Site.validatePublish(msg))
   ipcMain.handle('site_loadMetadata', (_event, msg) => Site.loadMetadata(msg))
+  ipcMain.handle('site_searchBangumiSubjects', (_event, msg) => Site.searchBangumiSubjects(msg))
   ipcMain.handle('site_publish', (_event, msg) => Site.publish(msg))
 
   ipcMain.handle('log_listLogs', () => Log.listLogs())

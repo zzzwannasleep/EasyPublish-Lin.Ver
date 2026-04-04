@@ -450,6 +450,9 @@ namespace Site {
   export function loadMetadata(msg: string) {
     return siteService.loadMetadata(msg)
   }
+  export function searchBangumiSubjects(msg: string) {
+    return siteService.searchBangumiSubjects(msg)
+  }
   export function publish(msg: string) {
     return siteService.publish(msg)
   }
