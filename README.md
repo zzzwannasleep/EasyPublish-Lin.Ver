@@ -1,241 +1,53 @@
-# Nexus Publish 新手教程
-
-![Nexus Publish](readme/logo.png)
-
-`Nexus Publish` 是一个面向 PT / NexusPHP 发布场景的桌面工具。它把“账号管理、项目编辑、内容检查、站点发布、结果回看”收进同一个工作区里，适合想把发布流程固定下来的人使用。
-
-如果你是第一次接触这个项目，先看下面这句就够了：
-
-> 推荐流程：先配代理和账号，再新建一个项目，填好内容后走完 `编辑 -> 检查 -> 发布 -> 完成`。
-
-## 这个项目能做什么
-
-- 把一次发布拆成可继续编辑的项目，而不是只跑一次性脚本
-- 管理多个站点账号、Cookie、Token 和代理设置
-- 支持剧集模式，以及合集 / 电影模式
-- 用 Markdown 维护正文，并在发布时转换成 HTML / BBCode
-- 保存每次发布结果，后面可以回看成功链接和失败记录
-
-当前项目里常见的目标站点包括：
-
-- 萌番组
-- Mikan
-- Anibt
-- MioBT
-- Nyaa
-- AcgRip
-- 动漫花园
-- AcgnX
-- 主站帖子流程
-
-## 使用前先准备这些东西
-
-- 你要发布的种子或资源文件
-- 标题、简介、截图、技术信息等基础内容
-- 对应站点的账号，或已经可用的 Cookie / Token
-- 如果目标站点需要代理，先准备好代理地址
-
-第一次使用时，建议先只选 `1` 个最熟悉的站点跑通流程，不要一上来就全站同时发布。
-
-## 5 分钟上手
-
-### 1. 安装或启动
-
-普通使用者：
-
-- 直接下载 Releases 里的安装包，安装后打开即可
-
-本地运行源码：
-
-```powershell
-npm install
-npm run dev
-```
-
-![项目界面](readme/01.png)
-
-### 2. 先配置代理
-
-如果你的发布站点需要代理，不要依赖系统代理，先在应用内把代理设置好。旧流程里很多登录、校验、发布问题，本质上都是代理没有先配好。
-
-![代理设置](readme/quickstart/01.png)
-
-### 3. 添加并检查站点账号
-
-进入 `站点账号` 页面后，把需要发布的站点账号先配置好，再执行检查。能在这里先发现的问题，不要拖到真正发布时再处理。
-
-常见做法：
-
-- 能用 Cookie / Token 的站点，优先填 Cookie / Token
-- 需要用户名密码登录的站点，先确认验证码或二次验证流程能正常完成
-- 检查状态异常时，先排查代理、Cookie 失效和站点登录状态
-
-![账号管理](readme/quickstart/02.png)
-
-### 4. 新建项目
-
-点击 `新建项目`，先决定这次发布属于哪种模式：
-
-- `剧集模式`：适合连载、补档、分集维护
-- `合集 / 电影`：适合单次成品、全集、电影、OVA、总集篇
-
-然后再决定内容来源：
-
-- `快速流程`：直接在当前工作流里填写内容，适合从零开始
-- `从文件导入`：你已经准备好了 Markdown / HTML / BBCode 文件
-- `模板生成`：希望基于模板字段自动组织发布内容
-
-![新建项目](readme/quickstart/03.png)
-
-### 5. 编辑项目内容
-
-项目创建完成后，按页面引导填写：
-
-- 项目名称
-- 发布标题
-- 目标站点
-- Markdown 正文
-- 分类、标签、站点字段
-- 种子路径、截图、补充说明
-
-如果你是第一次用，先把内容填到“能发出去”的程度，不要一开始就追求把每个字段都自动化。
-
-![编辑内容](readme/quickstart/13.png)
-
-### 6. 检查输出
-
-发布前先过一遍 `检查输出` 页面，重点看这几项：
-
-- 标题是否最终可用
-- HTML / Markdown / BBCode 的内容是否正常
-- 目标站点是否都处于可发布状态
-- 某些站点要求的分类、Bangumi 信息、额外字段是否缺失
-
-这一步的意义很简单：把“上线后才发现的错误”尽量提前解决。
-
-### 7. 发布种子
-
-检查无误后进入 `发布种子`。应用会按当前项目配置，把内容发到你选中的目标站点，并记录每个站点的返回状态。
-
-如果有站点失败，不需要整单重做，后面可以回到项目里继续补发。
-
-![发布种子](readme/quickstart/09.png)
-
-### 8. 发布主站或结束流程
-
-如果这次发布还需要同步主站帖子，就继续进入 `发布主站`。如果不需要主站流程，通常可以直接进入完成页查看结果。
-
-### 9. 在完成结果里复制链接
-
-发布完成后，去 `完成结果` 或项目列表里查看已经记录下来的远端链接和失败记录。后面补发、复查、复制链接，都从这里回看最方便。
-
-![完成结果](readme/03.png)
-
-## 项目模式怎么选
-
-### 剧集模式
-
-适合这些场景：
-
-- 连载更新
-- 一季内要反复补发
-- 同一部作品会有多集、多版本、多次调整
-
-这个模式更强调“持续维护一个工作区”。
-
-### 合集 / 电影模式
-
-适合这些场景：
-
-- 单部电影
-- 全集打包
-- OVA、SP、剧场版
-- 一次整理后就准备发布的成品内容
-
-这个模式更强调“把一单内容整理完，然后一次走完流程”。
-
-## 内容来源怎么选
-
-### 快速流程
-
-适合从零开始填表的人。你只要按界面顺序把字段补齐，就能直接走后续检查和发布。
-
-### 从文件导入
-
-适合已经有现成的 `Markdown`、`HTML`、`BBCode` 或历史发布稿的人。导入后再微调，比全部重写省时间。
-
-### 模板生成
-
-适合有固定写法、固定字段、固定站点信息的人。把常用结构模板化后，后续会轻松很多。
-
-## 常见问题
-
-### 为什么明明开了代理，还是登录失败？
-
-先确认你是在应用里设置的代理，而不是只改了系统代理。这个项目的关键网络流程优先看应用内配置。
-
-### 为什么有的站点能登录，但还是不能发布？
-
-通常是发布字段还没补齐，例如分类、Bangumi 信息、标题、目标站点默认字段，或者该站点当前账号状态还不可用。
-
-### 发布失败后要不要重建项目？
-
-一般不用。这个项目就是为了把一次发布变成可继续编辑的工作区，失败后回到项目里修字段、补账号、重新发就行。
-
-### 发布链接去哪里找？
-
-去 `完成结果` 页面，或者项目列表里看项目详情。成功链接和失败记录都会保留。
-
-### 看不懂哪里出错怎么办？
-
-先看 `日志诊断`，再回到项目检查目标站点、标题、分类和账号状态。大部分问题都能在这两个地方定位到。
-
-## 给第一次使用的人一点建议
-
-- 先用一个测试项目熟悉流程，再处理正式发布
-- 第一次只发一个站点，确认标题、分类和正文都正常
-- Markdown 正文先保持简单，确认能稳定转换后再慢慢模板化
-- 站点账号状态要先检查通过，不要边发布边排查登录问题
-
-## 开发命令
-
-如果你是来改代码或本地调试，可以直接用这些命令：
-
-```powershell
-npm install
-npm run dev
-npm run build
-```
-
-平台构建：
-
-```powershell
-npm run build:win
-npm run build:mac
-npm run build:linux
-```
-
-说明：
-
-- `npm run build` 会先做类型检查，再执行 Electron 构建
-- `npm run build:win` 会输出 Windows 安装包和更新元数据
-- `npm run build:mac` 需要在 macOS 主机上执行
-- `npm run build:linux` 当前会构建 Linux ARM64 的 `deb` 包
-
-## 仓库结构
-
-```text
-src/
-  main/        主进程服务、存储、站点适配器、IPC 注册
-  preload/     预加载桥接与类型定义
-  renderer/    桌面端界面、页面与功能模块
-  shared/      项目、站点、发布相关共享类型
-docs/          设计和重构过程文档
-build/         打包资源与构建脚本
-scripts/       辅助脚本
-readme/        README 里用到的截图和图片
-```
-
-## 致谢
-
-这个项目基于 `EasyPublish` 的思路继续演化而来。
+EasyPublish-Lin.Ver 一个便利的发布资源到BT站点的软件
+注意：本项目由ChatGPT在原项目的基础上开发出来的 会存在一些问题 拜托来Issue区告知我 谢谢！
+页面一览：
+<img width="2559" height="1599" alt="image" src="https://github.com/user-attachments/assets/9d1bdfdb-7c26-418d-a7a7-e050cee87925" />
+打开软件 映入眼帘的是总览页 这里显示最近项目 以及迅速进入各个页面进行检索或者发布
+<img width="2559" height="1599" alt="image" src="https://github.com/user-attachments/assets/e4aff6ac-8f3d-486e-8f43-6a824bcee8d6" />
+来到 新建项目页 我们看到了 剧集模式 和 合集/电影 模式 两者发布的方法如出一辙 只是为了区分放送中番剧和制作好的合集和剧场版旧这样开了两个 实际上怎么用都OK的
+<img width="2559" height="1599" alt="image" src="https://github.com/user-attachments/assets/c5eff2b9-4117-4b9d-9d2d-c876d57f51e0" />
+来到项目列表页 我们能在这里看到我们正在制作的 已经发布了的剧集 后续会在这里直接就能看到发布的链接 方便使用者直接点进对应链接进行修改
+<img width="2560" height="4449" alt="image" src="https://github.com/user-attachments/assets/25e0ff4b-bdc3-4ed5-a981-0e1032173620" />
+接下来是站点账号页 我们在这里管理自己的账号 填写 导入自己需要发布的站点
+日志诊断页 和 使用说明页 不进行介绍 字面意思
+使用教程：
+首先我们要在 站点账号页 登录我们需要发布的站点 我使用 [Anibt](https://anibt.net/) 进行使用的示范 其他站点依葫芦画瓢即可
+<img width="418" height="754" alt="image" src="https://github.com/user-attachments/assets/741426c8-147b-42f1-b8b9-97b2d0e7317c" />
+打开 [字幕组仪表盘](https://anibt.net/groups) 
+<img width="2545" height="835" alt="image" src="https://github.com/user-attachments/assets/1ac3cdd4-2c6a-4d31-998d-0c29a86b5a3f" />
+点击 API密钥 创建密钥 填写完毕后 点击创建 
+<img width="735" height="345" alt="image" src="https://github.com/user-attachments/assets/4eb98088-9e03-4d4b-90ed-246043e15193" />
+<img width="510" height="849" alt="image" src="https://github.com/user-attachments/assets/6ac4c461-4b2c-4e30-afa8-88bdce6e80ef" />
+获取到密钥后复制 然后粘贴到软件中 点击检查/登录 右上角显示已登录就是成功了
+<img width="2559" height="726" alt="image" src="https://github.com/user-attachments/assets/7ffcf7af-99b0-4874-b49d-d115e8174ce1" />
+为了演示上传 我转载上传拨雪寻春字幕组的 铃芽之旅 同时使用剧集模式 像你们展示通用的操作
+首先点击新建项目 点击 剧集模式
+<img width="2556" height="738" alt="image" src="https://github.com/user-attachments/assets/d14c7065-fb3e-4b29-bd7d-937d5587218b" />
+项目名称我们这里填写 铃芽之旅 即可 点击 创建项目
+<img width="2178" height="1083" alt="image" src="https://github.com/user-attachments/assets/73791478-26ba-4174-9387-3764ccc8f9f4" />
+接着我们会来到 编辑项目页 我们会看到一堆~的东西 别担心 我一步一步教会你
+<img width="2188" height="1958" alt="image" src="https://github.com/user-attachments/assets/44593428-1945-4f3c-8d66-e573f9008fbf" />
+首先我们要先搞定标题 我们引入了OKP内核的识别方案 输入类似 <标签> 即可让项目自己识别
+<img width="753" height="122" alt="image" src="https://github.com/user-attachments/assets/218d7add-7299-404b-8c81-d25c00bcdcee" />
+我们有三个规范命名的种子文件了（其实这里命名哪怕很乱 但是我们通过映射也可以使其规范）
+<img width="2055" height="732" alt="image" src="https://github.com/user-attachments/assets/9f4508d3-8086-47df-83cc-1b6853ab5f29" />
+看到首栏 标题匹配自动识别 我们只需要按照规则填写好即可 先复制种子文件名字到 文件名匹配 中去 将对应的标签填写进去
+注意！ 这里的标签可以留空 留空就是不使用会跳过 不然会会造成识别失败的喔
+<img width="2046" height="1116" alt="image" src="https://github.com/user-attachments/assets/be1ed812-9aef-473b-9234-4411c3e4db8d" />
+点击这个栏左下角的保存匹配方案即可
+点击 导入.torrent自动识别 导入种子即可 中间顶上会弹出提示
+<img width="462" height="45" alt="image" src="https://github.com/user-attachments/assets/aa5df2f9-d836-4209-bd08-5c26bdacc4c6" />
+<img width="2109" height="552" alt="image" src="https://github.com/user-attachments/assets/dbb0eafc-cf1f-494d-8e35-abbdee1ba841" />
+能看到这里也显示了正确的信息 点击 选择站点 这里只会展示你登陆了 并且账号是有效的
+<img width="2118" height="312" alt="image" src="https://github.com/user-attachments/assets/d146017d-e30a-4531-877d-aeca09787c0e" />
+将剧集名字填写到Bangumi ID 搜索 点击对应的剧集
+<img width="2112" height="1280" alt="image" src="https://github.com/user-attachments/assets/6f6e89df-e1f8-40c9-8b59-d1e19c001a5f" />
+会自动回写到站点字段里面的
+<img width="438" height="54" alt="image" src="https://github.com/user-attachments/assets/2b38e103-9939-4c57-b16b-8e7a3812fab2" />
+往下滑动 到正文编辑页面 目前考虑都是一次发一个剧的不同版本 遂三合一 后续会在这里优化 支持单独编辑某个版本的
+<img width="2124" height="1131" alt="image" src="https://github.com/user-attachments/assets/d42c76f7-c3c9-4557-9e93-2f124275d71f" />
+点击预览检查一下 确认无误之后 往上回拉进入检查页面 程序会自己确认一遍 通过了就可以点击发布了
+<img width="2136" height="879" alt="image" src="https://github.com/user-attachments/assets/ec064c49-7332-40fd-8c4e-a9de6eee6656" />
+发布成功 来到 [字幕组后台](https://anibt.net/groups) 一看
+<img width="2097" height="360" alt="image" src="https://github.com/user-attachments/assets/8eb2c4d9-0677-4b5a-b73f-ffdd0e52c56a" />
+已经发布成功了
