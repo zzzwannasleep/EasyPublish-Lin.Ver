@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { marked } from 'marked'
-import { normalizeLegacyAccountStatus } from '../../../../shared/utils/legacy-account-status'
 import StatusChip from '../../components/feedback/StatusChip.vue'
 import { useI18n } from '../../i18n'
 import { taskBridge } from '../../services/bridge/task'
@@ -25,7 +24,12 @@ interface SitePublishDraftForm {
   title: string
   description: string
   torrentPath: string
+  categoryBangumi: string
   categoryCode: string
+  publishIdentity: string
+  btSyncKey: string
+  teamSync: boolean
+  bangumiTagIds: string[]
   trackersText: string
   episodeKey: string
   resolution: string
@@ -109,8 +113,6 @@ interface PublishProgressRow {
   message: string
   remoteUrl?: string
 }
-
-const LEGACY_SITE_IDS = new Set<SiteId>(['bangumi'])
 
 const props = defineProps<{
   id: number
@@ -334,7 +336,12 @@ function createEmptyDraft(): SitePublishDraftForm {
     title: '',
     description: '',
     torrentPath: '',
+    categoryBangumi: '',
     categoryCode: '',
+    publishIdentity: 'personal',
+    btSyncKey: '',
+    teamSync: false,
+    bangumiTagIds: [],
     trackersText: '',
     episodeKey: '',
     resolution: '',
@@ -419,13 +426,38 @@ function readStoredNumber(value: unknown) {
 }
 
 function readStoredBoolean(value: unknown) {
-  return value === true
+  return value === true || value === 'true' || value === '1'
 }
 
 function readStoredNumberArray(value: unknown) {
   return Array.isArray(value)
     ? value.filter((item): item is number => typeof item === 'number' && Number.isFinite(item))
     : []
+}
+
+function readStoredBangumiTagIds(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [] as string[]
+  }
+
+  return [
+    ...new Set(
+      value
+        .map(item => {
+          if (typeof item === 'string') {
+            return item.trim()
+          }
+
+          if (!item || typeof item !== 'object' || Array.isArray(item)) {
+            return ''
+          }
+
+          const raw = item as Record<string, unknown>
+          return readOptionalString(raw.value) ?? readOptionalString(raw._id) ?? ''
+        })
+        .filter(Boolean),
+    ),
+  ]
 }
 
 function readStoredTrackersText(value: unknown) {
@@ -458,8 +490,13 @@ function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefa
     return draft
   }
 
+  draft.categoryBangumi = readStoredString(siteFieldDefaults.categoryBangumi ?? siteFieldDefaults.category_bangumi)
   draft.smallDescription = readStoredString(siteFieldDefaults.smallDescription)
   draft.categoryCode = readStoredString(siteFieldDefaults.categoryCode ?? siteFieldDefaults.category_nyaa)
+  draft.publishIdentity = readStoredString(siteFieldDefaults.publishIdentity) || draft.publishIdentity
+  draft.btSyncKey = readStoredString(siteFieldDefaults.btSyncKey ?? siteFieldDefaults.btskey ?? siteFieldDefaults.syncKey)
+  draft.teamSync = readStoredBoolean(siteFieldDefaults.teamSync ?? siteFieldDefaults.teamsync)
+  draft.bangumiTagIds = readStoredBangumiTagIds(siteFieldDefaults.bangumiTagIds ?? siteFieldDefaults.tags)
   draft.url = readStoredString(siteFieldDefaults.information ?? siteFieldDefaults.url)
   draft.technicalInfo = readStoredString(siteFieldDefaults.technicalInfo)
   draft.ptGen = readStoredString(siteFieldDefaults.ptGen)
@@ -529,6 +566,7 @@ function createInitialDraft(currentConfig: Config.PublishConfig, content: Messag
   const draft = createEmptyDraft()
   draft.title = currentConfig.title ?? content.title ?? ''
   draft.description = content.html ?? ''
+  draft.categoryBangumi = currentConfig.category_bangumi ?? ''
   draft.categoryCode = currentConfig.category_nyaa ?? ''
   draft.url = currentConfig.information ?? ''
   draft.complete = currentConfig.completed === true
@@ -538,7 +576,11 @@ function createInitialDraft(currentConfig: Config.PublishConfig, content: Messag
       ? joinProjectPath(project.value.workingDirectory, currentConfig.torrentName)
       : currentConfig.torrentPath ?? ''
   const storedFieldDefaults = normalizeStoredSiteFieldDefaults(currentConfig.siteFieldDefaults)?.[siteId]
-  return applyStoredSiteFieldDefaults(draft, storedFieldDefaults)
+  applyStoredSiteFieldDefaults(draft, storedFieldDefaults)
+  if (siteId === 'bangumi' && draft.bangumiTagIds.length === 0) {
+    draft.bangumiTagIds = readStoredBangumiTagIds(currentConfig.tags)
+  }
+  return draft
 }
 
 function ensureDraft(siteId: SiteId) {
@@ -752,6 +794,17 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
     }
   }
 
+  if (site?.adapter === 'bangumi') {
+    return {
+      ...baseInput,
+      categoryBangumi: draft.categoryBangumi.trim() || undefined,
+      publishIdentity: draft.publishIdentity || 'personal',
+      bangumiTagIds: draft.bangumiTagIds.length > 0 ? [...draft.bangumiTagIds] : undefined,
+      btSyncKey: draft.btSyncKey.trim() || undefined,
+      teamSync: draft.teamSync && draft.publishIdentity !== 'personal',
+    }
+  }
+
   if (site?.adapter === 'acgrip') {
     return baseInput
   }
@@ -780,46 +833,29 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
   }
 }
 
-async function buildLegacyReviewSite(site: SiteCatalogEntry, latestResult?: PublishResult) {
-  const issues: string[] = []
-  const currentConfig = config.value
-  if (!currentConfig) {
-    issues.push(t('stage.review.confirm.legacy.configLoading'))
-  } else {
-    if (site.id === 'bangumi' && !currentConfig.category_bangumi?.trim()) {
-      issues.push(t('stage.review.confirm.legacy.bangumiCategoryMissing'))
-    }
-  }
-
-  let statusText = ''
-  try {
-    const response: Message.BT.LoginStatus = JSON.parse(
-      await window.BTAPI.checkLoginStatus(JSON.stringify({ type: site.id } satisfies Message.BT.AccountType)),
-    )
-    statusText = response.status?.trim() ?? ''
-  } catch (error) {
-    issues.push((error as Error).message)
-  }
-
-  const normalizedStatus = normalizeLegacyAccountStatus(statusText || undefined, true)
-  if (normalizedStatus !== 'loggedIn') {
-    issues.push(statusText || t('stage.review.confirm.legacy.accountUnknown'))
-  }
-
-  return {
-    siteId: site.id,
-    siteName: site.name,
-    status: issues.length === 0 ? 'ready' : 'blocked',
-    message: issues.length === 0 ? t('stage.review.confirm.legacy.checksPassed') : issues[0],
-    issues,
-    latestResult,
-    adapterKind: site.adapter,
-  } satisfies ReviewSiteRow
-}
-
 async function buildAdapterReviewSite(site: SiteCatalogEntry, latestResult?: PublishResult) {
-  if (site.accountStatus !== 'authenticated') {
-    const accountMessage = site.accountMessage?.trim() || t('stage.review.confirm.adapter.accountUnauthenticated')
+  const accountValidation =
+    site.accountStatus === 'authenticated'
+      ? {
+          status: 'authenticated' as const,
+          message: site.accountMessage,
+        }
+      : await siteBridge.validateAccount(site.id).then(result =>
+          result.ok
+            ? result.data
+            : {
+                siteId: site.id,
+                status: 'error' as const,
+                message: result.error.message,
+              },
+        ).catch(error => ({
+          siteId: site.id,
+          status: 'error' as const,
+          message: (error as Error).message,
+        }))
+
+  if (accountValidation.status !== 'authenticated') {
+    const accountMessage = accountValidation.message?.trim() || t('stage.review.confirm.adapter.accountUnauthenticated')
     return {
       siteId: site.id,
       siteName: site.name,
@@ -900,11 +936,7 @@ async function refreshChecks() {
         continue
       }
 
-      nextRows.push(
-        LEGACY_SITE_IDS.has(siteId)
-          ? await buildLegacyReviewSite(site, latestResult)
-          : await buildAdapterReviewSite(site, latestResult),
-      )
+      nextRows.push(await buildAdapterReviewSite(site, latestResult))
     }
 
     siteRows.value = nextRows
@@ -939,62 +971,6 @@ function updateProgress(siteId: SiteId, patch: Partial<PublishProgressRow>) {
   }
 
   Object.assign(row, patch)
-}
-
-function getLegacyPublishType(siteId: SiteId) {
-  switch (siteId) {
-    case 'bangumi':
-      return 'bangumi'
-    default:
-      return null
-  }
-}
-
-async function publishLegacySite(siteId: SiteId) {
-  const publishType = getLegacyPublishType(siteId)
-  if (!publishType) {
-    return {
-      status: 'failed' as const,
-      message: t('stage.review.confirm.legacy.siteUnsupported'),
-      result: undefined,
-    }
-  }
-
-  let finalResult = 'failed'
-  for (let attempt = 1; attempt <= 5; attempt += 1) {
-    const response: Message.Task.Result = JSON.parse(
-      await window.BTAPI.publish(JSON.stringify({ id: props.id, type: publishType } satisfies Message.Task.ContentType)),
-    )
-    finalResult = response.result
-    if (['success', 'exist', 'unauthorized'].includes(response.result)) {
-      break
-    }
-  }
-
-  await refreshProject()
-  const latestResult = getLatestPublishResultMap(project.value?.publishResults ?? []).get(siteId)
-
-  if (latestResult?.status === 'published') {
-    return {
-      status: 'published' as const,
-      message: latestResult.message ?? t('stage.review.confirm.legacy.published'),
-      result: latestResult,
-    }
-  }
-
-  if (finalResult === 'unauthorized') {
-    return {
-      status: 'failed' as const,
-      message: latestResult?.message ?? t('stage.review.confirm.legacy.unauthorized'),
-      result: latestResult,
-    }
-  }
-
-  return {
-    status: 'failed' as const,
-    message: latestResult?.message ?? t('stage.review.confirm.legacy.publishFailed'),
-    result: latestResult,
-  }
 }
 
 async function publishAdapterSite(siteId: SiteId) {
@@ -1061,14 +1037,10 @@ async function confirmPublish() {
       currentProgressLabel.value = t('stage.review.confirm.progress.publishingSite', { site: row.siteName })
       updateProgress(row.siteId, {
         status: 'publishing',
-        message: LEGACY_SITE_IDS.has(row.siteId)
-          ? t('stage.review.confirm.progress.runningLegacy')
-          : t('stage.review.confirm.progress.runningAdapter'),
+        message: t('stage.review.confirm.progress.runningAdapter'),
       })
 
-      const publishResult = LEGACY_SITE_IDS.has(row.siteId)
-        ? await publishLegacySite(row.siteId)
-        : await publishAdapterSite(row.siteId)
+      const publishResult = await publishAdapterSite(row.siteId)
 
       updateProgress(row.siteId, {
         status: publishResult.status,

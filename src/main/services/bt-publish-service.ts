@@ -24,8 +24,6 @@ interface CreateBtPublishServiceOptions {
 }
 
 const DMHY_LINK_MISSING = '\u672A\u627E\u5230\u94FE\u63A5'
-const DUPLICATE_TORRENT = '\u5DF2\u5B58\u5728\u76F8\u540C\u7684\u79CD\u5B50'
-const TORRENT_EXISTS = '\u79CD\u5B50\u5DF2\u5B58\u5728'
 const LOGGED_IN_STATUS = '\u8D26\u53F7\u5DF2\u767B\u5F55'
 const DMHY_UPLOAD_EXISTS = '\u7A2E\u5B50\u5DF2\u5B58\u5728\uFF0C\u8ACB\u4E0D\u8981\u91CD\u8907\u4E0A\u50B3'
 const DMHY_UPLOAD_SUCCESS = '\u4E0A\u50B3\u6210\u529F'
@@ -78,9 +76,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
 
   function resolveLegacySiteId(type: string): SiteId | undefined {
     switch (type) {
-      case 'bangumi_all':
-      case 'bangumi':
-        return 'bangumi'
       case 'mikan':
       case 'miobt':
       case 'acgrip':
@@ -95,10 +90,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
 
   function getLegacySiteLabel(type: string) {
     switch (type) {
-      case 'bangumi_all':
-        return 'Bangumi sync'
-      case 'bangumi':
-        return 'Bangumi'
       case 'mikan':
         return 'Mikan'
       case 'miobt':
@@ -122,6 +113,14 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
     }
 
     return task[siteId]
+  }
+
+  function getLatestPublishedRemoteUrl(task: Config.Task, siteId: SiteId) {
+    const latestPublishedResult = [...(task.publishResults ?? [])]
+      .reverse()
+      .find(item => item.siteId === siteId && item.status === 'published' && item.remoteUrl)
+
+    return latestPublishedResult?.remoteUrl ?? getLegacySiteLink(task, siteId)
   }
 
   async function persistLegacyPublishResult(task: Config.Task, type: string, result: string, torrentName?: string) {
@@ -206,8 +205,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
   }
 
   async function runLegacyPublish(task: Config.Task, config: Config.PublishConfig, type: string) {
-    if (type == 'bangumi_all') return await publishBangumi(task, config, true)
-    if (type == 'bangumi') return await publishBangumi(task, config, false)
     if (type == 'mikan') return await publishMikan(task, config)
     if (type == 'miobt') return await publishMioBt(task, config)
     if (type == 'dmhy') return await publishDmhy(task, config)
@@ -270,48 +267,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
       }
       const message: Message.Task.Result = { result: 'failed' }
       return JSON.stringify(message)
-    }
-  }
-
-  async function publishBangumi(task: Config.Task, config: Config.PublishConfig, sync: boolean) {
-    try {
-      const taskDB = getTaskDBOrThrow()
-      const html = fs.readFileSync(join(task.path, 'bangumi.html'), { encoding: 'utf-8' })
-      const torrent = fs.readFileSync(join(task.path, config.torrentName))
-      const formData = new FormData()
-      const team = await axios.get('https://bangumi.moe/api/team/myteam', { responseType: 'json' })
-      const teamId: string = team.data[0]._id
-      formData.append('category_tag_id', config.category_bangumi)
-      formData.append('title', config.title)
-      formData.append('introduction', html)
-      formData.append('tag_ids', config.tags.map(item => item.value).toString())
-      formData.append('btskey', 'undefined')
-      formData.append('team_id', teamId)
-      if (sync) formData.append('teamsync', '1')
-      formData.append('file', new Blob([torrent], { type: 'application/x-bittorrent' }), config.torrentName)
-      const response = await axios.post('https://bangumi.moe/api/torrent/add', formData, { responseType: 'json' })
-      if (response.status != 200) throw response
-      if (response.data.success === true) {
-        task.bangumi = `https://bangumi.moe/torrent/${response.data.torrent._id}`
-        if (sync) {
-          await getBangumiSyncLink(task, response.data.torrent._id)
-        }
-        await taskDB.write()
-        return 'success'
-      }
-      if (response.data.success === false && (response.data.message as string).includes('torrent same as')) {
-        if (!task.bangumi) {
-          const id = (response.data.message as string).slice(16)
-          task.bangumi = `https://bangumi.moe/torrent/${id}`
-          await taskDB.write()
-        }
-        return 'exist'
-      }
-      log.error(response)
-      return 'failed'
-    } catch (err) {
-      log.error(err)
-      return 'failed'
     }
   }
 
@@ -752,73 +707,43 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
     return src
   }
 
-  async function getBangumiSyncLink(task: Config.Task, id: string) {
-    const taskDB = getTaskDBOrThrow()
-    task.sync = true
-    let data: any
-    for (let index = 0; index < 5; index++) {
-      await sleep(1000)
-      const result = await axios.post('https://bangumi.moe/api/torrent/fetch', { _id: id }, { responseType: 'json' })
-      if (result.status == 200 && result.data.sync) {
-        task.sync = false
-        data = result.data
-        await taskDB.write()
-        break
-      }
-    }
-    if (task.sync || !data?.sync) return
-    if (data.sync.acgnx) {
-      if (data.sync.acgnx != DUPLICATE_TORRENT) task.acgnx_a = data.sync.acgnx
-      else if (!task.acgnx_a) task.acgnx_a = TORRENT_EXISTS
-    }
-    if (data.sync.acgnx_int) {
-      if (data.sync.acgnx_int != DUPLICATE_TORRENT) task.acgnx_g = data.sync.acgnx_int
-      else if (!task.acgnx_g) task.acgnx_g = TORRENT_EXISTS
-    }
-    if (data.sync.acgrip) {
-      if (data.sync.acgrip != DUPLICATE_TORRENT) task.acgrip = data.sync.acgrip
-      else if (!task.acgrip) task.acgrip = TORRENT_EXISTS
-    }
-    if (data.sync.dmhy) {
-      if (data.sync.dmhy != DUPLICATE_TORRENT) task.dmhy = data.sync.dmhy
-      else if (!task.dmhy) task.dmhy = TORRENT_EXISTS
-    }
-  }
-
   async function getBTLinks(msg: string) {
-    const taskDB = getTaskDBOrThrow()
     const { id }: Message.Task.TaskID = JSON.parse(msg)
     const task = getTaskOrThrow(id)
-    let isFinished = 'true'
-    if (task.sync) {
-      isFinished = 'false'
-      const bangumiId = task.bangumi!.split('torrent/')[1]
-      await getBangumiSyncLink(task, bangumiId)
-      await taskDB.write()
-      if (!task.sync) isFinished = 'true'
-    }
-    if (task.dmhy == DMHY_LINK_MISSING) {
-      isFinished = 'false'
+    let dmhyLink = getLatestPublishedRemoteUrl(task, 'dmhy')
+
+    if (dmhyLink == DMHY_LINK_MISSING) {
       const config = readPublishConfig(task.path)
       const src = await getDmhyLink(config.title)
       if (src == '') task.dmhy = DMHY_LINK_MISSING
       else {
         task.dmhy = `https://www.dmhy.org${src}`
-        isFinished = 'true'
       }
-      await taskDB.write()
+      await getTaskDBOrThrow().write()
+      dmhyLink = task.dmhy
     }
-    const latestMikanResult = [...(task.publishResults ?? [])].reverse().find(item => item.siteId === 'mikan')
+
+    const bangumiLink = getLatestPublishedRemoteUrl(task, 'bangumi')
+    const mikanLink = getLatestPublishedRemoteUrl(task, 'mikan')
+    const miobtLink = getLatestPublishedRemoteUrl(task, 'miobt')
+    const nyaaLink = getLatestPublishedRemoteUrl(task, 'nyaa')
+    const acgripLink = getLatestPublishedRemoteUrl(task, 'acgrip')
+    const acgnxALink = getLatestPublishedRemoteUrl(task, 'acgnx_a')
+    const acgnxGLink = getLatestPublishedRemoteUrl(task, 'acgnx_g')
+    const hasResolvedLink = [bangumiLink, mikanLink, miobtLink, nyaaLink, dmhyLink, acgripLink, acgnxALink, acgnxGLink]
+      .filter((link): link is string => typeof link === 'string' && link.length > 0)
+      .some(link => link !== DMHY_LINK_MISSING)
+
     const result: Message.Task.PublishStatus = {
-      bangumi_all: isFinished,
-      bangumi: task.bangumi,
-      mikan: task.mikan ?? latestMikanResult?.message,
-      miobt: task.miobt,
-      nyaa: task.nyaa,
-      dmhy: task.dmhy,
-      acgrip: task.acgrip,
-      acgnx_a: task.acgnx_a,
-      acgnx_g: task.acgnx_g,
+      bangumi_all: hasResolvedLink ? 'true' : 'false',
+      bangumi: bangumiLink,
+      mikan: mikanLink,
+      miobt: miobtLink,
+      nyaa: nyaaLink,
+      dmhy: dmhyLink,
+      acgrip: acgripLink,
+      acgnx_a: acgnxALink,
+      acgnx_g: acgnxGLink,
     }
     return JSON.stringify(result)
   }
@@ -826,9 +751,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
   async function getTorrentList() {
     const loginInfo = getUserDBOrThrow().data.info
     const result: Message.BT.TorrentList = { list: [] }
-    if (loginInfo.find(item => item.name == 'bangumi')!.enable) {
-      mergeTorrentDetails(result.list, await getBangumiTorrentList(), 'bangumi')
-    }
     if (loginInfo.find(item => item.name == 'acgrip')!.enable) {
       mergeTorrentDetails(result.list, await getAcgripTorrentList(), 'acgrip')
     }
@@ -847,7 +769,7 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
   function mergeTorrentDetails(
     list: Message.BT.TorrentList['list'],
     items: { title: string; detail: unknown }[],
-    key: 'bangumi' | 'acgrip' | 'dmhy' | 'acgnx_a' | 'acgnx_g',
+    key: 'acgrip' | 'dmhy' | 'acgnx_a' | 'acgnx_g',
   ) {
     items.forEach(item => {
       const torrent = list.find(element => element.title == item.title)
@@ -857,34 +779,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
         list.push({ title: item.title, [key]: item.detail })
       }
     })
-  }
-
-  async function getBangumiTorrentList() {
-    try {
-      const team = await axios.get('https://bangumi.moe/api/team/myteam', { responseType: 'json' })
-      const teamId: string = team.data[0]._id
-      const response = await axios.get(`https://bangumi.moe/api/torrent/team?team_id=${teamId}`, { responseType: 'json' })
-      const result: { title: string; detail: Message.BT.TorrentDetail.BangumiDetail }[] = []
-      response.data.torrents.forEach(item => {
-        result.push({
-          title: item.title,
-          detail: {
-            id: item._id,
-            url: `https://bangumi.moe/torrent/${item._id}`,
-            is_loaded: true,
-            content: {
-              category_tag_id: item.category_tag_id,
-              tag_ids: item.tag_ids,
-              content: item.introduction,
-            },
-          },
-        })
-      })
-      return result
-    } catch (err) {
-      log.error(err)
-      return []
-    }
   }
 
   async function getAcgnxTorrentList(global: boolean) {
@@ -1052,35 +946,12 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
   async function updateTorrent(msg: string) {
     const { type, id, config, title }: Message.BT.UpdatedContent = JSON.parse(msg)
     let result
-    if (type == 'bangumi') result = await updateBangumiTorrent(title, id, config as Message.BT.TorrentDetail.BangumiContent)
     if (type == 'acgnx_a') result = await updateAcgnxTorrent(false, title, id, config as Message.BT.TorrentDetail.AcgnxContent)
     if (type == 'acgnx_g') result = await updateAcgnxTorrent(true, title, id, config as Message.BT.TorrentDetail.AcgnxContent)
     if (type == 'dmhy') result = await updateDmhyTorrent(title, id, config as Message.BT.TorrentDetail.DmhyContent)
     if (type == 'acgrip') result = await updateAcgripTorrent(title, id, config as Message.BT.TorrentDetail.AcgripContent)
     const message: Message.Task.Result = { result }
     return JSON.stringify(message)
-  }
-
-  async function updateBangumiTorrent(title: string, id: string, config: Message.BT.TorrentDetail.BangumiContent) {
-    try {
-      const team = await axios.get('https://bangumi.moe/api/team/myteam', { responseType: 'json' })
-      const teamId: string = team.data[0]._id
-      const data = {
-        category_tag_id: config.category_tag_id,
-        introduction: config.content.replaceAll('\n', ''),
-        tag_ids: config.tag_ids,
-        btskey: '',
-        _id: id,
-        title,
-        team_id: teamId,
-      }
-      const response = await axios.post('https://bangumi.moe/api/torrent/update', data, { responseType: 'json' })
-      if (response.status == 200 && response.data.success) return 'success'
-      return 'failed'
-    } catch (err) {
-      log.error(err)
-      return 'failed'
-    }
   }
 
   async function updateAcgnxTorrent(

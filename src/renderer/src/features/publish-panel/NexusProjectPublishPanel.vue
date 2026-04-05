@@ -7,6 +7,7 @@ import { taskBridge } from '../../services/bridge/task'
 import { getPublishStateLabel, publishStateTones } from '../../services/project/presentation'
 import type { PublishResult, SitePublishDraft } from '../../types/publish'
 import type {
+  BangumiSiteMetadataRaw,
   SiteAccountValidationPayload,
   SiteCatalogEntry,
   SiteId,
@@ -28,7 +29,12 @@ interface SitePublishDraftForm {
   title: string
   description: string
   torrentPath: string
+  categoryBangumi: string
   categoryCode: string
+  publishIdentity: string
+  btSyncKey: string
+  teamSync: boolean
+  bangumiTagIds: string[]
   trackersText: string
   episodeKey: string
   resolution: string
@@ -91,6 +97,11 @@ interface BatchTorrentDraftForm {
   title: string
 }
 
+interface BangumiTagOption {
+  label: string
+  value: string
+}
+
 const props = defineProps<{
   id: number
 }>()
@@ -122,6 +133,8 @@ const publishValidationLoadingBySite = ref<Partial<Record<SiteId, boolean>>>({})
 const publishErrorBySite = ref<Partial<Record<SiteId, string>>>({})
 const publishLoadingBySite = ref<Partial<Record<SiteId, boolean>>>({})
 const publishResultBySite = ref<Partial<Record<SiteId, PublishResult>>>({})
+const bangumiTagOptionsBySite = ref<Partial<Record<SiteId, BangumiTagOption[]>>>({})
+const bangumiTagLoadingBySite = ref<Partial<Record<SiteId, boolean>>>({})
 const batchTorrentEntries = ref<BatchTorrentDraftForm[]>([])
 
 const sharedDraft = reactive<SharedPublishDraftForm>({
@@ -215,6 +228,10 @@ function isMiobtSite(site: SiteCatalogEntry) {
   return site.adapter === 'miobt'
 }
 
+function isBangumiSite(site: SiteCatalogEntry) {
+  return site.adapter === 'bangumi'
+}
+
 function isDmhySite(site: SiteCatalogEntry) {
   return site.adapter === 'dmhy'
 }
@@ -238,6 +255,7 @@ function hasSiteSpecificRequiredFields(site: SiteCatalogEntry) {
 function hasOptionalSiteFields(site: SiteCatalogEntry) {
   return (
     supportsMetadata(site) ||
+    isBangumiSite(site) ||
     isUnit3dSite(site) ||
     isMikanSite(site) ||
     isAnibtSite(site) ||
@@ -308,6 +326,10 @@ function getAccountStatusLabel(siteId: SiteId) {
 }
 
 function getSharedFieldText(site: SiteCatalogEntry) {
+  if (isBangumiSite(site)) {
+    return t('nexus.site.sharedFieldsBangumi')
+  }
+
   if (isAnibtSite(site)) {
     return t('nexus.site.sharedFieldsAnibt')
   }
@@ -410,7 +432,12 @@ function createEmptyDraft(): SitePublishDraftForm {
     title: '',
     description: '',
     torrentPath: '',
+    categoryBangumi: '',
     categoryCode: '',
+    publishIdentity: 'personal',
+    btSyncKey: '',
+    teamSync: false,
+    bangumiTagIds: [],
     trackersText: '',
     episodeKey: '',
     resolution: '',
@@ -498,13 +525,50 @@ function readStoredNumber(value: unknown) {
 }
 
 function readStoredBoolean(value: unknown) {
-  return value === true
+  return value === true || value === 'true' || value === '1'
 }
 
 function readStoredNumberArray(value: unknown) {
   return Array.isArray(value)
     ? value.filter((item): item is number => typeof item === 'number' && Number.isFinite(item))
     : []
+}
+
+function readStoredBangumiTagOptions(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [] as BangumiTagOption[]
+  }
+
+  return value.reduce<BangumiTagOption[]>((options, item) => {
+    if (typeof item === 'string' && item.trim()) {
+      const normalized = item.trim()
+      if (!options.some(option => option.value === normalized)) {
+        options.push({
+          label: normalized,
+          value: normalized,
+        })
+      }
+      return options
+    }
+
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return options
+    }
+
+    const raw = item as Record<string, unknown>
+    const value = readOptionalString(raw.value) ?? readOptionalString(raw._id)
+    const label = readOptionalString(raw.label) ?? readOptionalString(raw.name) ?? value
+    if (!value || !label || options.some(option => option.value === value)) {
+      return options
+    }
+
+    options.push({ label, value })
+    return options
+  }, [])
+}
+
+function readStoredBangumiTagIds(value: unknown) {
+  return readStoredBangumiTagOptions(value).map(option => option.value)
 }
 
 function readStoredTrackersText(value: unknown) {
@@ -537,8 +601,13 @@ function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefa
     return draft
   }
 
+  draft.categoryBangumi = readStoredString(siteFieldDefaults.categoryBangumi ?? siteFieldDefaults.category_bangumi)
   draft.smallDescription = readStoredString(siteFieldDefaults.smallDescription)
   draft.categoryCode = readStoredString(siteFieldDefaults.categoryCode ?? siteFieldDefaults.category_nyaa)
+  draft.publishIdentity = readStoredString(siteFieldDefaults.publishIdentity) || draft.publishIdentity
+  draft.btSyncKey = readStoredString(siteFieldDefaults.btSyncKey ?? siteFieldDefaults.btskey ?? siteFieldDefaults.syncKey)
+  draft.teamSync = readStoredBoolean(siteFieldDefaults.teamSync ?? siteFieldDefaults.teamsync)
+  draft.bangumiTagIds = readStoredBangumiTagIds(siteFieldDefaults.bangumiTagIds ?? siteFieldDefaults.tags)
   draft.url = readStoredString(siteFieldDefaults.information ?? siteFieldDefaults.url)
   draft.technicalInfo = readStoredString(siteFieldDefaults.technicalInfo)
   draft.ptGen = readStoredString(siteFieldDefaults.ptGen)
@@ -611,6 +680,7 @@ function createInitialDraft(config: Config.PublishConfig, content: Message.Task.
   const draft = createEmptyDraft()
   draft.title = config.title ?? content.title ?? ''
   draft.description = content.html ?? ''
+  draft.categoryBangumi = config.category_bangumi ?? ''
   draft.categoryCode = config.category_nyaa ?? ''
   draft.url = config.information ?? ''
   draft.complete = config.completed === true
@@ -620,7 +690,11 @@ function createInitialDraft(config: Config.PublishConfig, content: Message.Task.
       ? joinProjectPath(project.value.workingDirectory, config.torrentName)
       : config.torrentPath ?? ''
   const storedFieldDefaults = normalizeStoredSiteFieldDefaults(config.siteFieldDefaults)?.[siteId]
-  return applyStoredSiteFieldDefaults(draft, storedFieldDefaults)
+  applyStoredSiteFieldDefaults(draft, storedFieldDefaults)
+  if (siteId === 'bangumi' && draft.bangumiTagIds.length === 0) {
+    draft.bangumiTagIds = readStoredBangumiTagIds(config.tags)
+  }
+  return draft
 }
 
 function ensureDraft(siteId: SiteId): SitePublishDraftForm {
@@ -663,6 +737,24 @@ function resolveMetadataSectionForDraft(siteId: SiteId, metadata: SiteMetadataRe
 
 function applyMetadataDefaults(siteId: SiteId, metadata: SiteMetadataRecord) {
   const draft = ensureDraft(siteId)
+  const site = getSite(siteId)
+  if (site && isBangumiSite(site)) {
+    const categoryOptions = getBangumiCategoryOptions(siteId)
+    if (!draft.categoryBangumi || !categoryOptions.some(option => option.value === draft.categoryBangumi)) {
+      draft.categoryBangumi = categoryOptions[0]?.value ?? draft.categoryBangumi
+    }
+
+    const identityOptions = getBangumiIdentityOptions(siteId)
+    if (!draft.publishIdentity || !identityOptions.some(option => option.value === draft.publishIdentity)) {
+      draft.publishIdentity = identityOptions[0]?.value ?? 'personal'
+    }
+
+    if (draft.publishIdentity === 'personal') {
+      draft.teamSync = false
+    }
+    return
+  }
+
   const section = resolveMetadataSectionForDraft(siteId, metadata)
   draft.sectionId = section?.id
   if (!draft.typeId || !section?.categories.some(category => category.id === draft.typeId)) {
@@ -697,6 +789,138 @@ function getMiobtCategoryOptions(siteId: SiteId) {
 
 function getDmhyTeamOptions(siteId: SiteId) {
   return getDmhyMetadataSection(siteId)?.subCategories.find(subCategory => subCategory.field === 'teamId')?.data ?? []
+}
+
+function getBangumiMetadataRaw(siteId: SiteId) {
+  const raw = getMetadata(siteId)?.raw
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return undefined
+  }
+
+  return raw as BangumiSiteMetadataRaw
+}
+
+function getBangumiCategoryOptions(siteId: SiteId) {
+  const options = getBangumiMetadataRaw(siteId)?.categories?.map(category => ({
+    label: category.name,
+    value: category.id,
+  }))
+
+  if (options && options.length > 0) {
+    return options
+  }
+
+  return getSiteFieldOptions(siteId, 'category_bangumi')
+}
+
+function getBangumiIdentityOptions(siteId: SiteId) {
+  const options = getBangumiMetadataRaw(siteId)?.identities?.map(identity => ({
+    label: identity.name,
+    value: identity.id,
+  }))
+
+  return options && options.length > 0
+    ? options
+    : [
+        {
+          label: t('sites.values.personalPublish'),
+          value: 'personal',
+        },
+      ]
+}
+
+function getBangumiTagOptions(siteId: SiteId) {
+  return bangumiTagOptionsBySite.value[siteId] ?? []
+}
+
+function isBangumiTagLoading(siteId: SiteId) {
+  return Boolean(bangumiTagLoadingBySite.value[siteId])
+}
+
+function mergeBangumiTagOptions(siteId: SiteId, options: BangumiTagOption[]) {
+  const merged = [...(bangumiTagOptionsBySite.value[siteId] ?? [])]
+  options.forEach(option => {
+    if (!merged.some(item => item.value === option.value)) {
+      merged.push(option)
+    }
+  })
+  bangumiTagOptionsBySite.value[siteId] = merged
+}
+
+function normalizeBangumiTagOptions(data: unknown) {
+  const source =
+    Array.isArray(data)
+      ? data
+      : data && typeof data === 'object' && !Array.isArray(data) && Array.isArray((data as Record<string, unknown>).tag)
+        ? ((data as Record<string, unknown>).tag as unknown[])
+        : []
+
+  return source.reduce<BangumiTagOption[]>((options, item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return options
+    }
+
+    const raw = item as Record<string, unknown>
+    const value = readOptionalString(raw._id) ?? readOptionalString(raw.value)
+    const label = readOptionalString(raw.name) ?? readOptionalString(raw.label) ?? value
+    if (!value || !label || raw.type === 'misc' || options.some(option => option.value === value)) {
+      return options
+    }
+
+    options.push({ label, value })
+    return options
+  }, [])
+}
+
+async function loadSuggestedBangumiTags(siteId: SiteId) {
+  bangumiTagLoadingBySite.value[siteId] = true
+
+  try {
+    const draft = ensureDraft(siteId)
+    const query = draft.title.trim() || sharedDraft.title.trim()
+    if (!query) {
+      return
+    }
+
+    const { data, status }: Message.BT.BangumiTags = JSON.parse(
+      await window.BTAPI.getBangumiTags(JSON.stringify({ query } satisfies Message.BT.BangumiQuery)),
+    )
+    if (status === 200) {
+      mergeBangumiTagOptions(siteId, normalizeBangumiTagOptions(data))
+    }
+  } catch {
+    return
+  } finally {
+    bangumiTagLoadingBySite.value[siteId] = false
+  }
+}
+
+async function searchBangumiTags(siteId: SiteId, query: string) {
+  if (!query.trim()) {
+    return
+  }
+
+  bangumiTagLoadingBySite.value[siteId] = true
+
+  try {
+    const { data, status }: Message.BT.BangumiTags = JSON.parse(
+      await window.BTAPI.searchBangumiTags(JSON.stringify({ query } satisfies Message.BT.BangumiQuery)),
+    )
+    if (status === 200) {
+      mergeBangumiTagOptions(siteId, normalizeBangumiTagOptions(data))
+    }
+  } catch {
+    return
+  } finally {
+    bangumiTagLoadingBySite.value[siteId] = false
+  }
+}
+
+function onBangumiIdentityChange(siteId: SiteId) {
+  const draft = ensureDraft(siteId)
+  if (draft.publishIdentity === 'personal') {
+    draft.teamSync = false
+  }
 }
 
 function getDmhyFallbackCategoryOptions(siteId: SiteId) {
@@ -818,6 +1042,17 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
       format: readOptionalString(draft.format),
       version: readOptionalString(draft.version),
       fileSize: draft.fileSize,
+    }
+  }
+
+  if (site?.adapter === 'bangumi') {
+    return {
+      ...baseInput,
+      categoryBangumi: draft.categoryBangumi.trim() || undefined,
+      publishIdentity: draft.publishIdentity || 'personal',
+      bangumiTagIds: draft.bangumiTagIds.length > 0 ? [...draft.bangumiTagIds] : undefined,
+      btSyncKey: draft.btSyncKey.trim() || undefined,
+      teamSync: draft.teamSync && draft.publishIdentity !== 'personal',
     }
   }
 
@@ -1013,17 +1248,36 @@ async function bootstrap() {
 
     sites.value = siteResult.data.sites.filter(
       site =>
+        site.adapter === 'bangumi' ||
         site.adapter === 'mikan' ||
         site.adapter === 'anibt' ||
         site.adapter === 'miobt' ||
         site.adapter === 'acgrip' ||
+        site.adapter === 'dmhy' ||
+        site.adapter === 'nyaa' ||
         site.adapter === 'nexusphp' ||
         site.adapter === 'unit3d',
     )
     applySharedDraft(config, content)
     batchTorrentEntries.value = createBatchTorrentEntries(config)
     sites.value.forEach(site => {
-      publishDrafts.value[site.id] = createInitialDraft(config, content, site.id)
+      const storedFieldDefaults = normalizeStoredSiteFieldDefaults(config.siteFieldDefaults)?.[site.id]
+      const draft = createInitialDraft(config, content, site.id)
+      publishDrafts.value[site.id] = draft
+      bangumiTagOptionsBySite.value[site.id] =
+        site.id === 'bangumi'
+          ? readStoredBangumiTagOptions(storedFieldDefaults?.bangumiTagIds ?? storedFieldDefaults?.tags)
+          : []
+      if (site.id === 'bangumi') {
+        mergeBangumiTagOptions(site.id, readStoredBangumiTagOptions(config.tags))
+        mergeBangumiTagOptions(
+          site.id,
+          draft.bangumiTagIds.map(value => ({
+            label: value,
+            value,
+          })),
+        )
+      }
       publishErrorBySite.value[site.id] = ''
       publishResultBySite.value[site.id] = undefined
       publishValidationBySite.value[site.id] = undefined
@@ -1308,6 +1562,29 @@ onMounted(() => {
             <div />
           </div>
 
+          <div v-else-if="isBangumiSite(site)" class="nexus-form__grid">
+            <el-form-item :label="t('sites.form.category')">
+              <el-select v-model="ensureDraft(site.id).categoryBangumi">
+                <el-option
+                  v-for="option in getBangumiCategoryOptions(site.id)"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('sites.form.publishIdentity')">
+              <el-select v-model="ensureDraft(site.id).publishIdentity" @change="onBangumiIdentityChange(site.id)">
+                <el-option
+                  v-for="option in getBangumiIdentityOptions(site.id)"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                />
+              </el-select>
+            </el-form-item>
+          </div>
+
           <div v-else-if="isAcgripSite(site)" class="nexus-site-card__manual">
             <div class="nexus-site-card__hint">
               {{ t('nexus.site.acgripManualHint') }}
@@ -1404,6 +1681,52 @@ onMounted(() => {
 
           <el-collapse v-if="hasOptionalSiteFields(site)" v-model="advancedSiteIds" class="nexus-site-card__collapse">
             <el-collapse-item :name="site.id" :title="t('nexus.site.optionalSection')">
+              <div v-if="isBangumiSite(site)" class="nexus-site-card__optional-stack">
+                <div class="nexus-site-card__hint">
+                  {{ getBangumiMetadataRaw(site.id)?.teamError || t('nexus.site.bangumiOptionalHint') }}
+                </div>
+
+                <el-form-item :label="t('sites.form.tags')">
+                  <el-select
+                    v-model="ensureDraft(site.id).bangumiTagIds"
+                    multiple
+                    filterable
+                    remote
+                    reserve-keyword
+                    collapse-tags
+                    collapse-tags-tooltip
+                    :loading="isBangumiTagLoading(site.id)"
+                    :remote-method="query => searchBangumiTags(site.id, query)"
+                    @focus="loadSuggestedBangumiTags(site.id)"
+                  >
+                    <el-option
+                      v-for="option in getBangumiTagOptions(site.id)"
+                      :key="option.value"
+                      :label="option.label"
+                      :value="option.value"
+                    />
+                  </el-select>
+                </el-form-item>
+
+                <div class="nexus-form__grid">
+                  <el-form-item :label="t('sites.form.btSyncKey')">
+                    <el-input v-model="ensureDraft(site.id).btSyncKey" />
+                  </el-form-item>
+                  <div />
+                </div>
+
+                <div class="nexus-form__grid nexus-form__grid--meta">
+                  <el-form-item>
+                    <el-checkbox
+                      v-model="ensureDraft(site.id).teamSync"
+                      :disabled="ensureDraft(site.id).publishIdentity === 'personal'"
+                    >
+                      {{ t('sites.flags.teamSync') }}
+                    </el-checkbox>
+                  </el-form-item>
+                </div>
+              </div>
+
               <div v-if="site.adapter === 'nexusphp' && supportsMetadata(site)" class="nexus-site-card__optional-stack">
                 <div class="nexus-form__grid">
                   <el-form-item :label="t('sites.form.smallDescription')">

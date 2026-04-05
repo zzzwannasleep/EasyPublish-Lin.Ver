@@ -142,6 +142,14 @@ const sites = {
   'nexus.account.authenticated': 'Authenticated',
   'nexus.account.unauthenticated': 'Unauthenticated',
   'nexus.account.error': 'Error',
+  'sites.form.publishIdentity': 'Publish Identity',
+  'sites.form.btSyncKey': 'BT Sync Key',
+  'sites.flags.teamSync': 'Team Sync',
+  'sites.values.personalPublish': 'Personal Publish',
+  'nexus.site.sharedFieldsBangumi':
+    'This adapter uses the shared title, description, and torrent file above. Bangumi category, publish identity, optional tags, BT sync key, and team sync are configured below.',
+  'nexus.site.bangumiOptionalHint':
+    'Choose personal or team publishing in the required fields above. Tags and BT sync key are optional; team sync is only available when publishing as a team.',
 } as const
 
 export default sites

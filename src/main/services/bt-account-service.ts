@@ -1084,7 +1084,7 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
 
   async function checkBangumiLoginStatusClean(info: Config.LoginInfo) {
     try {
-      const url = 'https://bangumi.moe/api/team/myteam'
+      const url = 'https://bangumi.moe'
       const response = await requestFastCheck(url, [200])
 
       const { data, status } = response
@@ -1092,7 +1092,11 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
         throw response
       }
 
-      setStatus(info, data == '[]' ? legacyAccountStatusText.loggedOut : legacyAccountStatusText.loggedIn)
+      const html = typeof data === 'string' ? data : ''
+      const isLoggedIn =
+        html.includes('showPublishDialog(') || html.includes('signout()') || html.includes('fa-sign-out')
+
+      setStatus(info, isLoggedIn ? legacyAccountStatusText.loggedIn : legacyAccountStatusText.loggedOut)
     } catch (err) {
       log.error(err)
       setStatus(info, legacyAccountStatusText.failed)

@@ -2066,18 +2066,18 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     const result: Message.Task.PublishStatus = {}
     const isPublishedLink = (value?: string) => Boolean(value && /^https?:\/\//.test(value))
     const publishedLabel = '\u5df2\u53d1\u5e03'
+    const publishedSites = new Set(
+      (task.publishResults ?? [])
+        .filter(item => item.status === 'published')
+        .map(item => item.siteId),
+    )
 
-    if (isPublishedLink(task.bangumi)) {
-      result.bangumi = publishedLabel
-      result.bangumi_all = publishedLabel
-    }
-    if (isPublishedLink(task.mikan)) result.mikan = publishedLabel
-    if (isPublishedLink(task.miobt)) result.miobt = publishedLabel
-    if (isPublishedLink(task.nyaa)) result.nyaa = publishedLabel
-    if (isPublishedLink(task.dmhy)) result.dmhy = publishedLabel
-    if (isPublishedLink(task.acgrip)) result.acgrip = publishedLabel
-    if (isPublishedLink(task.acgnx_a)) result.acgnx_a = publishedLabel
-    if (isPublishedLink(task.acgnx_g)) result.acgnx_g = publishedLabel
+    trackedLegacyTorrentSites.forEach(siteId => {
+      if (publishedSites.has(siteId) || isPublishedLink(task[siteId])) {
+        result[siteId] = publishedLabel
+      }
+    })
+
     return JSON.stringify(result)
   }
 

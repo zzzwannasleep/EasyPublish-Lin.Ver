@@ -23,6 +23,7 @@ export interface SitePublishDraft {
   projectId?: number
   siteId: SiteId
   typeId: number
+  categoryBangumi?: string
   categoryCode?: string
   teamId?: number
   title: string
@@ -66,9 +67,13 @@ export interface SitePublishDraft {
   disableDownloadSeedFile?: boolean
   emuleResource?: string
   syncKey?: string
+  btSyncKey?: string
   anonymous?: boolean
   complete?: boolean
   remake?: boolean
+  teamSync?: boolean
+  publishIdentity?: string
+  bangumiTagIds?: string[]
   personalRelease?: boolean
   internal?: boolean
   refundable?: boolean

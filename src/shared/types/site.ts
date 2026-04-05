@@ -142,6 +142,23 @@ export interface SiteMetadataRecord {
   raw?: unknown
 }
 
+export interface BangumiMetadataCategoryOption {
+  id: string
+  name: string
+}
+
+export interface BangumiPublishIdentityOption {
+  id: string
+  name: string
+  type: 'personal' | 'team'
+}
+
+export interface BangumiSiteMetadataRaw {
+  categories: BangumiMetadataCategoryOption[]
+  identities: BangumiPublishIdentityOption[]
+  teamError?: string
+}
+
 export interface SiteListPayload {
   sites: SiteCatalogEntry[]
 }
@@ -282,7 +299,7 @@ export const defaultSiteProfiles: SiteProfile[] = [
     name: 'Bangumi',
     adapter: 'bangumi',
     baseUrl: 'https://bangumi.moe',
-    capabilities: ['torrent_publish', 'cookie_auth', 'browser_login', 'content_preview'],
+    capabilities: ['torrent_publish', 'cookie_auth', 'browser_login', 'metadata_sections', 'content_preview', 'raw_response'],
   },
   {
     id: 'nyaa',
