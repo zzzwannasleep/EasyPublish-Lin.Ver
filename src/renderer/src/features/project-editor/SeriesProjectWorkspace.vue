@@ -338,16 +338,22 @@ function updateSiteFieldValue(siteId: SiteId, field: SiteFieldSchemaEntry, value
 }
 
 function syncCategoriesIntoSiteFields() {
-  ensureSiteFieldEntry('bangumi').category_bangumi = form.categoryBangumi
-  ensureSiteFieldEntry('nyaa').category_nyaa = form.categoryNyaa
-  ensureSiteFieldEntry('nyaa').categoryCode = form.categoryNyaa
+  if (form.targetSites.includes('bangumi')) {
+    ensureSiteFieldEntry('bangumi').category_bangumi = form.categoryBangumi
+  }
+
+  if (form.targetSites.includes('nyaa')) {
+    ensureSiteFieldEntry('nyaa').category_nyaa = form.categoryNyaa
+    ensureSiteFieldEntry('nyaa').categoryCode = form.categoryNyaa
+  }
 }
 
 function buildSiteFieldDefaultsPayload() {
   syncCategoriesIntoSiteFields()
   const payload: SiteFieldForm = {}
 
-  Object.entries(form.siteFieldDefaults).forEach(([siteId, entry]) => {
+  sortSiteIds(form.targetSites).forEach(siteId => {
+    const entry = form.siteFieldDefaults[siteId]
     if (!entry || typeof entry !== 'object') {
       return
     }
@@ -953,6 +959,7 @@ function addTargetSite(siteId: SiteId) {
 
 function removeTargetSite(siteId: SiteId) {
   form.targetSites = form.targetSites.filter(item => item !== siteId)
+  delete form.siteFieldDefaults[siteId]
 }
 
 async function persistDraft(options?: { quiet?: boolean; refresh?: boolean }) {

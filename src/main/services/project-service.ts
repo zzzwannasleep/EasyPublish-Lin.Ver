@@ -43,6 +43,7 @@ import {
 } from '../../shared/utils/series-title-match'
 import { getNowFormatDate } from '../core/utils'
 import { createProjectStore } from '../storage/project-store'
+import { buildEpisodeDerivedContent, writeDerivedContent } from './episode-publish-support'
 
 type ProjectChangeHandler = () => void
 
@@ -93,7 +94,11 @@ interface RecordSeriesVariantPublishResultInput {
 
 export function createProjectService(options: CreateProjectServiceOptions) {
   const { projectStore, notifyProjectDataChanged } = options
-  const defaultEpisodeSites: SiteId[] = ['bangumi', 'mikan', 'miobt', 'nyaa']
+  const defaultEpisodeSites: SiteId[] = []
+  const legacyEpisodeDefaultSites: SiteId[][] = [
+    ['bangumi', 'mikan', 'miobt', 'nyaa'],
+    ['bangumi', 'mikan', 'anibt', 'miobt', 'nyaa'],
+  ]
   const trackedLegacyTorrentSites = ['bangumi', 'mikan', 'miobt', 'nyaa', 'acgrip', 'dmhy', 'acgnx_a', 'acgnx_g'] as const
   const supportedVideoProfiles: SeriesVariantVideoProfile[] = ['1080p', '2160p', 'custom']
   const supportedSubtitleProfiles: SeriesVariantSubtitleProfile[] = ['chs', 'cht', 'eng', 'bilingual', 'custom']
@@ -364,6 +369,19 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     ]
   }
 
+  function getSiteIdSignature(value: unknown) {
+    return normalizeSiteIds(value).slice().sort().join('|')
+  }
+
+  function isLegacyEpisodeDefaultTargetSites(value: unknown) {
+    const signature = getSiteIdSignature(value)
+    if (!signature) {
+      return false
+    }
+
+    return legacyEpisodeDefaultSites.some(siteIds => getSiteIdSignature(siteIds) === signature)
+  }
+
   function normalizeTitleTemplate(value: unknown) {
     if (typeof value !== 'string') {
       return undefined
@@ -521,19 +539,48 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     return normalizeSiteFieldDefaults(fieldDefaults)
   }
 
+  function filterSiteFieldDefaultsByTargetSites(
+    fieldDefaults: SeriesPublishProfileSiteFieldDefaults | undefined,
+    targetSites: SiteId[],
+  ) {
+    const normalizedFieldDefaults = normalizeSiteFieldDefaults(fieldDefaults)
+    if (!normalizedFieldDefaults) {
+      return undefined
+    }
+
+    const allowedSites = new Set(normalizeSiteIds(targetSites))
+    if (!allowedSites.size) {
+      return undefined
+    }
+
+    const nextFieldDefaults = Object.entries(normalizedFieldDefaults).reduce<
+      Partial<Record<SiteId, Record<string, unknown>>>
+    >((accumulator, [siteId, siteFieldDefaults]) => {
+      if (!allowedSites.has(siteId as SiteId)) {
+        return accumulator
+      }
+
+      accumulator[siteId as SiteId] = { ...siteFieldDefaults }
+      return accumulator
+    }, {})
+
+    return Object.keys(nextFieldDefaults).length > 0 ? nextFieldDefaults : undefined
+  }
+
   function buildProjectSiteFieldDefaults(config: Config.PublishConfig) {
-    const nextFieldDefaults = normalizeSiteFieldDefaults(config.siteFieldDefaults) ?? {}
+    const targetSites = getVariantTargetSitesFromConfig(config)
+    const nextFieldDefaults = filterSiteFieldDefaultsByTargetSites(config.siteFieldDefaults, targetSites) ?? {}
     const bangumiCategory = normalizeOptionalString(config.category_bangumi)
     const nyaaCategory = normalizeOptionalString(config.category_nyaa)
 
-    if (bangumiCategory) {
+    if (bangumiCategory && targetSites.includes('bangumi')) {
       nextFieldDefaults.bangumi = {
         ...(nextFieldDefaults.bangumi ?? {}),
         category_bangumi: bangumiCategory,
       }
     }
 
-    if (nyaaCategory) {
+    if (nyaaCategory && targetSites.includes('nyaa')) {
       nextFieldDefaults.nyaa = {
         ...(nextFieldDefaults.nyaa ?? {}),
         category_nyaa: nyaaCategory,
@@ -925,6 +972,22 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     }
   }
 
+  function isEpisodeContent(value: unknown): value is Config.Content_episode {
+    return Boolean(value && typeof value === 'object' && !Array.isArray(value) && 'episodeLabel' in value)
+  }
+
+  function isEpisodePublishConfig(config: Config.PublishConfig): config is Config.PublishConfig & { content: Config.Content_episode } {
+    return isEpisodeContent(config.content)
+  }
+
+  function materializeEpisodeDerivedDraftFiles(projectPath: string, config: Config.PublishConfig) {
+    if (!isEpisodePublishConfig(config)) {
+      return
+    }
+
+    writeDerivedContent(projectPath, buildEpisodeDerivedContent(config))
+  }
+
   function readVariantConfigSummary(projectPath: string, episode: SeriesProjectEpisode, variant: SeriesProjectVariant) {
     const variantConfigPath = getVariantConfigPath(projectPath, episode, variant)
     if (!fs.existsSync(variantConfigPath)) {
@@ -956,6 +1019,126 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       ...variant,
       title: summary.title ?? normalizeOptionalString(variant.title),
       targetSites: summary.targetSites?.length ? [...summary.targetSites] : normalizeSiteIds(variant.targetSites),
+    }
+  }
+
+  function syncEpisodeSharedDraftAcrossVariants(
+    projectPath: string,
+    workspace: SeriesProjectWorkspace,
+    updatedAt: string,
+  ) {
+    if (!workspace.activeEpisodeId || !workspace.activeVariantId) {
+      return workspace
+    }
+
+    const episode = workspace.episodes.find(item => item.id === workspace.activeEpisodeId)
+    const activeVariant = episode?.variants.find(item => item.id === workspace.activeVariantId)
+    if (!episode || !activeVariant) {
+      return workspace
+    }
+
+    const draftConfig = readPublishConfigFromPath(getDraftConfigPath(projectPath))
+    if (!isEpisodePublishConfig(draftConfig)) {
+      return workspace
+    }
+
+    const sourceTargetSites = getVariantTargetSitesFromConfig(draftConfig)
+    const sourceFieldDefaults = filterSiteFieldDefaultsByTargetSites(draftConfig.siteFieldDefaults, sourceTargetSites)
+    const sourceSummary = normalizeOptionalString(draftConfig.content.summary)
+    const sourceInformation = normalizeOptionalString(draftConfig.information)
+    const sourceBodyTemplate = normalizeBodyTemplate(draftConfig.bodyTemplate)
+    const sourceBodyTemplateFormat = normalizeMarkupFormat(draftConfig.bodyTemplateFormat)
+
+    let nextEpisode = episode
+    let didChange = false
+
+    episode.variants.forEach(variant => {
+      if (variant.id === activeVariant.id) {
+        return
+      }
+
+      const variantConfigPath = getVariantConfigPath(projectPath, episode, variant)
+      if (!fs.existsSync(variantConfigPath)) {
+        return
+      }
+
+      const variantConfig = readPublishConfigFromPath(variantConfigPath)
+      if (!isEpisodePublishConfig(variantConfig)) {
+        return
+      }
+
+      const variantTargetSites = getVariantTargetSitesFromConfig(variantConfig)
+      const shouldReplaceTargetSites =
+        sourceTargetSites.length > 0 &&
+        (variantTargetSites.length === 0 || isLegacyEpisodeDefaultTargetSites(variantTargetSites))
+      const variantFieldDefaults = normalizeSiteFieldDefaults(variantConfig.siteFieldDefaults)
+
+      let variantChanged = false
+
+      if (shouldReplaceTargetSites) {
+        variantConfig.targetSites = [...sourceTargetSites]
+        variantConfig.content.targetSites = [...sourceTargetSites]
+        variantChanged = true
+      }
+
+      if (
+        sourceFieldDefaults &&
+        (shouldReplaceTargetSites || !variantFieldDefaults || Object.keys(variantFieldDefaults).length === 0)
+      ) {
+        variantConfig.siteFieldDefaults = cloneSiteFieldDefaults(sourceFieldDefaults)
+        variantChanged = true
+      }
+
+      if (shouldReplaceTargetSites && sourceTargetSites.includes('bangumi')) {
+        variantConfig.category_bangumi = draftConfig.category_bangumi
+        variantChanged = true
+      }
+
+      if (shouldReplaceTargetSites && sourceTargetSites.includes('nyaa')) {
+        variantConfig.category_nyaa = draftConfig.category_nyaa
+        variantChanged = true
+      }
+
+      if (sourceInformation && !normalizeOptionalString(variantConfig.information)) {
+        variantConfig.information = sourceInformation
+        variantChanged = true
+      }
+
+      if (sourceSummary && !normalizeOptionalString(variantConfig.content.summary)) {
+        variantConfig.content.summary = sourceSummary
+        variantChanged = true
+      }
+
+      if (sourceBodyTemplate && !normalizeBodyTemplate(variantConfig.bodyTemplate)) {
+        variantConfig.bodyTemplate = sourceBodyTemplate
+        variantConfig.bodyTemplateFormat = sourceBodyTemplateFormat
+        variantChanged = true
+      }
+
+      if (!variantChanged) {
+        return
+      }
+
+      fs.writeFileSync(variantConfigPath, JSON.stringify(variantConfig))
+      const nextVariant = applyVariantSummary(
+        {
+          ...variant,
+          updatedAt,
+        },
+        buildVariantSummaryFromConfig(variantConfig),
+      )
+      nextEpisode = replaceVariant(nextEpisode, nextVariant, updatedAt)
+      didChange = true
+    })
+
+    if (!didChange) {
+      return workspace
+    }
+
+    writeEpisodeRecord(projectPath, nextEpisode)
+    return {
+      ...replaceEpisode(workspace, nextEpisode),
+      updatedAt,
     }
   }
 
@@ -1355,18 +1538,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       title: '',
       category_bangumi: bangumiCategory,
       category_nyaa: nyaaCategory,
-      siteFieldDefaults:
-        projectMode === 'episode'
-          ? {
-              bangumi: {
-                category_bangumi: bangumiCategory,
-              },
-              nyaa: {
-                category_nyaa: nyaaCategory,
-                categoryCode: nyaaCategory,
-              },
-            }
-          : undefined,
+      siteFieldDefaults: undefined,
       information: 'https://vcb-s.com/archives/138',
       tags: [],
       torrentName: '',
@@ -1397,7 +1569,11 @@ export function createProjectService(options: CreateProjectServiceOptions) {
 
     const projectPath = join(workingDirectory, name)
     fs.mkdirSync(projectPath)
-    fs.writeFileSync(join(projectPath, 'config.json'), JSON.stringify(buildInitialPublishConfig(input)))
+    const initialConfig = buildInitialPublishConfig(input)
+    fs.writeFileSync(join(projectPath, 'config.json'), JSON.stringify(initialConfig))
+    if (projectMode === 'episode') {
+      materializeEpisodeDerivedDraftFiles(projectPath, initialConfig)
+    }
 
     const id = Date.now()
     if (projectMode === 'episode') {
@@ -1770,7 +1946,9 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         const activatedEpisode = sortedEpisodes.find(episode => episode.id === activatedEpisodeId)
         const activatedVariant = activatedEpisode?.variants.find(variant => variant.id === activatedVariantId)
         if (activatedEpisode && activatedVariant) {
-          fs.copyFileSync(getVariantConfigPath(task.path, activatedEpisode, activatedVariant), getDraftConfigPath(task.path))
+          const activatedConfigPath = getVariantConfigPath(task.path, activatedEpisode, activatedVariant)
+          fs.copyFileSync(activatedConfigPath, getDraftConfigPath(task.path))
+          materializeEpisodeDerivedDraftFiles(task.path, readPublishConfigFromPath(activatedConfigPath))
           replaceLegacyTaskPublishState(task, activatedVariant.publishResults)
           await projectStore.write()
         }
@@ -1994,7 +2172,9 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         )
       }
 
+      const activatedConfig = readPublishConfigFromPath(variantConfigPath)
       fs.copyFileSync(variantConfigPath, getDraftConfigPath(task.path))
+      materializeEpisodeDerivedDraftFiles(task.path, activatedConfig)
       replaceLegacyTaskPublishState(task, variant.publishResults)
       await projectStore.write()
       const nextVariant = applyVariantSummary(
@@ -2247,9 +2427,11 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     }
 
     if (project?.projectMode === 'episode') {
+      materializeEpisodeDerivedDraftFiles(task.path, config)
       const workspace = readSeriesWorkspace(project.id, task.path)
       const timestamp = new Date().toISOString()
-      const nextWorkspace = syncActiveVariantDraft(task.path, workspace, timestamp)
+      let nextWorkspace = syncActiveVariantDraft(task.path, workspace, timestamp)
+      nextWorkspace = syncEpisodeSharedDraftAcrossVariants(task.path, nextWorkspace, timestamp)
       if (nextWorkspace !== workspace) {
         writeSeriesWorkspace(task.path, nextWorkspace)
       }
