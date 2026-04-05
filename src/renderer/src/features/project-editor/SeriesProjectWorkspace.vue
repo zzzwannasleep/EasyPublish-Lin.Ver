@@ -16,7 +16,6 @@ import { siteBridge } from '../../services/bridge/site'
 import { taskBridge } from '../../services/bridge/task'
 import {
   formatProjectTimestamp,
-  getSiteLabel,
   summarizeTargetSiteProgress,
 } from '../../services/project/presentation'
 import type {
@@ -434,15 +433,20 @@ const activeVariant = computed(() => activeEpisode.value?.variants.find(item => 
 const selectedEpisode = computed(() => episodes.value.find(item => item.id === selectedEpisodeId.value) ?? activeEpisode.value ?? episodes.value[0] ?? null)
 const totalVariantCount = computed(() => episodes.value.reduce((count, episode) => count + episode.variants.length, 0))
 
-const availableSites = computed(() =>
+const selectableSites = computed(() =>
   [...siteCatalog.value]
     .filter(site => site.enabled && site.capabilitySet.publish.torrent && site.accountStatus === 'authenticated')
     .sort((left, right) => sortSiteIds([left.id, right.id]).indexOf(left.id) - sortSiteIds([left.id, right.id]).indexOf(right.id)),
 )
 
+function filterSelectableTargetSites(siteIds: SiteId[]) {
+  const allowedSites = new Set(selectableSites.value.map(site => site.id))
+  return sortSiteIds(siteIds.filter(siteId => allowedSites.has(siteId)))
+}
+
 const selectedTargetSites = computed(() =>
   sortSiteIds(form.targetSites)
-    .map(siteId => availableSites.value.find(site => site.id === siteId) ?? null)
+    .map(siteId => selectableSites.value.find(site => site.id === siteId) ?? null)
     .filter((site): site is SiteCatalogEntry => Boolean(site)),
 )
 const selectedSiteFieldSections = computed(() =>
@@ -458,7 +462,7 @@ const selectedBangumiSiteIds = computed(() =>
 )
 const selectedBangumiSites = computed(() =>
   selectedBangumiSiteIds.value
-    .map(siteId => availableSites.value.find(site => site.id === siteId) ?? null)
+    .map(siteId => selectableSites.value.find(site => site.id === siteId) ?? null)
     .filter((site): site is SiteCatalogEntry => Boolean(site)),
 )
 const currentProgress = computed(() =>
@@ -599,6 +603,24 @@ watch(
   { immediate: true },
 )
 
+watch(
+  () => selectableSites.value.map(site => site.id).join('|'),
+  () => {
+    const nextTargetSites = filterSelectableTargetSites(form.targetSites)
+    if (nextTargetSites.join('|') === sortSiteIds(form.targetSites).join('|')) {
+      return
+    }
+
+    form.targetSites = nextTargetSites
+    Object.keys(form.siteFieldDefaults).forEach(siteId => {
+      if (!nextTargetSites.includes(siteId as SiteId)) {
+        delete form.siteFieldDefaults[siteId as SiteId]
+      }
+    })
+  },
+  { immediate: true },
+)
+
 watch(selectedBangumiSiteIds, (siteIds) => {
   if (siteIds.length) {
     return
@@ -677,7 +699,7 @@ function buildTorrentEntryPayloadFromForm() {
 }
 
 function buildConfigFromForm() {
-  const targetSites = sortSiteIds(form.targetSites)
+  const targetSites = filterSelectableTargetSites(form.targetSites)
   const siteFieldDefaults = buildSiteFieldDefaultsPayload()
   const bodyMarkdown = normalizeMarkdown(form.bodyMarkdown).trim()
   const activeTorrentPath = form.torrentPath.trim()
@@ -739,7 +761,7 @@ function initializeFormFromConfig(config: Config.PublishConfig) {
   form.summary = normalizeOptionalString(content.summary)
   form.information = normalizeOptionalString(config.information)
   form.torrentPath = normalizeOptionalString(activeTorrentEntry?.path ?? config.torrentPath)
-  form.targetSites = sortSiteIds(config.targetSites ?? content.targetSites ?? [])
+  form.targetSites = filterSelectableTargetSites(sortSiteIds(config.targetSites ?? content.targetSites ?? []))
   form.siteFieldDefaults = siteFieldDefaults
   form.bodyMarkdown = normalizeMarkdown(config.bodyTemplate || '')
   form.categoryBangumi =
@@ -1126,6 +1148,11 @@ async function prepareReview() {
 
   isPreparingReview.value = true
   try {
+    const saved = await persistDraft({ quiet: true, refresh: false })
+    if (!saved) {
+      return
+    }
+
     const nextConfig = buildConfigFromForm()
     const result = JSON.parse(
       await window.taskAPI.createConfig(
@@ -1155,12 +1182,8 @@ async function prepareReview() {
   }
 }
 
-function getVariantSiteLabels(variant: SeriesProjectVariant) {
-  return (variant.targetSites ?? []).map(siteId => getSiteLabel(siteId)).join(' / ')
-}
-
-function getVariantProgressSummary(variant: SeriesProjectVariant) {
-  return summarizeTargetSiteProgress(variant.targetSites, variant.publishResults)
+function getVariantCardSubtitle(variant: SeriesProjectVariant) {
+  return variant.title?.trim() || variant.publishProfileName?.trim() || '\u53ea\u8d1f\u8d23\u5207\u6362\u7248\u672c\u548c\u67e5\u770b\u72b6\u6001'
 }
 
 onMounted(() => {
@@ -1402,7 +1425,7 @@ onMounted(() => {
                 <div>
                   <div class="series-studio__variant-name">{{ variant.name }}</div>
                   <div class="series-studio__variant-text">
-                    {{ getVariantSiteLabels(variant) || '\u5c1a\u672a\u8bbe\u7f6e\u76ee\u6807\u7ad9\u70b9' }}
+                    {{ getVariantCardSubtitle(variant) }}
                   </div>
                 </div>
                 <div class="series-studio__variant-status">
@@ -1415,18 +1438,6 @@ onMounted(() => {
                   <StatusChip v-if="variant.videoProfile" tone="info">{{ variant.videoProfile }}</StatusChip>
                   <StatusChip v-if="variant.subtitleProfile" tone="warning">{{ variant.subtitleProfile }}</StatusChip>
                 </div>
-              </div>
-
-              <div class="series-studio__variant-progress">
-                <StatusChip v-if="getVariantProgressSummary(variant).publishedSiteIds.length" tone="success">
-                  {{ '\u5df2\u53d1' }} {{ getVariantProgressSummary(variant).publishedSiteIds.length }}
-                </StatusChip>
-                <StatusChip v-if="getVariantProgressSummary(variant).pendingSiteIds.length" tone="warning">
-                  {{ '\u5f85\u53d1' }} {{ getVariantProgressSummary(variant).pendingSiteIds.length }}
-                </StatusChip>
-                <StatusChip v-if="getVariantProgressSummary(variant).failedSiteIds.length" tone="danger">
-                  {{ '\u5931\u8d25' }} {{ getVariantProgressSummary(variant).failedSiteIds.length }}
-                </StatusChip>
               </div>
 
               <div class="series-studio__variant-foot">
@@ -1482,7 +1493,7 @@ onMounted(() => {
 
         <div v-if="activeVariant" class="series-studio__site-grid">
           <article
-            v-for="site in availableSites"
+            v-for="site in selectableSites"
             :key="site.id"
             :class="['series-studio__site-card', { 'is-target': form.targetSites.includes(site.id) }]"
             @click="form.targetSites.includes(site.id) ? removeTargetSite(site.id) : addTargetSite(site.id)"
@@ -1491,7 +1502,7 @@ onMounted(() => {
               <div>
                 <div class="series-studio__site-name">{{ site.name }}</div>
                 <div class="series-studio__site-text">
-                  {{ site.accountMessage || '\u8d26\u53f7\u6709\u6548\uff0c\u53ef\u76f4\u63a5\u52a0\u5165\u5f53\u524d\u7248\u672c' }}
+                  {{ site.accountMessage || '\u8d26\u53f7\u6709\u6548\uff0c\u53ef\u52a0\u5165\u5f53\u524d\u96c6\u8fd9\u6b21\u53d1\u5e03' }}
                 </div>
               </div>
               <StatusChip :tone="form.targetSites.includes(site.id) ? 'success' : 'neutral'">

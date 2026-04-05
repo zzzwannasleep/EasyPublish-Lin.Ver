@@ -1025,6 +1025,11 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       return workspace
     }
 
+    const sourceTargetSites = getVariantTargetSitesFromConfig(draftConfig)
+    const sourceSummary = draftConfig.content.summary ?? ''
+    const sourceInformation = draftConfig.information ?? ''
+    const sourceBangumiCategory = draftConfig.category_bangumi ?? ''
+    const sourceNyaaCategory = draftConfig.category_nyaa ?? ''
     const sourceBodyTemplate = normalizeBodyTemplate(draftConfig.bodyTemplate)
     const sourceBodyTemplateFormat = normalizeMarkupFormat(draftConfig.bodyTemplateFormat)
 
@@ -1047,6 +1052,33 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       }
 
       let variantChanged = false
+
+      const variantTargetSites = getVariantTargetSitesFromConfig(variantConfig)
+      if (normalizeSiteIds(variantTargetSites).join('|') !== normalizeSiteIds(sourceTargetSites).join('|')) {
+        variantConfig.targetSites = [...sourceTargetSites]
+        variantConfig.content.targetSites = [...sourceTargetSites]
+        variantChanged = true
+      }
+
+      if ((variantConfig.information ?? '') !== sourceInformation) {
+        variantConfig.information = sourceInformation
+        variantChanged = true
+      }
+
+      if ((variantConfig.content.summary ?? '') !== sourceSummary) {
+        variantConfig.content.summary = sourceSummary
+        variantChanged = true
+      }
+
+      if ((variantConfig.category_bangumi ?? '') !== sourceBangumiCategory) {
+        variantConfig.category_bangumi = sourceBangumiCategory
+        variantChanged = true
+      }
+
+      if ((variantConfig.category_nyaa ?? '') !== sourceNyaaCategory) {
+        variantConfig.category_nyaa = sourceNyaaCategory
+        variantChanged = true
+      }
 
       const variantBodyTemplate = normalizeBodyTemplate(variantConfig.bodyTemplate)
       const variantBodyTemplateFormat = normalizeMarkupFormat(variantConfig.bodyTemplateFormat)
@@ -1617,7 +1649,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     }
 
     const timestamp = new Date().toISOString()
-    const syncedWorkspace = syncActiveVariantDraft(task.path, readSeriesWorkspace(project.id, task.path), timestamp)
+    let syncedWorkspace = syncActiveVariantDraft(task.path, readSeriesWorkspace(project.id, task.path), timestamp)
+    syncedWorkspace = syncEpisodeSharedDraftAcrossVariants(task.path, syncedWorkspace, timestamp)
     writeSeriesWorkspace(task.path, syncedWorkspace)
     const hydratedWorkspace = hydrateSeriesWorkspace(task.path, syncedWorkspace)
     const episode = hydratedWorkspace.episodes.find(item => item.id === hydratedWorkspace.activeEpisodeId)
@@ -2095,7 +2128,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       }
 
       const timestamp = new Date().toISOString()
-      const workspace = syncActiveVariantDraft(task.path, readSeriesWorkspace(project.id, task.path), timestamp)
+      let workspace = syncActiveVariantDraft(task.path, readSeriesWorkspace(project.id, task.path), timestamp)
+      workspace = syncEpisodeSharedDraftAcrossVariants(task.path, workspace, timestamp)
       const episode = workspace.episodes.find(item => item.id === episodeId)
       if (!episode) {
         return JSON.stringify(fail('SERIES_EPISODE_NOT_FOUND', `\u5267\u96c6 ${episodeId} \u4e0d\u5b58\u5728`))

@@ -613,8 +613,11 @@ function createInitialDraft(currentConfig: Config.PublishConfig, siteId: SiteId)
   return draft
 }
 
-function createReviewVariantState(payload: SeriesEpisodeReviewVariantPayload): ReviewVariantState {
-  const targetSiteIds = [...new Set(resolveConfiguredTargetSites(payload.config))]
+function createReviewVariantState(
+  payload: SeriesEpisodeReviewVariantPayload,
+  sharedTargetSiteIds?: SiteId[],
+) {
+  const targetSiteIds = [...new Set((sharedTargetSiteIds?.length ? sharedTargetSiteIds : resolveConfiguredTargetSites(payload.config)))]
   const siteDrafts = targetSiteIds.reduce<Partial<Record<SiteId, SitePublishDraftForm>>>((accumulator, siteId) => {
     accumulator[siteId] = createInitialDraft(payload.config, siteId)
     return accumulator
@@ -1274,14 +1277,16 @@ async function loadReview() {
     }
 
     sites.value = siteResult.data.sites.filter(site => site.capabilitySet.publish.torrent)
-    const activeVariants = reviewResult.data.variants.filter(variant => variant.isActive)
-    const variantsToReview = activeVariants.length > 0 ? activeVariants : reviewResult.data.variants.slice(0, 1)
+    const sharedTargetSiteIds = (() => {
+      const activeVariant = reviewResult.data.variants.find(variant => variant.isActive)
+      const baseVariant = activeVariant ?? reviewResult.data.variants[0]
+      return baseVariant ? [...new Set(resolveConfiguredTargetSites(baseVariant.config))] : []
+    })()
 
-    reviewBundle.value = {
-      ...reviewResult.data,
-      variants: variantsToReview,
-    }
-    reviewVariants.value = variantsToReview.map(createReviewVariantState)
+    reviewBundle.value = reviewResult.data
+    reviewVariants.value = reviewResult.data.variants.map(variant =>
+      createReviewVariantState(variant, sharedTargetSiteIds),
+    )
     await refreshChecks()
   } catch (error) {
     loadError.value = (error as Error).message
