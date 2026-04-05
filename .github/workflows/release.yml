@@ -215,11 +215,8 @@ jobs:
             echo
             echo "## Changes"
             echo
-            if [ -s NEW.md ]; then
-              cat NEW.md
-            else
-              echo "- Automated release build."
-            fi
+            echo "- Automated release build."
+            echo "- See \`README.md\` for the current onboarding guide and usage notes."
           } > release-notes.md
 
       - name: Publish release
