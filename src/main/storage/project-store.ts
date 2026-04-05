@@ -85,6 +85,24 @@ function readConfiguredTargetSites(configPath: string) {
   }
 }
 
+function readConfiguredSourceKind(configPath: string): ProjectSourceKind | undefined {
+  try {
+    if (!fs.existsSync(configPath)) {
+      return undefined
+    }
+
+    const config = JSON.parse(fs.readFileSync(configPath, { encoding: 'utf-8' })) as Config.PublishConfig
+    const sourceKind = config.sourceKind
+    if (sourceKind === 'quick' || sourceKind === 'file' || sourceKind === 'template') {
+      return sourceKind
+    }
+
+    return undefined
+  } catch {
+    return undefined
+  }
+}
+
 function mapLegacyStage(step: Config.Task['step']): ProjectStage {
   if (step === 'check') return 'review'
   if (step === 'bt_publish') return 'torrent_publish'
@@ -233,7 +251,7 @@ function getProjectMode(task: Config.Task): ProjectMode {
 function getProjectSourceKind(task: Config.Task): ProjectSourceKind | undefined {
   const legacyType = getLegacyTaskType(task)
   if (!legacyType || legacyType === 'episode') {
-    return undefined
+    return readConfiguredSourceKind(join(task.path, 'config.json'))
   }
 
   return legacyType
@@ -337,6 +355,14 @@ export function createProjectStore(options: CreateProjectStoreOptions) {
     }
   }
 
+  function setLegacyTaskType(id: number | string, type?: LegacyProjectType) {
+    const task = findLegacyTaskById(id)
+    if (!task) {
+      throw new Error(`Project ${id} does not exist`)
+    }
+    task.type = type
+  }
+
   function setForumLink(id: number | string, link: string) {
     const task = findLegacyTaskById(id)
     if (!task) {
@@ -416,6 +442,7 @@ export function createProjectStore(options: CreateProjectStoreOptions) {
     write,
     removeLegacyTask,
     getLegacyTaskType,
+    setLegacyTaskType,
     setLegacyTaskStep,
     setForumLink,
     setSiteLink,

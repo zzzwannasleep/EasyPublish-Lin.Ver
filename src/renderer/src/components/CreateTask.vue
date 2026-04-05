@@ -3,7 +3,6 @@ import { computed, ref } from 'vue'
 import type { ProjectMode } from '../types/project'
 import { useI18n } from '../i18n'
 import EpisodeCreateForm from './EpisodeCreateForm.vue'
-import FeatureCreateForm from './FeatureCreateForm.vue'
 import ProjectModeSelectDialog from './ProjectModeSelectDialog.vue'
 
 const { t } = useI18n()
@@ -39,8 +38,12 @@ function handleModeSelect(mode: ProjectMode) {
       <ProjectModeSelectDialog v-if="showModeSelector" :selected-mode="selectedMode" @select="handleModeSelect" />
     </section>
 
-    <FeatureCreateForm v-if="selectedMode === 'feature' && !showModeSelector" @back="openModeSelector" />
-    <EpisodeCreateForm v-else-if="selectedMode === 'episode' && !showModeSelector" @back="openModeSelector" />
+    <EpisodeCreateForm
+      v-if="selectedMode && !showModeSelector"
+      :key="selectedMode"
+      :mode="selectedMode"
+      @back="openModeSelector"
+    />
   </div>
 </template>
 

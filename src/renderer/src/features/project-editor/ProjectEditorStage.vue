@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import Edit from '../../components/Edit.vue'
 import StageWorkspace from '../../components/base/StageWorkspace.vue'
 import { useI18n } from '../../i18n'
 import ProjectStageAside from '../project-detail/ProjectStageAside.vue'
 import { useProjectContext } from '../project-detail/project-context'
+import FeatureProjectWorkspace from './FeatureProjectWorkspace.vue'
 import SeriesProjectWorkspace from './SeriesProjectWorkspace.vue'
 
 const props = defineProps<{
@@ -14,27 +14,11 @@ const props = defineProps<{
 const { t } = useI18n()
 const { project, isLoading, errorMessage } = useProjectContext()
 const projectName = computed(() => project.value?.name ?? t('common.projectWithId', { id: props.id }))
-const isSeriesProject = computed(() => project.value?.projectMode === 'episode')
-const notes = computed(() => {
-  if (!isSeriesProject.value) {
-    return []
-  }
-
-  return [
-    {
-      title: t('stage.editor.series.note1.title'),
-      text: t('stage.editor.series.note1.text'),
-    },
-    {
-      title: t('stage.editor.series.note2.title'),
-      text: t('stage.editor.series.note2.text'),
-    },
-  ]
-})
 </script>
 
 <template>
   <SeriesProjectWorkspace v-if="project?.projectMode === 'episode'" :id="id" :project="project" />
+  <FeatureProjectWorkspace v-else-if="project" :id="id" :project="project" />
 
   <StageWorkspace
     v-else
@@ -52,11 +36,7 @@ const notes = computed(() => {
     :aside-description="t('stage.editor.asideDescription')"
     aside-placement="side"
   >
-    <Edit v-if="project" :id="id" :project="project" />
-    <div
-      v-else
-      class="surface-subtle px-4 py-6 text-sm leading-6 text-copy-secondary"
-    >
+    <div class="surface-subtle px-4 py-6 text-sm leading-6 text-copy-secondary">
       Loading project editor...
     </div>
 
@@ -65,7 +45,7 @@ const notes = computed(() => {
         :project="project"
         :is-loading="isLoading"
         :error-message="errorMessage"
-        :notes="notes"
+        :notes="[]"
       />
     </template>
   </StageWorkspace>

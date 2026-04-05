@@ -1,26 +1,55 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
+import type { ProjectMode } from '../types/project'
 import { useRouter } from 'vue-router'
-import { Document, FolderOpened, Loading } from '@element-plus/icons-vue'
+import { Collection, Document, Film, FolderOpened, Loading } from '@element-plus/icons-vue'
 import { useI18n } from '../i18n'
 import { projectBridge } from '../services/bridge/project'
 import type { CreateProjectInput } from '../types/project'
 
-type EpisodeCreateFormModel = CreateProjectInput & {
-  projectMode: 'episode'
-}
+const props = defineProps<{
+  mode: ProjectMode
+}>()
+
+const emit = defineEmits<{
+  back: []
+}>()
 
 const router = useRouter()
 const { t } = useI18n()
 const isCreating = ref(false)
 const isPickingFolder = ref(false)
 
-const form = reactive<EpisodeCreateFormModel>({
+const form = reactive<CreateProjectInput>({
   name: '',
-  projectMode: 'episode',
+  projectMode: props.mode,
   workingDirectory: '',
-  plannedEpisodeCount: undefined,
+  plannedEpisodeCount: props.mode === 'episode' ? undefined : undefined,
 })
+
+const isEpisodeMode = computed(() => props.mode === 'episode')
+const modeIcon = computed(() => (isEpisodeMode.value ? Collection : Film))
+const titleText = computed(() =>
+  isEpisodeMode.value ? t('create.episode.title') : t('create.feature.title'),
+)
+const descriptionText = computed(() =>
+  isEpisodeMode.value ? t('create.episode.description') : t('create.feature.description'),
+)
+const alertText = computed(() =>
+  isEpisodeMode.value ? t('create.episode.alert') : t('create.feature.alert'),
+)
+const nameHelpText = computed(() =>
+  isEpisodeMode.value ? t('create.episode.nameHelp') : t('create.feature.nameHelp'),
+)
+const directoryHelpText = computed(() =>
+  isEpisodeMode.value ? t('create.episode.directoryHelp') : t('create.feature.directoryHelp'),
+)
+const nextDescriptionText = computed(() =>
+  isEpisodeMode.value ? t('create.episode.nextDescription') : t('create.feature.nextDescription'),
+)
+const successMessage = computed(() =>
+  isEpisodeMode.value ? t('create.episode.success') : t('create.feature.success'),
+)
 
 async function pickFolder() {
   isPickingFolder.value = true
@@ -47,7 +76,7 @@ async function submitCreate() {
     }
 
     ElMessage({
-      message: t('create.episode.success'),
+      message: successMessage.value,
       type: 'success',
       plain: true,
     })
@@ -66,30 +95,51 @@ async function submitCreate() {
 </script>
 
 <template>
-  <div class="episode-create">
-    <el-form :model="form" label-position="top" class="episode-create__form">
-      <section class="episode-create__panel">
-        <div class="episode-create__field-grid">
-          <article class="episode-create__field-card">
-            <div class="episode-create__field-label">
-              <span class="episode-create__field-icon">
+  <div class="project-shell-create">
+    <el-form :model="form" label-position="top" class="project-shell-create__form">
+      <section class="project-shell-create__hero">
+        <div class="project-shell-create__hero-copy">
+          <div class="project-shell-create__mode-mark">
+            <span class="project-shell-create__mode-icon">
+              <el-icon><component :is="modeIcon" /></el-icon>
+            </span>
+            <span class="project-shell-create__mode-label">{{ t(`create.mode.${mode}.label`) }}</span>
+          </div>
+          <h3 class="project-shell-create__title">{{ titleText }}</h3>
+          <p class="project-shell-create__description">{{ descriptionText }}</p>
+        </div>
+
+        <el-alert :title="alertText" type="info" :closable="false" show-icon />
+      </section>
+
+      <section class="project-shell-create__panel">
+        <div class="project-shell-create__field-grid">
+          <article class="project-shell-create__field-card">
+            <div class="project-shell-create__field-label">
+              <span class="project-shell-create__field-icon">
                 <el-icon><Document /></el-icon>
               </span>
-              <span>{{ t('create.form.name.label') }}</span>
+              <div>
+                <div class="project-shell-create__field-title">{{ t('create.form.name.label') }}</div>
+                <div class="project-shell-create__field-text">{{ nameHelpText }}</div>
+              </div>
             </div>
-            <el-form-item class="episode-create__item">
+            <el-form-item class="project-shell-create__item">
               <el-input v-model="form.name" size="large" :placeholder="t('create.form.name.placeholder')" />
             </el-form-item>
           </article>
 
-          <article class="episode-create__field-card">
-            <div class="episode-create__field-label">
-              <span class="episode-create__field-icon">
+          <article class="project-shell-create__field-card">
+            <div class="project-shell-create__field-label">
+              <span class="project-shell-create__field-icon">
                 <el-icon><FolderOpened /></el-icon>
               </span>
-              <span>{{ t('create.form.directory.label') }}</span>
+              <div>
+                <div class="project-shell-create__field-title">{{ t('create.form.directory.label') }}</div>
+                <div class="project-shell-create__field-text">{{ directoryHelpText }}</div>
+              </div>
             </div>
-            <el-form-item class="episode-create__item">
+            <el-form-item class="project-shell-create__item">
               <el-input
                 v-model="form.workingDirectory"
                 size="large"
@@ -98,13 +148,13 @@ async function submitCreate() {
                 <template #suffix>
                   <button
                     type="button"
-                    class="episode-create__picker"
+                    class="project-shell-create__picker"
                     :disabled="isPickingFolder"
                     :title="t('create.form.directory.label')"
                     :aria-label="t('create.form.directory.label')"
                     @click="pickFolder"
                   >
-                    <el-icon class="episode-create__picker-icon" :class="{ 'is-spinning': isPickingFolder }">
+                    <el-icon class="project-shell-create__picker-icon" :class="{ 'is-spinning': isPickingFolder }">
                       <component :is="isPickingFolder ? Loading : FolderOpened" />
                     </el-icon>
                   </button>
@@ -115,30 +165,36 @@ async function submitCreate() {
         </div>
       </section>
 
-      <section class="episode-create__actions">
-        <el-button type="primary" size="large" :loading="isCreating" @click="submitCreate">
-          {{ t('create.form.submit') }}
-        </el-button>
+      <section class="project-shell-create__actions">
+        <div class="project-shell-create__actions-copy">
+          <div class="project-shell-create__actions-title">{{ t('create.episode.nextTitle') }}</div>
+          <div class="project-shell-create__actions-text">{{ nextDescriptionText }}</div>
+        </div>
+        <div class="project-shell-create__actions-buttons">
+          <el-button plain @click="emit('back')">{{ t('create.mode.back') }}</el-button>
+          <el-button type="primary" size="large" :loading="isCreating" @click="submitCreate">
+            {{ t('create.form.submit') }}
+          </el-button>
+        </div>
       </section>
     </el-form>
   </div>
 </template>
 
 <style scoped>
-.episode-create,
-.episode-create__form {
+.project-shell-create,
+.project-shell-create__form {
   width: 100%;
 }
 
-.episode-create__form {
+.project-shell-create__form {
   display: grid;
   gap: 18px;
 }
 
-.episode-create__panel {
-  position: relative;
-  overflow: hidden;
-  padding: clamp(18px, 2.4vw, 26px);
+.project-shell-create__hero,
+.project-shell-create__panel,
+.project-shell-create__actions {
   border: 1px solid var(--border-soft);
   border-radius: calc(var(--radius-xl) + 4px);
   background:
@@ -148,29 +204,38 @@ async function submitCreate() {
   box-shadow: var(--shadow-sm);
 }
 
-.episode-create__field-grid {
+.project-shell-create__hero,
+.project-shell-create__panel {
+  padding: clamp(18px, 2.4vw, 26px);
+}
+
+.project-shell-create__hero {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
-.episode-create__field-card {
-  padding: 18px;
-  border: 1px solid var(--border-soft);
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--surface-soft-fill) 90%, white 10%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+.project-shell-create__hero-copy {
+  display: grid;
+  gap: 10px;
 }
 
-.episode-create__field-label {
-  display: flex;
+.project-shell-create__mode-mark {
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  font-size: 15px;
+  gap: 10px;
+  width: fit-content;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-soft) 74%, var(--bg-panel) 26%);
+  color: var(--accent);
+  font-size: 13px;
   font-weight: 700;
 }
 
-.episode-create__field-icon {
+.project-shell-create__mode-icon,
+.project-shell-create__field-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -183,33 +248,78 @@ async function submitCreate() {
   flex: none;
 }
 
-.episode-create__item {
+.project-shell-create__mode-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  font-size: 16px;
+}
+
+.project-shell-create__title,
+.project-shell-create__actions-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(22px, 2vw, 28px);
+  letter-spacing: -0.04em;
+}
+
+.project-shell-create__description,
+.project-shell-create__field-text,
+.project-shell-create__actions-text {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.project-shell-create__field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.project-shell-create__field-card {
+  padding: 18px;
+  border: 1px solid var(--border-soft);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface-soft-fill) 90%, white 10%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.project-shell-create__field-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.project-shell-create__field-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.project-shell-create__item {
   margin: 16px 0 0;
 }
 
-.episode-create__item :deep(.el-form-item__content) {
+.project-shell-create__item :deep(.el-form-item__content) {
   display: block;
 }
 
-.episode-create__item :deep(.el-input__wrapper) {
+.project-shell-create__item :deep(.el-input__wrapper) {
   min-height: 52px;
   border-radius: 16px;
   background: var(--field-bg);
   box-shadow: var(--field-shadow);
 }
 
-.episode-create__item :deep(.el-input__suffix) {
-  display: flex;
-  align-items: center;
-}
-
-.episode-create__item :deep(.el-input__suffix-inner) {
+.project-shell-create__item :deep(.el-input__suffix),
+.project-shell-create__item :deep(.el-input__suffix-inner) {
   display: flex;
   align-items: center;
   gap: 0;
 }
 
-.episode-create__picker {
+.project-shell-create__picker {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -228,38 +338,45 @@ async function submitCreate() {
     transform 160ms ease;
 }
 
-.episode-create__picker:hover:not(:disabled) {
+.project-shell-create__picker:hover:not(:disabled) {
   background: color-mix(in srgb, var(--brand-soft) 76%, white 24%);
   border-color: color-mix(in srgb, var(--brand) 18%, transparent);
   transform: translateY(-1px);
 }
 
-.episode-create__picker:focus-visible {
+.project-shell-create__picker:focus-visible {
   outline: none;
   border-color: color-mix(in srgb, var(--brand) 28%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-soft) 72%, transparent);
 }
 
-.episode-create__picker:disabled {
+.project-shell-create__picker:disabled {
   cursor: wait;
   opacity: 0.9;
 }
 
-.episode-create__picker-icon {
+.project-shell-create__picker-icon {
   font-size: 18px;
 }
 
-.episode-create__picker-icon.is-spinning {
-  animation: episode-create-spin 1s linear infinite;
+.project-shell-create__picker-icon.is-spinning {
+  animation: project-shell-create-spin 1s linear infinite;
 }
 
-.episode-create__actions {
+.project-shell-create__actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: clamp(16px, 2vw, 22px);
+}
+
+.project-shell-create__actions-buttons {
+  display: flex;
   gap: 12px;
 }
 
-@keyframes episode-create-spin {
+@keyframes project-shell-create-spin {
   from {
     transform: rotate(0deg);
   }
@@ -270,17 +387,19 @@ async function submitCreate() {
 }
 
 @media (max-width: 860px) {
-  .episode-create__field-grid {
+  .project-shell-create__field-grid {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 640px) {
-  .episode-create__actions {
+@media (max-width: 720px) {
+  .project-shell-create__actions,
+  .project-shell-create__actions-buttons {
     flex-direction: column;
+    align-items: stretch;
   }
 
-  .episode-create__actions :deep(.el-button) {
+  .project-shell-create__actions :deep(.el-button) {
     width: 100%;
   }
 }

@@ -1358,10 +1358,6 @@ export function createProjectService(options: CreateProjectServiceOptions) {
   async function createProjectRecord(input: CreateProjectInput) {
     let { workingDirectory, name, projectMode, sourceKind } = input
 
-    if (projectMode === 'feature' && !sourceKind) {
-      return fail('PROJECT_SOURCE_KIND_REQUIRED', '\u7535\u5f71\u9879\u76ee\u5fc5\u987b\u6307\u5b9a\u6765\u6e90\u7c7b\u578b')
-    }
-
     if (workingDirectory === '') {
       workingDirectory = join(app.getPath('userData'), 'task')
       if (!fs.existsSync(workingDirectory)) {
@@ -1385,7 +1381,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     if (projectMode === 'episode') {
       writeSeriesWorkspace(projectPath, createDefaultSeriesWorkspace(id, input.plannedEpisodeCount))
     }
-    const legacyType: LegacyProjectType = projectMode === 'episode' ? 'episode' : sourceKind!
+    const legacyType: LegacyProjectType | undefined = projectMode === 'episode' ? 'episode' : sourceKind
     projectStore.insertLegacyTask({
       id,
       mode: projectMode,
@@ -2101,6 +2097,15 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     fs.writeFileSync(getDraftConfigPath(task.path), JSON.stringify(config))
 
     const project = projectStore.getProjectById(id)
+    if (project?.projectMode === 'feature') {
+      const sourceKind =
+        config.sourceKind === 'quick' || config.sourceKind === 'file' || config.sourceKind === 'template'
+          ? config.sourceKind
+          : undefined
+      projectStore.setLegacyTaskType(id, sourceKind)
+      await projectStore.write()
+    }
+
     if (project?.projectMode === 'episode') {
       const workspace = readSeriesWorkspace(project.id, task.path)
       const timestamp = new Date().toISOString()

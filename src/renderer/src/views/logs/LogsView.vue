@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import AppPanel from '../../components/base/AppPanel.vue'
 import PageShell from '../../components/layout/PageShell.vue'
@@ -26,6 +26,23 @@ interface FailureEntry {
   result: PublishResult
 }
 
+interface VirtualRange {
+  start: number
+  end: number
+  paddingTop: number
+  paddingBottom: number
+}
+
+interface IndexedLogLine {
+  index: number
+  content: string
+}
+
+const FILE_LIST_ITEM_HEIGHT = 92
+const FILE_LIST_OVERSCAN = 6
+const LOG_LINE_HEIGHT = 24
+const LOG_LINE_OVERSCAN = 160
+
 const router = useRouter()
 const { t } = useI18n()
 const isLoading = ref(false)
@@ -35,8 +52,15 @@ const logDirectory = ref('')
 const files = ref<LogFileSummary[]>([])
 const selectedFilePath = ref('')
 const selectedContent = ref('')
+const selectedContentLines = shallowRef<string[]>([])
 const selectedFileLoading = ref(false)
 const projects = ref<PublishProject[]>([])
+const fileListViewportRef = ref<HTMLElement | null>(null)
+const viewerViewportRef = ref<HTMLElement | null>(null)
+const fileListScrollTop = ref(0)
+const fileListViewportHeight = ref(FILE_LIST_ITEM_HEIGHT)
+const viewerScrollTop = ref(0)
+const viewerViewportHeight = ref(LOG_LINE_HEIGHT)
 
 const selectedFile = computed(
   () => files.value.find((file) => file.path === selectedFilePath.value) ?? null
@@ -62,6 +86,35 @@ const latestFailures = computed<FailureEntry[]>(() => {
 })
 
 const fileCount = computed(() => files.value.length)
+const fileListVirtualRange = computed(() =>
+  getVirtualRange(
+    files.value.length,
+    fileListScrollTop.value,
+    fileListViewportHeight.value,
+    FILE_LIST_ITEM_HEIGHT,
+    FILE_LIST_OVERSCAN
+  )
+)
+const visibleFiles = computed(() =>
+  files.value.slice(fileListVirtualRange.value.start, fileListVirtualRange.value.end)
+)
+const logViewerVirtualRange = computed(() =>
+  getVirtualRange(
+    selectedContentLines.value.length,
+    viewerScrollTop.value,
+    viewerViewportHeight.value,
+    LOG_LINE_HEIGHT,
+    LOG_LINE_OVERSCAN
+  )
+)
+const visibleSelectedContentLines = computed<IndexedLogLine[]>(() =>
+  selectedContentLines.value
+    .slice(logViewerVirtualRange.value.start, logViewerVirtualRange.value.end)
+    .map((content, offset) => ({
+      index: logViewerVirtualRange.value.start + offset,
+      content
+    }))
+)
 
 const stageRouteMap: Record<
   ProjectStage,
@@ -72,6 +125,49 @@ const stageRouteMap: Record<
   torrent_publish: 'bt_publish',
   forum_publish: 'forum_publish',
   completed: 'finish'
+}
+
+function splitLogContent(content: string) {
+  if (!content) {
+    return []
+  }
+
+  return content.split(/\r?\n/)
+}
+
+function setSelectedContent(content: string) {
+  selectedContent.value = content
+  selectedContentLines.value = splitLogContent(content)
+}
+
+function getVirtualRange(
+  total: number,
+  scrollTop: number,
+  viewportHeight: number,
+  itemHeight: number,
+  overscan: number
+): VirtualRange {
+  if (total === 0) {
+    return {
+      start: 0,
+      end: 0,
+      paddingTop: 0,
+      paddingBottom: 0
+    }
+  }
+
+  const safeViewportHeight = Math.max(viewportHeight, itemHeight)
+  const rawStart = Math.max(0, Math.floor(scrollTop / itemHeight))
+  const rawEnd = Math.max(rawStart + 1, Math.ceil((scrollTop + safeViewportHeight) / itemHeight))
+  const start = Math.max(0, rawStart - overscan)
+  const end = Math.min(total, rawEnd + overscan)
+
+  return {
+    start,
+    end,
+    paddingTop: start * itemHeight,
+    paddingBottom: Math.max(0, (total - end) * itemHeight)
+  }
 }
 
 function formatBytes(size: number) {
@@ -142,19 +238,24 @@ async function exportDiagnostics() {
 async function readLog(path: string) {
   selectedFileLoading.value = true
   selectedFilePath.value = path
+  resetViewerScroll()
+  await nextTick()
+  syncViewerViewportMetrics()
 
   try {
     const result = await logBridge.readLog(path)
     if (!result.ok) {
-      selectedContent.value = result.error.message
+      setSelectedContent(result.error.message)
       return
     }
 
-    selectedContent.value = result.data.content
+    setSelectedContent(result.data.content)
   } catch (error) {
-    selectedContent.value = (error as Error).message
+    setSelectedContent((error as Error).message)
   } finally {
     selectedFileLoading.value = false
+    await nextTick()
+    syncViewerViewportMetrics()
   }
 }
 
@@ -196,12 +297,15 @@ async function loadData() {
     if (selectedFilePath.value) {
       await readLog(selectedFilePath.value)
     } else {
-      selectedContent.value = ''
+      setSelectedContent('')
     }
   } catch (error) {
     errorMessage.value = (error as Error).message
   } finally {
     isLoading.value = false
+    await nextTick()
+    syncFileListViewportMetrics()
+    syncViewerViewportMetrics()
   }
 }
 
@@ -212,11 +316,62 @@ function openProject(projectId: number, stage: ProjectStage) {
   })
 }
 
+function syncFileListViewportMetrics() {
+  const element = fileListViewportRef.value
+  if (!element) {
+    fileListScrollTop.value = 0
+    fileListViewportHeight.value = FILE_LIST_ITEM_HEIGHT
+    return
+  }
+
+  fileListScrollTop.value = element.scrollTop
+  fileListViewportHeight.value = element.clientHeight || FILE_LIST_ITEM_HEIGHT
+}
+
+function syncViewerViewportMetrics() {
+  const element = viewerViewportRef.value
+  if (!element) {
+    viewerScrollTop.value = 0
+    viewerViewportHeight.value = LOG_LINE_HEIGHT
+    return
+  }
+
+  viewerScrollTop.value = element.scrollTop
+  viewerViewportHeight.value = element.clientHeight || LOG_LINE_HEIGHT
+}
+
+function handleFileListScroll(event: Event) {
+  const element = event.target as HTMLElement
+  fileListScrollTop.value = element.scrollTop
+  fileListViewportHeight.value = element.clientHeight || FILE_LIST_ITEM_HEIGHT
+}
+
+function handleViewerScroll(event: Event) {
+  const element = event.target as HTMLElement
+  viewerScrollTop.value = element.scrollTop
+  viewerViewportHeight.value = element.clientHeight || LOG_LINE_HEIGHT
+}
+
+function resetViewerScroll() {
+  viewerScrollTop.value = 0
+  viewerViewportRef.value?.scrollTo({ top: 0 })
+}
+
+function handleWindowResize() {
+  syncFileListViewportMetrics()
+  syncViewerViewportMetrics()
+}
+
 onMounted(() => {
   void loadData()
   window.projectAPI.refreshProjectData(() => {
     void loadData()
   })
+  window.addEventListener('resize', handleWindowResize)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleWindowResize)
 })
 </script>
 
@@ -266,11 +421,20 @@ onMounted(() => {
             >
               {{ t('logs.empty.noFiles') }}
             </div>
-            <div v-else class="logs-list-scroll">
-              <div class="grid gap-3">
+            <div
+              v-else
+              ref="fileListViewportRef"
+              class="logs-list-scroll"
+              @scroll.passive="handleFileListScroll"
+            >
+              <div :style="{ height: `${fileListVirtualRange.paddingTop}px` }"></div>
+              <div
+                v-for="file in visibleFiles"
+                :key="file.path"
+                class="logs-file-item"
+                :style="{ height: `${FILE_LIST_ITEM_HEIGHT}px` }"
+              >
                 <button
-                  v-for="file in files"
-                  :key="file.path"
                   :class="[
                     'logs-file-button surface-tile w-full px-4 py-4 text-left',
                     file.path === selectedFilePath ? 'logs-file-button--active' : ''
@@ -284,6 +448,7 @@ onMounted(() => {
                   </div>
                 </button>
               </div>
+              <div :style="{ height: `${fileListVirtualRange.paddingBottom}px` }"></div>
             </div>
           </AppPanel>
         </div>
@@ -306,9 +471,22 @@ onMounted(() => {
                 </StatusChip>
               </div>
 
-              <pre class="logs-code-block logs-viewer-scroll">{{
-                selectedContent
-              }}</pre>
+              <div
+                ref="viewerViewportRef"
+                class="logs-code-block logs-viewer-scroll"
+                @scroll.passive="handleViewerScroll"
+              >
+                <div :style="{ height: `${logViewerVirtualRange.paddingTop}px` }"></div>
+                <div
+                  v-for="line in visibleSelectedContentLines"
+                  :key="line.index"
+                  class="logs-code-line"
+                  :style="{ height: `${LOG_LINE_HEIGHT}px` }"
+                >
+                  {{ line.content }}
+                </div>
+                <div :style="{ height: `${logViewerVirtualRange.paddingBottom}px` }"></div>
+              </div>
             </div>
 
             <div
@@ -441,7 +619,13 @@ onMounted(() => {
 }
 
 .logs-file-button {
+  height: 100%;
   contain: layout paint;
+}
+
+.logs-file-item {
+  box-sizing: border-box;
+  padding-bottom: 0.75rem;
 }
 
 .logs-file-button--active {
@@ -467,5 +651,9 @@ onMounted(() => {
   white-space: pre;
   word-break: normal;
   overflow-wrap: normal;
+}
+
+.logs-code-line {
+  line-height: 24px;
 }
 </style>

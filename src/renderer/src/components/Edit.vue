@@ -10,7 +10,10 @@
     import type { FormRules } from 'element-plus'
     import type { ProjectSourceKind, PublishProject } from '../types/project'
 
-    const props = defineProps<{id: number, project: PublishProject}>()
+    const props = withDefaults(defineProps<{id: number, project: PublishProject, embedded?: boolean, sourceKind?: ProjectSourceKind | null}>(), {
+        embedded: false,
+        sourceKind: null,
+    })
     const router = useRouter()
 
     //编辑器设置
@@ -68,7 +71,7 @@
     const createForm_file = ref()
     const createForm_template = ref()
     const urlType = ref('html')
-    const taskType = computed<ProjectSourceKind>(() => props.project.sourceKind ?? 'file')
+    const taskType = computed<ProjectSourceKind>(() => props.sourceKind ?? props.project.sourceKind ?? 'file')
     interface ruleForm {
         torrentPath: string,
         title_CN: string,
@@ -1040,7 +1043,10 @@
     }
 
     onMounted(async () => {
-        setscrollbar()
+        if (!props.embedded)
+            setscrollbar()
+        else
+            slbHeight.value = 'auto'
         changeTheme()
         loadReleaseProfiles()
         let message: Message.Task.TaskStatus = { id: props.id, step: 'edit' }
@@ -1059,8 +1065,8 @@
 </script>
 
 <template>
-    <div v-if="loadCompleted" class="edit-view" :style="{ height: slbHeight }">
-        <el-scrollbar class="edit-view__scroll">
+    <div v-if="loadCompleted" :class="['edit-view', { 'edit-view--embedded': embedded }]" :style="embedded ? undefined : { height: slbHeight }">
+        <el-scrollbar :class="['edit-view__scroll', { 'edit-view__scroll--embedded': embedded }]">
             <el-row>
                 <el-col :span="3" />
                 <el-col :span="18">
@@ -1403,6 +1409,11 @@
   height: 100%;
 }
 
+.edit-view--embedded,
+.edit-view__scroll--embedded {
+  height: auto;
+}
+
 .option-input {
   width: 100%;
   margin-bottom: 8px;
@@ -1446,6 +1457,14 @@
   display: grid;
   gap: 24px;
   padding: 4px 0 28px;
+}
+
+:deep(.edit-view__scroll--embedded .el-scrollbar__wrap) {
+  overflow: visible;
+}
+
+:deep(.edit-view__scroll--embedded .el-scrollbar__bar) {
+  display: none;
 }
 
 :deep(.edit-view__scroll .el-scrollbar__view > .el-row:nth-child(-n + 4)) {

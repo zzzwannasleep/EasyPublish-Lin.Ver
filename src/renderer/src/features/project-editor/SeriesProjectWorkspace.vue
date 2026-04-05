@@ -1159,16 +1159,16 @@ onMounted(() => {
               <el-input v-model="titleMatchForm.resolutionTemplate" placeholder="<res>p" />
             </label>
             <label class="series-studio__field">
-              <span class="series-studio__field-label">{{ '\u97f3\u9891\u7f16\u7801\u6a21\u677f' }}</span>
-              <el-input v-model="titleMatchForm.audioCodecTemplate" placeholder="<audio>" />
-            </label>
-            <label class="series-studio__field">
               <span class="series-studio__field-label">{{ '\u5b57\u5e55\u6a21\u677f' }}</span>
               <el-input v-model="titleMatchForm.subtitleTemplate" placeholder="<sub>" />
             </label>
             <label class="series-studio__field">
               <span class="series-studio__field-label">{{ '\u5236\u4f5c\u7ec4\u6a21\u677f' }}</span>
               <el-input v-model="titleMatchForm.releaseTeamTemplate" placeholder="<team>" />
+            </label>
+            <label class="series-studio__field">
+              <span class="series-studio__field-label">{{ '\u97f3\u9891\u7f16\u7801\u6a21\u677f' }}</span>
+              <el-input v-model="titleMatchForm.audioCodecTemplate" placeholder="<audio>" />
             </label>
             <label class="series-studio__field">
               <span class="series-studio__field-label">{{ '\u89c6\u9891\u7f16\u7801\u6a21\u677f' }}</span>
@@ -1902,6 +1902,12 @@ onMounted(() => {
 
 .series-studio__field--wide {
   grid-column: span 2;
+}
+
+@media (min-width: 1280px) {
+  .series-studio__match-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .series-studio__field :deep(.el-input-number) {

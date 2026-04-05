@@ -10,12 +10,12 @@ const projects = {
   'projectCreate.hero.eyebrow': 'Projects',
   'projectCreate.hero.title': 'Create a new publishing project.',
   'projectCreate.hero.summary':
-    'Choose the project mode first, then continue into the matching create form and publishing workflow.',
+    'Choose the project mode first, create the project shell, and continue inside the matching workspace.',
   'projectCreate.hero.chip': 'Project model connected',
   'projectCreate.panel.eyebrow': 'Project Setup',
   'projectCreate.panel.title': 'Initialize Release Workspace',
   'projectCreate.panel.description':
-    'Choose series or feature/movie mode first, then continue into the matching create form.',
+    'Choose series or feature/movie mode first, then create the matching project shell.',
   'create.mode.dialog.title': 'Choose Project Mode',
   'create.mode.dialog.description':
     'Decide whether this is a series release or a feature/movie release before selecting the detailed flow.',
@@ -29,8 +29,8 @@ const projects = {
   'create.mode.episode.action': 'Open series form',
   'create.mode.feature.label': 'Feature / Movie',
   'create.mode.feature.description':
-    'Keep the existing quick, file-import, and template-based creation flows for full releases.',
-  'create.mode.feature.action': 'Open feature form',
+    'Create the project shell first, then choose quick, file, or template source inside the feature workspace.',
+  'create.mode.feature.action': 'Open feature workspace',
   'create.form.name.label': 'Project Name',
   'create.form.name.placeholder': 'Leave blank to use a timestamp-based folder name',
   'create.form.directory.label': 'Working Directory',
@@ -51,6 +51,18 @@ const projects = {
   'create.success.created': 'Project created. Opening the editor workspace.',
   'create.feature.actionsText':
     'Feature and movie projects keep the existing quick, file, and template creation paths.',
+  'create.feature.title': 'Create Feature Workspace',
+  'create.feature.description':
+    'Create the feature project shell first, then choose the content source and continue editing inside the workspace.',
+  'create.feature.alert':
+    'Feature-mode projects now land in the workspace first. Quick, file, and template sources are selected there.',
+  'create.feature.nameHelp':
+    'Use the release title or collection name here so the project list stays easy to scan later.',
+  'create.feature.directoryHelp':
+    'Use a dedicated working folder for this collection or movie project, or keep the default app-managed path.',
+  'create.feature.nextDescription':
+    'After creation, the feature workspace opens first so you can choose the source path and continue editing.',
+  'create.feature.success': 'Feature project created. Opening the workspace.',
   'create.episode.title': 'Create Series Workspace',
   'create.episode.description':
     'Create the series project shell first, then enter the series workspace and open the current release draft from there.',

@@ -81,6 +81,24 @@ const workflow = {
   'stage.editor.note2.text': 'This stage only changes layout, framing, and route ownership. No publishing logic is rewritten here.',
   'stage.editor.note3.title': 'Next Handoff',
   'stage.editor.note3.text': 'After editing is complete, the project continues into the review stage inside the new shell.',
+  'featureWorkspace.source.title': 'Content Source',
+  'featureWorkspace.source.text':
+    'Choose whether this feature project starts from quick publish, local files, or the template editor before expanding the current draft.',
+  'featureWorkspace.source.pending':
+    'No content source has been selected yet. Pick one first, then continue into the current draft.',
+  'featureWorkspace.source.current': 'Current source: {source}',
+  'featureWorkspace.source.saved': 'Switched the feature workspace to {source}',
+  'featureWorkspace.source.loadingFailed': 'Failed to load the current draft config',
+  'featureWorkspace.source.saveFailed': 'Failed to save the selected content source',
+  'featureWorkspace.source.switchTitle': 'Switch content source',
+  'featureWorkspace.source.switchText':
+    'Switching between template and file-based flows will reset source-specific draft fields in the current editor. Continue?',
+  'featureWorkspace.currentDraft.title': 'Current Feature Draft',
+  'featureWorkspace.currentDraft.text':
+    'After the source is set, continue editing in the same draft workspace and keep the downstream review and publish flow unchanged.',
+  'featureWorkspace.currentDraft.empty':
+    'Pick a content source first. The draft editor will appear here right after that.',
+  'featureWorkspace.currentDraft.active': 'The current draft is now using the {source} source path.',
   'stage.review.eyebrow': 'Project Review',
   'stage.review.title': 'Inspect generated release output before publishing.',
   'stage.review.description': '{project} now enters review through the new project-detail shell while the existing preview module continues to run its original checks.',

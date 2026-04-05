@@ -203,7 +203,7 @@ function getDisplayAccountStatus(status: string, enabled: boolean) {
   }
 
   if (isConfiguredOnlyStatus(status)) {
-    return 'unknown'
+    return 'loggedIn'
   }
 
   return normalizeLegacyAccountStatus(status, enabled)
@@ -244,10 +244,6 @@ function getAccountStatusTone(
   status: string,
   enabled: boolean,
 ): 'neutral' | 'info' | 'success' | 'warning' | 'danger' {
-  if (isConfiguredOnlyStatus(status)) {
-    return 'info'
-  }
-
   switch (getDisplayAccountStatus(status, enabled)) {
     case 'loggedIn':
       return 'success'
@@ -269,10 +265,6 @@ function getAccountStatusTone(
 }
 
 function getAccountStatusLabel(status: string, enabled: boolean) {
-  if (isConfiguredOnlyStatus(status)) {
-    return status
-  }
-
   switch (getDisplayAccountStatus(status, enabled)) {
     case 'disabled':
       return t('accounts.status.disabled')

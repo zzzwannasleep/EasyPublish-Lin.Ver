@@ -78,9 +78,7 @@ const activeStep = computed(() => {
   return 0
 })
 
-const hideWorkflowRail = computed(
-  () => project.value?.projectMode === 'episode' && route.name === 'edit'
-)
+const hideWorkflowRail = computed(() => route.name === 'edit')
 
 const workflowId = computed(() => Number(route.params.id ?? 0))
 const project = ref<PublishProject | null>(null)
