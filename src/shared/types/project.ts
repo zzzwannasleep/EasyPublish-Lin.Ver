@@ -41,6 +41,8 @@ export interface PublishTorrentEntry {
   enabled?: boolean
   titleOverride?: string
   bodyOverride?: string
+  targetSites?: SiteId[]
+  siteFieldDefaults?: SeriesPublishProfileSiteFieldDefaults
 }
 
 export interface SeriesProjectEpisode {

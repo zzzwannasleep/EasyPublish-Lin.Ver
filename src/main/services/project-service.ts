@@ -95,10 +95,6 @@ interface RecordSeriesVariantPublishResultInput {
 export function createProjectService(options: CreateProjectServiceOptions) {
   const { projectStore, notifyProjectDataChanged } = options
   const defaultEpisodeSites: SiteId[] = []
-  const legacyEpisodeDefaultSites: SiteId[][] = [
-    ['bangumi', 'mikan', 'miobt', 'nyaa'],
-    ['bangumi', 'mikan', 'anibt', 'miobt', 'nyaa'],
-  ]
   const trackedLegacyTorrentSites = ['bangumi', 'mikan', 'miobt', 'nyaa', 'acgrip', 'dmhy', 'acgnx_a', 'acgnx_g'] as const
   const supportedVideoProfiles: SeriesVariantVideoProfile[] = ['1080p', '2160p', 'custom']
   const supportedSubtitleProfiles: SeriesVariantSubtitleProfile[] = ['chs', 'cht', 'eng', 'bilingual', 'custom']
@@ -367,19 +363,6 @@ export function createProjectService(options: CreateProjectServiceOptions) {
           .filter(Boolean),
       ),
     ]
-  }
-
-  function getSiteIdSignature(value: unknown) {
-    return normalizeSiteIds(value).slice().sort().join('|')
-  }
-
-  function isLegacyEpisodeDefaultTargetSites(value: unknown) {
-    const signature = getSiteIdSignature(value)
-    if (!signature) {
-      return false
-    }
-
-    return legacyEpisodeDefaultSites.some(siteIds => getSiteIdSignature(siteIds) === signature)
   }
 
   function normalizeTitleTemplate(value: unknown) {
@@ -1042,10 +1025,6 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       return workspace
     }
 
-    const sourceTargetSites = getVariantTargetSitesFromConfig(draftConfig)
-    const sourceFieldDefaults = filterSiteFieldDefaultsByTargetSites(draftConfig.siteFieldDefaults, sourceTargetSites)
-    const sourceSummary = normalizeOptionalString(draftConfig.content.summary)
-    const sourceInformation = normalizeOptionalString(draftConfig.information)
     const sourceBodyTemplate = normalizeBodyTemplate(draftConfig.bodyTemplate)
     const sourceBodyTemplateFormat = normalizeMarkupFormat(draftConfig.bodyTemplateFormat)
 
@@ -1067,51 +1046,13 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         return
       }
 
-      const variantTargetSites = getVariantTargetSitesFromConfig(variantConfig)
-      const shouldReplaceTargetSites =
-        sourceTargetSites.length > 0 &&
-        (variantTargetSites.length === 0 || isLegacyEpisodeDefaultTargetSites(variantTargetSites))
-      const variantFieldDefaults = normalizeSiteFieldDefaults(variantConfig.siteFieldDefaults)
-
       let variantChanged = false
 
-      if (shouldReplaceTargetSites) {
-        variantConfig.targetSites = [...sourceTargetSites]
-        variantConfig.content.targetSites = [...sourceTargetSites]
-        variantChanged = true
-      }
-
-      if (
-        sourceFieldDefaults &&
-        (shouldReplaceTargetSites || !variantFieldDefaults || Object.keys(variantFieldDefaults).length === 0)
-      ) {
-        variantConfig.siteFieldDefaults = cloneSiteFieldDefaults(sourceFieldDefaults)
-        variantChanged = true
-      }
-
-      if (shouldReplaceTargetSites && sourceTargetSites.includes('bangumi')) {
-        variantConfig.category_bangumi = draftConfig.category_bangumi
-        variantChanged = true
-      }
-
-      if (shouldReplaceTargetSites && sourceTargetSites.includes('nyaa')) {
-        variantConfig.category_nyaa = draftConfig.category_nyaa
-        variantChanged = true
-      }
-
-      if (sourceInformation && !normalizeOptionalString(variantConfig.information)) {
-        variantConfig.information = sourceInformation
-        variantChanged = true
-      }
-
-      if (sourceSummary && !normalizeOptionalString(variantConfig.content.summary)) {
-        variantConfig.content.summary = sourceSummary
-        variantChanged = true
-      }
-
-      if (sourceBodyTemplate && !normalizeBodyTemplate(variantConfig.bodyTemplate)) {
+      const variantBodyTemplate = normalizeBodyTemplate(variantConfig.bodyTemplate)
+      const variantBodyTemplateFormat = normalizeMarkupFormat(variantConfig.bodyTemplateFormat)
+      if (variantBodyTemplate !== sourceBodyTemplate || variantBodyTemplateFormat !== sourceBodyTemplateFormat) {
         variantConfig.bodyTemplate = sourceBodyTemplate
-        variantConfig.bodyTemplateFormat = sourceBodyTemplateFormat
+        variantConfig.bodyTemplateFormat = sourceBodyTemplate ? sourceBodyTemplateFormat : undefined
         variantChanged = true
       }
 

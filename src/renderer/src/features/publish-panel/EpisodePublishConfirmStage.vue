@@ -87,6 +87,7 @@ interface ReviewVariantState {
   variantName: string
   isActive: boolean
   config: Config.PublishConfig
+  savedTitle?: string
   publishResults: PublishResult[]
   targetSiteIds: SiteId[]
   siteDrafts: Partial<Record<SiteId, SitePublishDraftForm>>
@@ -269,13 +270,18 @@ function resolveConfiguredTargetSites(currentConfig: Config.PublishConfig) {
   return project.value?.targetSites ?? []
 }
 
-function resolveTorrentTitle(currentConfig: Config.PublishConfig, entry: PublishTorrentEntry) {
+function resolveConfiguredTorrentTitle(currentConfig: Config.PublishConfig, entry: PublishTorrentEntry) {
   const titleOverride = entry.titleOverride?.trim()
   if (titleOverride) {
     return titleOverride
   }
 
-  return entry.id === currentConfig.activeTorrentId ? currentConfig.title?.trim() ?? '' : ''
+  const activeEntry = getActivePublishTorrentEntry(currentConfig)
+  if (activeEntry && entry.id === activeEntry.id) {
+    return currentConfig.title?.trim() ?? ''
+  }
+
+  return ''
 }
 
 function getEpisodeContent(currentConfig: Config.PublishConfig) {
@@ -321,7 +327,7 @@ function renderBodyContent(content: string, format?: Config.PublishConfig['bodyT
   return marked.parse(content, { async: false }) as string
 }
 
-function buildTorrentBody(currentConfig: Config.PublishConfig, entry: PublishTorrentEntry) {
+function buildTorrentBody(currentConfig: Config.PublishConfig, entry: PublishTorrentEntry, title: string) {
   const bodyOverride = entry.bodyOverride?.trim()
   if (bodyOverride) {
     return {
@@ -340,7 +346,7 @@ function buildTorrentBody(currentConfig: Config.PublishConfig, entry: PublishTor
 
   return {
     label: t('stage.review.confirm.body.source.generated'),
-    html: renderBodyContent(buildAutoBodyMarkdown(currentConfig, resolveTorrentTitle(currentConfig, entry)), 'md'),
+    html: renderBodyContent(buildAutoBodyMarkdown(currentConfig, title), 'md'),
   }
 }
 
@@ -619,10 +625,25 @@ function createReviewVariantState(payload: SeriesEpisodeReviewVariantPayload): R
     variantName: payload.variant.name || payload.config.torrentName || `Variant ${payload.variant.id}`,
     isActive: payload.isActive,
     config: payload.config,
+    savedTitle: payload.variant.title?.trim() || undefined,
     publishResults: [...(payload.variant.publishResults ?? [])],
     targetSiteIds,
     siteDrafts,
   }
+}
+
+function resolveTorrentTitle(reviewVariant: ReviewVariantState, entry: PublishTorrentEntry) {
+  const configuredTitle = resolveConfiguredTorrentTitle(reviewVariant.config, entry)
+  if (configuredTitle) {
+    return configuredTitle
+  }
+
+  const selectedEntries = getSelectedPublishTorrentEntries(reviewVariant.config)
+  if (selectedEntries.length <= 1) {
+    return reviewVariant.savedTitle?.trim() ?? ''
+  }
+
+  return ''
 }
 
 function findVariantState(variantId: number) {
@@ -639,7 +660,8 @@ function ensureVariantDraft(reviewVariant: ReviewVariantState, siteId: SiteId) {
 
 function createTorrentRowsForVariant(reviewVariant: ReviewVariantState) {
   return getSelectedPublishTorrentEntries(reviewVariant.config).map(entry => {
-    const body = buildTorrentBody(reviewVariant.config, entry)
+    const title = resolveTorrentTitle(reviewVariant, entry)
+    const body = buildTorrentBody(reviewVariant.config, entry, title)
     return {
       key: `${reviewVariant.variantId}:${entry.id}`,
       variantId: reviewVariant.variantId,
@@ -648,7 +670,7 @@ function createTorrentRowsForVariant(reviewVariant: ReviewVariantState) {
       id: entry.id,
       name: entry.name,
       torrentPath: entry.path,
-      title: resolveTorrentTitle(reviewVariant.config, entry),
+      title,
       bodySourceLabel: body.label,
       bodyHtml: body.html,
       targetSiteIds: [...reviewVariant.targetSiteIds],
@@ -773,12 +795,13 @@ function buildPublishInput(row: ReviewSiteRow): SitePublishDraft {
   const site = sites.value.find(item => item.id === row.siteId)
   const selectedTorrents = getSelectedPublishTorrentEntries(reviewVariant.config)
   const primaryTorrent = selectedTorrents[0] ?? getActivePublishTorrentEntry(reviewVariant.config)
-  const primaryBody = primaryTorrent ? buildTorrentBody(reviewVariant.config, primaryTorrent) : { html: '' }
+  const primaryTitle = primaryTorrent ? resolveTorrentTitle(reviewVariant, primaryTorrent).trim() : reviewVariant.savedTitle?.trim() ?? ''
+  const primaryBody = primaryTorrent ? buildTorrentBody(reviewVariant.config, primaryTorrent, primaryTitle) : { html: '' }
 
   const baseInput: SitePublishDraft = {
     siteId: row.siteId,
     typeId: draft.typeId ?? 0,
-    title: primaryTorrent ? resolveTorrentTitle(reviewVariant.config, primaryTorrent).trim() : reviewVariant.config.title?.trim() ?? '',
+    title: primaryTitle,
     description: primaryBody.html.trim(),
     torrentPath: primaryTorrent?.path.trim() || reviewVariant.config.torrentPath?.trim() || '',
     batchEntries:
@@ -787,7 +810,7 @@ function buildPublishInput(row: ReviewSiteRow): SitePublishDraft {
             id: entry.id,
             name: entry.name,
             torrentPath: entry.path.trim(),
-            title: resolveTorrentTitle(reviewVariant.config, entry),
+            title: resolveTorrentTitle(reviewVariant, entry),
           }))
         : undefined,
     anonymous: draft.anonymous,
@@ -1251,8 +1274,14 @@ async function loadReview() {
     }
 
     sites.value = siteResult.data.sites.filter(site => site.capabilitySet.publish.torrent)
-    reviewBundle.value = reviewResult.data
-    reviewVariants.value = reviewResult.data.variants.map(createReviewVariantState)
+    const activeVariants = reviewResult.data.variants.filter(variant => variant.isActive)
+    const variantsToReview = activeVariants.length > 0 ? activeVariants : reviewResult.data.variants.slice(0, 1)
+
+    reviewBundle.value = {
+      ...reviewResult.data,
+      variants: variantsToReview,
+    }
+    reviewVariants.value = variantsToReview.map(createReviewVariantState)
     await refreshChecks()
   } catch (error) {
     loadError.value = (error as Error).message

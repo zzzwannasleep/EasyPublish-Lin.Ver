@@ -741,7 +741,7 @@ function initializeFormFromConfig(config: Config.PublishConfig) {
   form.torrentPath = normalizeOptionalString(activeTorrentEntry?.path ?? config.torrentPath)
   form.targetSites = sortSiteIds(config.targetSites ?? content.targetSites ?? [])
   form.siteFieldDefaults = siteFieldDefaults
-  form.bodyMarkdown = normalizeMarkdown(config.bodyTemplate || content.summary || '')
+  form.bodyMarkdown = normalizeMarkdown(config.bodyTemplate || '')
   form.categoryBangumi =
     normalizeOptionalString(config.category_bangumi) ||
     normalizeOptionalString(siteFieldDefaults.bangumi?.category_bangumi) ||

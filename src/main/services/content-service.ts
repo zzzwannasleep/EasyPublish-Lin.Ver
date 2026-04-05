@@ -10,7 +10,7 @@ import presetHTML5 from '@bbob/preset-html5'
 import { marked } from 'marked'
 import html2md from 'turndown'
 import { materializeEpisodePublishDraft } from './episode-publish-support'
-import { buildDerivedMarkupFromHtml, htmlToMarkdown, markdownToBbcode } from './markup-conversion'
+import { buildDerivedMarkupFromContent, buildDerivedMarkupFromHtml, htmlToMarkdown, markdownToBbcode } from './markup-conversion'
 
 type TaskDbProvider = () => Low<Config.TaskData>
 
@@ -192,6 +192,19 @@ export function createContentService(options: CreateContentServiceOptions) {
     fs.writeFileSync(join(taskPath, 'acgrip.bbcode'), bbcode)
   }
 
+  function writeBodyTemplateContent(taskPath: string, config: Config.PublishConfig) {
+    const bodyTemplate = config.bodyTemplate?.trim()
+    if (!bodyTemplate) {
+      return
+    }
+
+    const format = config.bodyTemplateFormat ?? 'html'
+    const { html, md, bbcode } = buildDerivedMarkupFromContent(bodyTemplate, format)
+    fs.writeFileSync(join(taskPath, 'bangumi.html'), html)
+    fs.writeFileSync(join(taskPath, 'nyaa.md'), md)
+    fs.writeFileSync(join(taskPath, 'acgrip.bbcode'), bbcode)
+  }
+
   void resolveEpisodePublishHtml
   void writeDerivedContent
 
@@ -221,6 +234,7 @@ export function createContentService(options: CreateContentServiceOptions) {
       } else {
         fs.copyFileSync(info.path_bbcode, join(task.path, 'acgrip.bbcode'))
       }
+      writeBodyTemplateContent(task.path, config)
       fs.copyFileSync(config.torrentPath, join(task.path, basename(config.torrentPath)))
       return 'success'
     } catch (err) {
@@ -353,6 +367,7 @@ export function createContentService(options: CreateContentServiceOptions) {
       fs.writeFileSync(join(task.path, 'bangumi.html'), html)
       fs.writeFileSync(join(task.path, 'nyaa.md'), md)
       fs.writeFileSync(join(task.path, 'acgrip.bbcode'), bbcode)
+      writeBodyTemplateContent(task.path, config)
       fs.copyFileSync(config.torrentPath, join(task.path, basename(config.torrentPath)))
       return 'success'
     } catch (err) {
