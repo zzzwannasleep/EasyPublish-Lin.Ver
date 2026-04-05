@@ -28,6 +28,7 @@ export interface SitePublishDraft {
   teamId?: number
   title: string
   description: string
+  notes?: string
   torrentPath: string
   posterUrl?: string
   batchEntries?: SitePublishBatchEntry[]

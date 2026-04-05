@@ -8,6 +8,9 @@ import type { SiteId } from '../types/site'
 
 const TOKEN_PATTERN = /<([a-zA-Z][a-zA-Z0-9_]*)>/g
 const DEFAULT_TITLE_TAG_TEMPLATE = '<tags>'
+const DEFAULT_EPISODE_TEMPLATE = '<ep>'
+const DEFAULT_VARIANT_TEMPLATE = '<res>p-<sub>'
+const DEFAULT_OPTIONAL_EPISODE_LABEL = '1'
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -15,6 +18,10 @@ function escapeRegExp(value: string) {
 
 function normalizeText(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeOptionalTemplate(value: unknown) {
+  return typeof value === 'string' ? value.trim() : undefined
 }
 
 function normalizeTitleTagTemplateToken(value: unknown, fallback = DEFAULT_TITLE_TAG_TEMPLATE) {
@@ -196,6 +203,19 @@ export function renderSeriesTitleTemplate(template: string | undefined, variable
   return template.replace(TOKEN_PATTERN, (_match, token: string) => variables[token] ?? '').trim()
 }
 
+export function renderSeriesEpisodeTemplate(template: string | undefined, variables: Record<string, string>) {
+  if (template === undefined) {
+    return renderSeriesTitleTemplate(DEFAULT_EPISODE_TEMPLATE, variables)
+  }
+
+  const rendered = renderSeriesTitleTemplate(template, variables)
+  return rendered || (!template.trim() ? DEFAULT_OPTIONAL_EPISODE_LABEL : '')
+}
+
+export function renderSeriesVariantTemplate(template: string | undefined, variables: Record<string, string>) {
+  return renderSeriesTitleTemplate(template ?? DEFAULT_VARIANT_TEMPLATE, variables)
+}
+
 export function composeSeriesPublishTitle(input: {
   releaseTeam?: string
   mainTitle?: string
@@ -244,15 +264,15 @@ export function normalizeSeriesTitleMatchConfig(value: unknown): SeriesTitleMatc
 
   const config: SeriesTitleMatchConfig = {
     fileNamePattern: normalizeText(raw.fileNamePattern),
-    episodeTemplate: normalizeText(raw.episodeTemplate) || undefined,
-    variantTemplate: normalizeText(raw.variantTemplate) || undefined,
-    titleTemplate: normalizeText(raw.titleTemplate) || undefined,
-    releaseTeamTemplate: normalizeText(raw.releaseTeamTemplate) || undefined,
-    sourceTypeTemplate: normalizeText(raw.sourceTypeTemplate) || undefined,
-    resolutionTemplate: normalizeText(raw.resolutionTemplate) || undefined,
-    videoCodecTemplate: normalizeText(raw.videoCodecTemplate) || undefined,
-    audioCodecTemplate: normalizeText(raw.audioCodecTemplate) || undefined,
-    subtitleTemplate: normalizeText(raw.subtitleTemplate) || undefined,
+    episodeTemplate: normalizeOptionalTemplate(raw.episodeTemplate),
+    variantTemplate: normalizeOptionalTemplate(raw.variantTemplate),
+    titleTemplate: normalizeOptionalTemplate(raw.titleTemplate),
+    releaseTeamTemplate: normalizeOptionalTemplate(raw.releaseTeamTemplate),
+    sourceTypeTemplate: normalizeOptionalTemplate(raw.sourceTypeTemplate),
+    resolutionTemplate: normalizeOptionalTemplate(raw.resolutionTemplate),
+    videoCodecTemplate: normalizeOptionalTemplate(raw.videoCodecTemplate),
+    audioCodecTemplate: normalizeOptionalTemplate(raw.audioCodecTemplate),
+    subtitleTemplate: normalizeOptionalTemplate(raw.subtitleTemplate),
     titleTagMappings: normalizeTitleTagMappings(raw.titleTagMappings, legacyTemplateToken),
     targetSites: targetSites.length ? (targetSites as SiteId[]) : undefined,
     createdAt: normalizeText(raw.createdAt) || undefined,

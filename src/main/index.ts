@@ -396,6 +396,9 @@ namespace Project {
   export function getSeriesWorkspace(msg: string) {
     return projectService.getSeriesWorkspace(msg)
   }
+  export function getSeriesEpisodeReviewBundle(msg: string) {
+    return projectService.getSeriesEpisodeReviewBundle(msg)
+  }
   export function saveSeriesTitleMatchConfig(msg: string) {
     return projectService.saveSeriesTitleMatchConfig(msg)
   }
@@ -413,6 +416,9 @@ namespace Project {
   }
   export function syncSeriesVariantFromDraft(msg: string) {
     return projectService.syncSeriesVariantFromDraft(msg)
+  }
+  export function recordSeriesVariantPublishResult(msg: string) {
+    return projectService.recordSeriesVariantPublishResult(msg)
   }
   export function getProjectStats() {
     return projectService.getProjectStats()

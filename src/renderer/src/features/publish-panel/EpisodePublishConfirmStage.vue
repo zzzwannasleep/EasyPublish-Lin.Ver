@@ -1,24 +1,20 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { marked } from 'marked'
 import StatusChip from '../../components/feedback/StatusChip.vue'
 import { useI18n } from '../../i18n'
-import { taskBridge } from '../../services/bridge/task'
+import {
+  projectBridge,
+  type SeriesEpisodeReviewPayload,
+  type SeriesEpisodeReviewVariantPayload,
+} from '../../services/bridge/project'
 import { siteBridge } from '../../services/bridge/site'
 import { getLatestPublishResultMap, getPublishStateLabel, getSiteLabel } from '../../services/project/presentation'
 import type { PublishResult, SitePublishDraft } from '../../types/publish'
 import type { PublishTorrentEntry } from '../../types/project'
 import type { SiteCatalogEntry, SiteId, SitePublishValidationPayload } from '../../types/site'
 import { useProjectContext } from '../project-detail/project-context'
-
-interface SharedPublishDraftForm {
-  title: string
-  description: string
-  torrentPath: string
-  nfoPath: string
-  anonymous: boolean
-}
 
 interface SitePublishDraftForm {
   title: string
@@ -37,6 +33,9 @@ interface SitePublishDraftForm {
   subtitle: string
   format: string
   version: string
+  notes: string
+  posterUrl: string
+  emuleResource: string
   smallDescription: string
   url: string
   technicalInfo: string
@@ -61,6 +60,7 @@ interface SitePublishDraftForm {
   sectionId?: number
   categoryId?: number
   typeId?: number
+  teamId?: number
   resolutionId?: number
   bangumiId?: number
   subtitleGroupId?: number
@@ -82,7 +82,21 @@ interface SitePublishDraftForm {
   nfoPath: string
 }
 
+interface ReviewVariantState {
+  variantId: number
+  variantName: string
+  isActive: boolean
+  config: Config.PublishConfig
+  publishResults: PublishResult[]
+  targetSiteIds: SiteId[]
+  siteDrafts: Partial<Record<SiteId, SitePublishDraftForm>>
+}
+
 interface TorrentReviewRow {
+  key: string
+  variantId: number
+  variantName: string
+  isActive: boolean
   id: string
   name: string
   torrentPath: string
@@ -96,6 +110,10 @@ type ReviewSiteStatus = 'ready' | 'published' | 'blocked'
 type PublishProgressStatus = 'queued' | 'publishing' | 'published' | 'failed' | 'skipped'
 
 interface ReviewSiteRow {
+  key: string
+  variantId: number
+  variantName: string
+  isActive: boolean
   siteId: SiteId
   siteName: string
   status: ReviewSiteStatus
@@ -107,11 +125,19 @@ interface ReviewSiteRow {
 }
 
 interface PublishProgressRow {
+  key: string
+  variantId: number
+  variantName: string
   siteId: SiteId
   siteName: string
   status: PublishProgressStatus
   message: string
   remoteUrl?: string
+}
+
+type CachedAccountValidation = {
+  status: 'authenticated' | 'unauthenticated' | 'error'
+  message?: string
 }
 
 const props = defineProps<{
@@ -127,25 +153,16 @@ const isChecking = ref(false)
 const isPublishing = ref(false)
 const loadError = ref('')
 const publishError = ref('')
-const config = ref<Config.PublishConfig | null>(null)
+const reviewBundle = ref<SeriesEpisodeReviewPayload | null>(null)
+const reviewVariants = ref<ReviewVariantState[]>([])
 const sites = ref<SiteCatalogEntry[]>([])
-const targetSiteIds = ref<SiteId[]>([])
 const siteRows = ref<ReviewSiteRow[]>([])
 const progressRows = ref<PublishProgressRow[]>([])
 const progressCompleted = ref(0)
 const progressTotal = ref(0)
 const currentProgressLabel = ref('')
 const autoReturnTimer = ref<number | null>(null)
-
-const sharedDraft = reactive<SharedPublishDraftForm>({
-  title: '',
-  description: '',
-  torrentPath: '',
-  nfoPath: '',
-  anonymous: false,
-})
-
-const siteDrafts = ref<Partial<Record<SiteId, SitePublishDraftForm>>>({})
+const accountValidationCache = new Map<SiteId, CachedAccountValidation>()
 
 function readOptionalString(value: unknown) {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
@@ -289,8 +306,19 @@ function buildAutoBodyMarkdown(currentConfig: Config.PublishConfig, title: strin
   ].filter(Boolean)
 
   const summary = content.summary?.trim() || t('stage.review.confirm.body.noSummary')
-
   return [`# ${title || currentConfig.title?.trim() || content.episodeLabel}`, '', ...metaRows, '', summary].join('\n')
+}
+
+function renderBodyContent(content: string, format?: Config.PublishConfig['bodyTemplateFormat']) {
+  if (!content.trim()) {
+    return ''
+  }
+
+  if (format === 'html') {
+    return content
+  }
+
+  return marked.parse(content, { async: false }) as string
 }
 
 function buildTorrentBody(currentConfig: Config.PublishConfig, entry: PublishTorrentEntry) {
@@ -298,7 +326,7 @@ function buildTorrentBody(currentConfig: Config.PublishConfig, entry: PublishTor
   if (bodyOverride) {
     return {
       label: t('stage.review.confirm.body.source.override'),
-      markdown: bodyOverride,
+      html: renderBodyContent(bodyOverride, currentConfig.bodyTemplateFormat),
     }
   }
 
@@ -306,13 +334,13 @@ function buildTorrentBody(currentConfig: Config.PublishConfig, entry: PublishTor
   if (bodyTemplate) {
     return {
       label: t('stage.review.confirm.body.source.shared'),
-      markdown: bodyTemplate,
+      html: renderBodyContent(bodyTemplate, currentConfig.bodyTemplateFormat),
     }
   }
 
   return {
     label: t('stage.review.confirm.body.source.generated'),
-    markdown: buildAutoBodyMarkdown(currentConfig, resolveTorrentTitle(currentConfig, entry)),
+    html: renderBodyContent(buildAutoBodyMarkdown(currentConfig, resolveTorrentTitle(currentConfig, entry)), 'md'),
   }
 }
 
@@ -349,6 +377,9 @@ function createEmptyDraft(): SitePublishDraftForm {
     subtitle: '',
     format: '',
     version: '',
+    notes: '',
+    posterUrl: '',
+    emuleResource: '',
     smallDescription: '',
     url: '',
     technicalInfo: '',
@@ -373,6 +404,7 @@ function createEmptyDraft(): SitePublishDraftForm {
     sectionId: undefined,
     categoryId: undefined,
     typeId: undefined,
+    teamId: undefined,
     resolutionId: undefined,
     bangumiId: undefined,
     subtitleGroupId: undefined,
@@ -514,6 +546,7 @@ function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefa
   draft.sectionId = readStoredNumber(siteFieldDefaults.sectionId)
   draft.categoryId = readStoredNumber(siteFieldDefaults.categoryId)
   draft.typeId = readStoredNumber(siteFieldDefaults.typeId)
+  draft.teamId = readStoredNumber(siteFieldDefaults.teamId)
   draft.resolutionId = readStoredNumber(siteFieldDefaults.resolutionId)
   draft.episodeKey = readStoredString(siteFieldDefaults.episodeKey)
   draft.resolution = readStoredString(siteFieldDefaults.resolution)
@@ -521,8 +554,11 @@ function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefa
   draft.subtitle = readStoredString(siteFieldDefaults.subtitle)
   draft.format = readStoredString(siteFieldDefaults.format)
   draft.version = readStoredString(siteFieldDefaults.version)
+  draft.notes = readStoredString(siteFieldDefaults.notes)
   draft.fileSize = readStoredNumber(siteFieldDefaults.fileSize)
   draft.trackersText = readStoredTrackersText(siteFieldDefaults.trackers ?? siteFieldDefaults.trackersText)
+  draft.posterUrl = readStoredString(siteFieldDefaults.posterUrl)
+  draft.emuleResource = readStoredString(siteFieldDefaults.emuleResource)
   draft.complete = readStoredBoolean(siteFieldDefaults.complete ?? siteFieldDefaults.completed)
   draft.remake = readStoredBoolean(siteFieldDefaults.remake)
   draft.bangumiId = readStoredNumber(siteFieldDefaults.bangumiId)
@@ -551,21 +587,9 @@ function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefa
   return draft
 }
 
-function applySharedDraft(currentConfig: Config.PublishConfig, content: Message.Task.TaskContents) {
-  sharedDraft.title = currentConfig.title ?? content.title ?? ''
-  sharedDraft.description = content.html ?? ''
-  sharedDraft.torrentPath =
-    currentConfig.torrentName && project.value?.workingDirectory
-      ? joinProjectPath(project.value.workingDirectory, currentConfig.torrentName)
-      : currentConfig.torrentPath ?? ''
-  sharedDraft.nfoPath = ''
-  sharedDraft.anonymous = false
-}
-
-function createInitialDraft(currentConfig: Config.PublishConfig, content: Message.Task.TaskContents, siteId: SiteId) {
+function createInitialDraft(currentConfig: Config.PublishConfig, siteId: SiteId) {
   const draft = createEmptyDraft()
-  draft.title = currentConfig.title ?? content.title ?? ''
-  draft.description = content.html ?? ''
+  draft.title = currentConfig.title ?? ''
   draft.categoryBangumi = currentConfig.category_bangumi ?? ''
   draft.categoryCode = currentConfig.category_nyaa ?? ''
   draft.url = currentConfig.information ?? ''
@@ -583,33 +607,85 @@ function createInitialDraft(currentConfig: Config.PublishConfig, content: Messag
   return draft
 }
 
-function ensureDraft(siteId: SiteId) {
-  if (!siteDrafts.value[siteId]) {
-    siteDrafts.value[siteId] = createEmptyDraft()
-  }
+function createReviewVariantState(payload: SeriesEpisodeReviewVariantPayload): ReviewVariantState {
+  const targetSiteIds = [...new Set(resolveConfiguredTargetSites(payload.config))]
+  const siteDrafts = targetSiteIds.reduce<Partial<Record<SiteId, SitePublishDraftForm>>>((accumulator, siteId) => {
+    accumulator[siteId] = createInitialDraft(payload.config, siteId)
+    return accumulator
+  }, {})
 
-  return siteDrafts.value[siteId] as SitePublishDraftForm
+  return {
+    variantId: payload.variant.id,
+    variantName: payload.variant.name || payload.config.torrentName || `Variant ${payload.variant.id}`,
+    isActive: payload.isActive,
+    config: payload.config,
+    publishResults: [...(payload.variant.publishResults ?? [])],
+    targetSiteIds,
+    siteDrafts,
+  }
 }
 
-const selectedSiteLabels = computed(() =>
+function findVariantState(variantId: number) {
+  return reviewVariants.value.find(variant => variant.variantId === variantId)
+}
+
+function ensureVariantDraft(reviewVariant: ReviewVariantState, siteId: SiteId) {
+  if (!reviewVariant.siteDrafts[siteId]) {
+    reviewVariant.siteDrafts[siteId] = createInitialDraft(reviewVariant.config, siteId)
+  }
+
+  return reviewVariant.siteDrafts[siteId] as SitePublishDraftForm
+}
+
+function createTorrentRowsForVariant(reviewVariant: ReviewVariantState) {
+  return getSelectedPublishTorrentEntries(reviewVariant.config).map(entry => {
+    const body = buildTorrentBody(reviewVariant.config, entry)
+    return {
+      key: `${reviewVariant.variantId}:${entry.id}`,
+      variantId: reviewVariant.variantId,
+      variantName: reviewVariant.variantName,
+      isActive: reviewVariant.isActive,
+      id: entry.id,
+      name: entry.name,
+      torrentPath: entry.path,
+      title: resolveTorrentTitle(reviewVariant.config, entry),
+      bodySourceLabel: body.label,
+      bodyHtml: body.html,
+      targetSiteIds: [...reviewVariant.targetSiteIds],
+    } satisfies TorrentReviewRow
+  })
+}
+
+const episodeDisplayLabel = computed(() => {
+  const episode = reviewBundle.value?.episode
+  if (!episode) {
+    return ''
+  }
+
+  return episode.episodeTitle ? `${episode.episodeLabel} / ${episode.episodeTitle}` : episode.episodeLabel
+})
+
+const targetSiteIds = computed(() => [...new Set(reviewVariants.value.flatMap(variant => variant.targetSiteIds))])
+const configuredSiteLabels = computed(() =>
   targetSiteIds.value.map(siteId => sites.value.find(site => site.id === siteId)?.name ?? getSiteLabel(siteId)),
 )
-const currentTargetSitesText = computed(() =>
+const configuredTargetSitesText = computed(() =>
   t('stage.review.confirm.sections.siteChecks.targets', {
-    sites: selectedSiteLabels.value.length > 0 ? selectedSiteLabels.value.join(' / ') : t('common.none'),
+    sites: configuredSiteLabels.value.length > 0 ? configuredSiteLabels.value.join(' / ') : t('common.none'),
   }),
 )
-const torrentRows = computed<TorrentReviewRow[]>(() => (config.value ? createTorrentRows(config.value) : []))
+const torrentRows = computed<TorrentReviewRow[]>(() => reviewVariants.value.flatMap(createTorrentRowsForVariant))
 
 const titleIssues = computed(() =>
   torrentRows.value
     .filter(row => !row.title.trim())
-    .map(row => t('stage.review.confirm.validation.titleMissing', { name: row.name })),
+    .map(row => t('stage.review.confirm.validation.titleMissing', { name: `${row.variantName} / ${row.name}` })),
 )
 
-const readySiteRows = computed(() => siteRows.value.filter(row => row.status === 'ready'))
-const blockedSiteRows = computed(() => siteRows.value.filter(row => row.status === 'blocked'))
-const publishedSiteRows = computed(() => siteRows.value.filter(row => row.status === 'published'))
+const visibleSiteRows = computed(() => siteRows.value)
+const readySiteRows = computed(() => visibleSiteRows.value.filter(row => row.status === 'ready'))
+const blockedSiteRows = computed(() => visibleSiteRows.value.filter(row => row.status === 'blocked'))
+const publishedSiteRows = computed(() => visibleSiteRows.value.filter(row => row.status === 'published'))
 
 const progressVisible = computed(() => isPublishing.value || progressRows.value.length > 0)
 const progressPercentage = computed(() => {
@@ -687,54 +763,41 @@ function getProgressLabel(status: PublishProgressStatus) {
   }
 }
 
-function createTorrentRows(currentConfig: Config.PublishConfig) {
-  const selectedEntries = getSelectedPublishTorrentEntries(currentConfig)
-  return selectedEntries.map(entry => {
-    const title = resolveTorrentTitle(currentConfig, entry)
-    const body = buildTorrentBody(currentConfig, entry)
-    return {
-      id: entry.id,
-      name: entry.name,
-      torrentPath: entry.path,
-      title,
-      bodySourceLabel: body.label,
-      bodyHtml: marked.parse(body.markdown, { async: false }) as string,
-      targetSiteIds: [...targetSiteIds.value],
-    } satisfies TorrentReviewRow
-  })
-}
+function buildPublishInput(row: ReviewSiteRow): SitePublishDraft {
+  const reviewVariant = findVariantState(row.variantId)
+  if (!reviewVariant) {
+    throw new Error(`Variant ${row.variantId} is not loaded`)
+  }
 
-function buildPublishInput(siteId: SiteId): SitePublishDraft {
-  const draft = ensureDraft(siteId)
-  const site = sites.value.find(item => item.id === siteId)
-  const primaryTorrent = torrentRows.value[0]
-  const isBatchTorrentMode = torrentRows.value.length > 1
-  const resolvedTitle = isBatchTorrentMode ? primaryTorrent?.title.trim() ?? '' : sharedDraft.title.trim()
-  const resolvedTorrentPath = isBatchTorrentMode ? primaryTorrent?.torrentPath.trim() ?? '' : sharedDraft.torrentPath.trim()
+  const draft = ensureVariantDraft(reviewVariant, row.siteId)
+  const site = sites.value.find(item => item.id === row.siteId)
+  const selectedTorrents = getSelectedPublishTorrentEntries(reviewVariant.config)
+  const primaryTorrent = selectedTorrents[0] ?? getActivePublishTorrentEntry(reviewVariant.config)
+  const primaryBody = primaryTorrent ? buildTorrentBody(reviewVariant.config, primaryTorrent) : { html: '' }
 
   const baseInput: SitePublishDraft = {
-    projectId: props.id,
-    siteId,
+    siteId: row.siteId,
     typeId: draft.typeId ?? 0,
-    title: resolvedTitle,
-    description: sharedDraft.description.trim(),
-    torrentPath: resolvedTorrentPath,
-    batchEntries: isBatchTorrentMode
-      ? torrentRows.value.map(row => ({
-          id: row.id,
-          name: row.name,
-          torrentPath: row.torrentPath.trim(),
-          title: row.title,
-        }))
-      : undefined,
-    anonymous: sharedDraft.anonymous,
+    title: primaryTorrent ? resolveTorrentTitle(reviewVariant.config, primaryTorrent).trim() : reviewVariant.config.title?.trim() ?? '',
+    description: primaryBody.html.trim(),
+    torrentPath: primaryTorrent?.path.trim() || reviewVariant.config.torrentPath?.trim() || '',
+    batchEntries:
+      selectedTorrents.length > 1
+        ? selectedTorrents.map(entry => ({
+            id: entry.id,
+            name: entry.name,
+            torrentPath: entry.path.trim(),
+            title: resolveTorrentTitle(reviewVariant.config, entry),
+          }))
+        : undefined,
+    anonymous: draft.anonymous,
     subCategories: Object.entries(draft.subCategories).reduce<Record<string, number>>((accumulator, [field, value]) => {
       if (typeof value === 'number' && value > 0) {
         accumulator[field] = value
       }
       return accumulator
     }, {}),
-    nfoPath: sharedDraft.nfoPath.trim() || undefined,
+    nfoPath: draft.nfoPath.trim() || undefined,
   }
 
   if (site?.adapter === 'unit3d') {
@@ -782,6 +845,7 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
     const language = parseTextList(draft.languageText)
     return {
       ...baseInput,
+      notes: readOptionalString(draft.notes),
       trackers: trackers.length > 0 ? trackers : undefined,
       bangumiId: draft.bangumiId,
       episodeKey: readOptionalString(draft.episodeKey),
@@ -819,6 +883,17 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
     }
   }
 
+  if (site?.adapter === 'dmhy') {
+    const trackers = parseTrackerText(draft.trackersText)
+    return {
+      ...baseInput,
+      teamId: draft.teamId,
+      posterUrl: draft.posterUrl.trim() || undefined,
+      trackers: trackers.length > 0 ? trackers : undefined,
+      emuleResource: draft.emuleResource.trim() || undefined,
+    }
+  }
+
   return {
     ...baseInput,
     smallDescription: draft.smallDescription.trim() || undefined,
@@ -833,57 +908,93 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
   }
 }
 
-async function buildAdapterReviewSite(site: SiteCatalogEntry, latestResult?: PublishResult) {
-  const accountValidation =
+async function resolveAccountValidation(site: SiteCatalogEntry) {
+  const cached = accountValidationCache.get(site.id)
+  if (cached) {
+    return cached
+  }
+
+  const value: CachedAccountValidation =
     site.accountStatus === 'authenticated'
       ? {
-          status: 'authenticated' as const,
+          status: 'authenticated',
           message: site.accountMessage,
         }
-      : await siteBridge.validateAccount(site.id).then(result =>
-          result.ok
-            ? result.data
-            : {
-                siteId: site.id,
-                status: 'error' as const,
-                message: result.error.message,
-              },
-        ).catch(error => ({
-          siteId: site.id,
-          status: 'error' as const,
-          message: (error as Error).message,
-        }))
+      : await siteBridge
+          .validateAccount(site.id)
+          .then(result =>
+            result.ok
+              ? {
+                  status: result.data.status,
+                  message: result.data.message,
+                }
+              : {
+                  status: 'error' as const,
+                  message: result.error.message,
+                },
+          )
+          .catch(error => ({
+            status: 'error' as const,
+            message: (error as Error).message,
+          }))
+
+  accountValidationCache.set(site.id, value)
+  return value
+}
+
+function createSiteRowBase(reviewVariant: ReviewVariantState, site: SiteCatalogEntry) {
+  return {
+    key: `${reviewVariant.variantId}:${site.id}`,
+    variantId: reviewVariant.variantId,
+    variantName: reviewVariant.variantName,
+    isActive: reviewVariant.isActive,
+    siteId: site.id,
+    siteName: site.name,
+    adapterKind: site.adapter,
+  }
+}
+
+async function buildAdapterReviewSite(
+  reviewVariant: ReviewVariantState,
+  site: SiteCatalogEntry,
+  latestResult?: PublishResult,
+) {
+  const rowBase = createSiteRowBase(reviewVariant, site)
+  const accountValidation = await resolveAccountValidation(site)
 
   if (accountValidation.status !== 'authenticated') {
     const accountMessage = accountValidation.message?.trim() || t('stage.review.confirm.adapter.accountUnauthenticated')
     return {
-      siteId: site.id,
-      siteName: site.name,
+      ...rowBase,
       status: 'blocked',
       message: accountMessage,
       issues: [accountMessage],
       latestResult,
-      adapterKind: site.adapter,
     } satisfies ReviewSiteRow
   }
 
-  const result = await siteBridge.validatePublish(buildPublishInput(site.id))
+  const result = await siteBridge.validatePublish({
+    ...buildPublishInput({
+      ...rowBase,
+      status: 'ready',
+      message: '',
+      issues: [],
+    }),
+  })
+
   if (!result.ok) {
     return {
-      siteId: site.id,
-      siteName: site.name,
+      ...rowBase,
       status: 'blocked',
       message: result.error.message,
       issues: [result.error.message],
       latestResult,
-      adapterKind: site.adapter,
     } satisfies ReviewSiteRow
   }
 
   const issues = result.data.issues.map(issue => `${issue.field}: ${issue.message}`)
   return {
-    siteId: site.id,
-    siteName: site.name,
+    ...rowBase,
     status: result.data.valid ? 'ready' : 'blocked',
     message: result.data.valid
       ? t('stage.review.confirm.adapter.validationPassed')
@@ -891,52 +1002,63 @@ async function buildAdapterReviewSite(site: SiteCatalogEntry, latestResult?: Pub
     issues,
     validation: result.data,
     latestResult,
-    adapterKind: site.adapter,
   } satisfies ReviewSiteRow
 }
 
 async function refreshChecks() {
-  if (!config.value) {
+  if (!reviewVariants.value.length) {
     siteRows.value = []
     return
   }
 
   isChecking.value = true
   publishError.value = ''
+  accountValidationCache.clear()
 
   try {
-    const latestResultMap = getLatestPublishResultMap(project.value?.publishResults ?? [])
     const nextRows: ReviewSiteRow[] = []
 
-    for (const siteId of targetSiteIds.value) {
-      const site = sites.value.find(item => item.id === siteId)
-      const latestResult = latestResultMap.get(siteId)
+    for (const reviewVariant of reviewVariants.value) {
+      const latestResultMap = getLatestPublishResultMap(reviewVariant.publishResults)
 
-      if (latestResult?.status === 'published') {
-        nextRows.push({
-          siteId,
-          siteName: site?.name ?? getSiteLabel(siteId),
-          status: 'published',
-          message: latestResult.message ?? t('stage.review.confirm.site.alreadyPublished'),
-          issues: [],
-          latestResult,
-          adapterKind: site?.adapter,
-        })
-        continue
+      for (const siteId of reviewVariant.targetSiteIds) {
+        const site = sites.value.find(item => item.id === siteId)
+        const latestResult = latestResultMap.get(siteId)
+
+        if (latestResult?.status === 'published') {
+          nextRows.push({
+            key: `${reviewVariant.variantId}:${siteId}`,
+            variantId: reviewVariant.variantId,
+            variantName: reviewVariant.variantName,
+            isActive: reviewVariant.isActive,
+            siteId,
+            siteName: site?.name ?? getSiteLabel(siteId),
+            status: 'published',
+            message: latestResult.message ?? t('stage.review.confirm.site.alreadyPublished'),
+            issues: [],
+            latestResult,
+            adapterKind: site?.adapter,
+          })
+          continue
+        }
+
+        if (!site) {
+          nextRows.push({
+            key: `${reviewVariant.variantId}:${siteId}`,
+            variantId: reviewVariant.variantId,
+            variantName: reviewVariant.variantName,
+            isActive: reviewVariant.isActive,
+            siteId,
+            siteName: getSiteLabel(siteId),
+            status: 'blocked',
+            message: t('stage.review.confirm.site.missingFromCatalog'),
+            issues: [t('stage.review.confirm.site.missingFromCatalog')],
+          })
+          continue
+        }
+
+        nextRows.push(await buildAdapterReviewSite(reviewVariant, site, latestResult))
       }
-
-      if (!site) {
-        nextRows.push({
-          siteId,
-          siteName: getSiteLabel(siteId),
-          status: 'blocked',
-          message: t('stage.review.confirm.site.missingFromCatalog'),
-          issues: [t('stage.review.confirm.site.missingFromCatalog')],
-        })
-        continue
-      }
-
-      nextRows.push(await buildAdapterReviewSite(site, latestResult))
     }
 
     siteRows.value = nextRows
@@ -952,7 +1074,10 @@ function initializeProgressRows() {
     progressTotal.value > 0
       ? t('stage.review.confirm.progress.preparingQueue')
       : t('stage.review.confirm.progress.noPendingSites')
-  progressRows.value = siteRows.value.map(row => ({
+  progressRows.value = visibleSiteRows.value.map(row => ({
+    key: row.key,
+    variantId: row.variantId,
+    variantName: row.variantName,
     siteId: row.siteId,
     siteName: row.siteName,
     status: row.status === 'published' ? 'skipped' : 'queued',
@@ -964,8 +1089,8 @@ function initializeProgressRows() {
   }))
 }
 
-function updateProgress(siteId: SiteId, patch: Partial<PublishProgressRow>) {
-  const row = progressRows.value.find(item => item.siteId === siteId)
+function updateProgress(key: string, patch: Partial<PublishProgressRow>) {
+  const row = progressRows.value.find(item => item.key === key)
   if (!row) {
     return
   }
@@ -973,22 +1098,53 @@ function updateProgress(siteId: SiteId, patch: Partial<PublishProgressRow>) {
   Object.assign(row, patch)
 }
 
-async function publishAdapterSite(siteId: SiteId) {
-  const result = await siteBridge.publish(buildPublishInput(siteId))
-  await refreshProject()
+function appendVariantPublishResult(variantId: number, result: PublishResult) {
+  reviewVariants.value = reviewVariants.value.map(variant =>
+    variant.variantId === variantId
+      ? {
+          ...variant,
+          publishResults: [...variant.publishResults, result],
+        }
+      : variant,
+  )
+}
 
-  if (!result.ok) {
+async function publishAdapterSite(row: ReviewSiteRow) {
+  const publishResult = await siteBridge.publish(buildPublishInput(row))
+  const normalizedResult: PublishResult = publishResult.ok
+    ? {
+        ...publishResult.data.result,
+        timestamp: publishResult.data.result.timestamp ?? new Date().toISOString(),
+      }
+    : {
+        siteId: row.siteId,
+        status: 'failed',
+        message: publishResult.error.message,
+        timestamp: new Date().toISOString(),
+      }
+
+  const recordResult = await projectBridge.recordSeriesVariantPublishResult({
+    projectId: props.id,
+    episodeId: reviewBundle.value?.episode.id ?? 0,
+    variantId: row.variantId,
+    result: normalizedResult,
+    syncTaskState: row.isActive,
+  })
+
+  if (!recordResult.ok) {
     return {
       status: 'failed' as const,
-      message: result.error.message,
-      result: undefined,
+      message: recordResult.error.message,
+      result: normalizedResult,
     }
   }
 
+  appendVariantPublishResult(row.variantId, normalizedResult)
+
   return {
-    status: result.data.result.status === 'published' ? ('published' as const) : ('failed' as const),
-    message: result.data.result.message ?? getPublishStateLabel(result.data.result.status),
-    result: result.data.result,
+    status: normalizedResult.status === 'published' ? ('published' as const) : ('failed' as const),
+    message: normalizedResult.message ?? getPublishStateLabel(normalizedResult.status),
+    result: normalizedResult,
   }
 }
 
@@ -1034,15 +1190,16 @@ async function confirmPublish() {
 
   try {
     for (const row of readySiteRows.value) {
-      currentProgressLabel.value = t('stage.review.confirm.progress.publishingSite', { site: row.siteName })
-      updateProgress(row.siteId, {
+      currentProgressLabel.value = t('stage.review.confirm.progress.publishingSite', {
+        site: `${row.variantName} / ${row.siteName}`,
+      })
+      updateProgress(row.key, {
         status: 'publishing',
         message: t('stage.review.confirm.progress.runningAdapter'),
       })
 
-      const publishResult = await publishAdapterSite(row.siteId)
-
-      updateProgress(row.siteId, {
+      const publishResult = await publishAdapterSite(row)
+      updateProgress(row.key, {
         status: publishResult.status,
         message: publishResult.message,
         remoteUrl: publishResult.result?.remoteUrl,
@@ -1051,6 +1208,7 @@ async function confirmPublish() {
     }
 
     await refreshChecks()
+    await refreshProject()
 
     const failedCount = progressRows.value.filter(row => row.status === 'failed').length
     if (failedCount > 0) {
@@ -1079,29 +1237,22 @@ async function loadReview() {
   publishError.value = ''
 
   try {
-    const [siteResult, content, currentConfig] = await Promise.all([
+    const [siteResult, reviewResult] = await Promise.all([
       siteBridge.listSites(),
-      taskBridge.getContent(props.id),
-      taskBridge.getPublishConfig(props.id),
+      projectBridge.getSeriesEpisodeReviewBundle(props.id),
     ])
 
     if (!siteResult.ok) {
       throw new Error(siteResult.error.message)
     }
 
-    config.value = currentConfig
+    if (!reviewResult.ok) {
+      throw new Error(reviewResult.error.message)
+    }
+
     sites.value = siteResult.data.sites.filter(site => site.capabilitySet.publish.torrent)
-    targetSiteIds.value = [...new Set(resolveConfiguredTargetSites(currentConfig))].filter(siteId =>
-      sites.value.some(site => site.id === siteId),
-    )
-
-    applySharedDraft(currentConfig, content)
-
-    siteDrafts.value = targetSiteIds.value.reduce<Partial<Record<SiteId, SitePublishDraftForm>>>((accumulator, siteId) => {
-      accumulator[siteId] = createInitialDraft(currentConfig, content, siteId)
-      return accumulator
-    }, {})
-
+    reviewBundle.value = reviewResult.data
+    reviewVariants.value = reviewResult.data.variants.map(createReviewVariantState)
     await refreshChecks()
   } catch (error) {
     loadError.value = (error as Error).message
@@ -1133,6 +1284,9 @@ onBeforeUnmount(() => {
           <div class="episode-confirm__eyebrow">{{ t('stage.review.confirm.hero.eyebrow') }}</div>
           <h3 class="episode-confirm__title">{{ t('stage.review.confirm.hero.title') }}</h3>
           <p class="episode-confirm__description">{{ t('stage.review.confirm.hero.description') }}</p>
+          <p v-if="episodeDisplayLabel" class="episode-confirm__section-text">
+            当前集：{{ episodeDisplayLabel }}，共 {{ reviewVariants.length }} 个版本。
+          </p>
         </div>
 
         <div class="episode-confirm__chips">
@@ -1162,23 +1316,25 @@ onBeforeUnmount(() => {
         <div class="episode-confirm__section-head">
           <div>
             <h4 class="episode-confirm__section-title">{{ t('stage.review.confirm.sections.siteChecks.title') }}</h4>
-            <p class="episode-confirm__section-text">{{ currentTargetSitesText }}</p>
+            <p class="episode-confirm__section-text">{{ configuredTargetSitesText }}</p>
           </div>
           <el-button plain :loading="isChecking" @click="refreshChecks">
             {{ t('stage.review.confirm.actions.recheck') }}
           </el-button>
         </div>
 
-        <div v-if="siteRows.length === 0" class="episode-confirm__empty">
+        <div v-if="visibleSiteRows.length === 0" class="episode-confirm__empty">
           {{ t('stage.review.confirm.sections.siteChecks.empty') }}
         </div>
 
         <div v-else class="episode-confirm__site-grid">
-          <article v-for="row in siteRows" :key="row.siteId" class="episode-confirm__site-card">
+          <article v-for="row in visibleSiteRows" :key="row.key" class="episode-confirm__site-card">
             <div class="episode-confirm__site-head">
               <div>
                 <div class="episode-confirm__site-name">{{ row.siteName }}</div>
-                <div class="episode-confirm__site-meta">{{ row.adapterKind || row.siteId }}</div>
+                <div class="episode-confirm__site-meta">
+                  {{ row.variantName }}{{ row.isActive ? ' / 当前版本' : '' }} · {{ row.adapterKind || row.siteId }}
+                </div>
               </div>
               <StatusChip :tone="getReviewTone(row.status)">
                 {{ getReviewLabel(row.status) }}
@@ -1188,7 +1344,7 @@ onBeforeUnmount(() => {
             <div class="episode-confirm__site-message">{{ row.message }}</div>
 
             <ul v-if="row.issues.length > 0" class="episode-confirm__issue-list">
-              <li v-for="issue in row.issues" :key="`${row.siteId}-${issue}`">
+              <li v-for="issue in row.issues" :key="`${row.key}-${issue}`">
                 {{ issue }}
               </li>
             </ul>
@@ -1219,20 +1375,29 @@ onBeforeUnmount(() => {
         </div>
 
         <div v-else class="episode-confirm__torrent-stack">
-          <article v-for="torrent in torrentRows" :key="torrent.id" class="episode-confirm__torrent-card">
+          <article v-for="torrent in torrentRows" :key="torrent.key" class="episode-confirm__torrent-card">
             <div class="episode-confirm__torrent-head">
               <div>
-                <div class="episode-confirm__torrent-name">{{ torrent.name }}</div>
+                <div class="episode-confirm__torrent-name">
+                  {{ torrent.variantName }}{{ torrent.isActive ? ' / 当前版本' : '' }}
+                </div>
+                <div class="episode-confirm__torrent-path">{{ torrent.name }}</div>
                 <div class="episode-confirm__torrent-path">{{ torrent.torrentPath }}</div>
               </div>
               <StatusChip :tone="torrent.title.trim() ? 'success' : 'danger'">
-                {{ torrent.title.trim() ? t('stage.review.confirm.torrent.titleReady') : t('stage.review.confirm.torrent.titleMissing') }}
+                {{
+                  torrent.title.trim()
+                    ? t('stage.review.confirm.torrent.titleReady')
+                    : t('stage.review.confirm.torrent.titleMissing')
+                }}
               </StatusChip>
             </div>
 
             <div class="episode-confirm__field">
               <div class="episode-confirm__field-label">{{ t('stage.review.confirm.torrent.publishTitle') }}</div>
-              <div class="episode-confirm__field-value">{{ torrent.title.trim() || t('stage.review.confirm.torrent.titleValueMissing') }}</div>
+              <div class="episode-confirm__field-value">
+                {{ torrent.title.trim() || t('stage.review.confirm.torrent.titleValueMissing') }}
+              </div>
             </div>
 
             <div class="episode-confirm__field">
@@ -1240,7 +1405,7 @@ onBeforeUnmount(() => {
               <div class="episode-confirm__tag-row">
                 <el-tag
                   v-for="siteId in torrent.targetSiteIds"
-                  :key="`${torrent.id}-${siteId}`"
+                  :key="`${torrent.key}-${siteId}`"
                   size="small"
                   effect="plain"
                   type="info"
@@ -1277,9 +1442,12 @@ onBeforeUnmount(() => {
         />
 
         <div class="episode-confirm__progress-list">
-          <article v-for="row in progressRows" :key="`progress-${row.siteId}`" class="episode-confirm__progress-row">
+          <article v-for="row in progressRows" :key="`progress-${row.key}`" class="episode-confirm__progress-row">
             <div class="episode-confirm__progress-head">
-              <div class="episode-confirm__site-name">{{ row.siteName }}</div>
+              <div>
+                <div class="episode-confirm__site-name">{{ row.siteName }}</div>
+                <div class="episode-confirm__site-meta">{{ row.variantName }}</div>
+              </div>
               <StatusChip :tone="getProgressTone(row.status)">
                 {{ getProgressLabel(row.status) }}
               </StatusChip>

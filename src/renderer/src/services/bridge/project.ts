@@ -14,6 +14,27 @@ import type {
   SeriesVariantPayload,
   SeriesWorkspacePayload,
 } from '../../types/project'
+import type { PublishResult } from '../../types/publish'
+
+export interface SeriesEpisodeReviewVariantPayload {
+  variant: import('../../types/project').SeriesProjectVariant
+  config: Config.PublishConfig
+  isActive: boolean
+}
+
+export interface SeriesEpisodeReviewPayload {
+  episode: import('../../types/project').SeriesProjectEpisode
+  variants: SeriesEpisodeReviewVariantPayload[]
+  workspace: import('../../types/project').SeriesProjectWorkspace
+}
+
+export interface RecordSeriesVariantPublishResultInput {
+  projectId: number
+  episodeId: number
+  variantId: number
+  result: PublishResult
+  syncTaskState?: boolean
+}
 
 async function parseResult<T>(promise: Promise<string>): Promise<ApiResult<T>> {
   return JSON.parse(await promise) as ApiResult<T>
@@ -34,6 +55,12 @@ export const projectBridge = {
 
   getSeriesWorkspace(projectId: number) {
     return parseResult<SeriesWorkspacePayload>(window.projectAPI.getSeriesWorkspace(JSON.stringify({ id: projectId })))
+  },
+
+  getSeriesEpisodeReviewBundle(projectId: number) {
+    return parseResult<SeriesEpisodeReviewPayload>(
+      window.projectAPI.getSeriesEpisodeReviewBundle(JSON.stringify({ id: projectId })),
+    )
   },
 
   saveSeriesTitleMatchConfig(input: SaveSeriesTitleMatchConfigInput) {
@@ -60,6 +87,10 @@ export const projectBridge = {
 
   syncSeriesVariantFromDraft(input: SeriesVariantDraftInput) {
     return parseResult<SeriesVariantPayload>(window.projectAPI.syncSeriesVariantFromDraft(JSON.stringify(input)))
+  },
+
+  recordSeriesVariantPublishResult(input: RecordSeriesVariantPublishResultInput) {
+    return parseResult<SeriesVariantPayload>(window.projectAPI.recordSeriesVariantPublishResult(JSON.stringify(input)))
   },
 
   getProjectStats() {

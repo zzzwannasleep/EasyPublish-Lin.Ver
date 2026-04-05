@@ -21,6 +21,7 @@ import {
 } from '../../services/project/presentation'
 import type {
   PublishProject,
+  PublishTorrentEntry,
   SeriesProjectEpisode,
   SeriesTitleMatchConfig,
   SeriesTitleTagMapping,
@@ -37,12 +38,14 @@ import {
   normalizeMatchedVideoProfile,
   normalizeSeriesTitleMatchConfig,
   resolveSeriesTitleMappedTagBindings,
+  renderSeriesEpisodeTemplate,
   renderSeriesTitleTemplate,
+  renderSeriesVariantTemplate,
   stripTorrentExtension,
 } from '../../../../shared/utils/series-title-match'
 import SeriesRichTextEditor from './SeriesRichTextEditor.vue'
 
-const SITE_ORDER: SiteId[] = ['bangumi', 'mikan', 'miobt', 'nyaa', 'acgrip', 'dmhy', 'acgnx_a', 'acgnx_g']
+const SITE_ORDER: SiteId[] = ['bangumi', 'mikan', 'anibt', 'miobt', 'nyaa', 'acgrip', 'dmhy', 'acgnx_a', 'acgnx_g']
 const DEFAULT_BANGUMI_CATEGORY = '549ef207fe682f7549f1ea90'
 const DEFAULT_NYAA_CATEGORY = '1_3'
 const DEFAULT_TITLE_TAG_TEMPLATE = getDefaultSeriesTitleTagTemplate()
@@ -171,6 +174,50 @@ function getFileName(path: string) {
   return path.replace(/^.*[\\/]/, '')
 }
 
+function normalizePublishTorrentEntry(value: unknown, index: number): PublishTorrentEntry | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+
+  const raw = value as Record<string, unknown>
+  const path = normalizeOptionalString(raw.path)
+  if (!path) {
+    return null
+  }
+
+  return {
+    id: normalizeOptionalString(raw.id) || `torrent-${index + 1}`,
+    name: normalizeOptionalString(raw.name) || getFileName(path),
+    path,
+    enabled: raw.enabled !== false,
+    titleOverride: normalizeOptionalString(raw.titleOverride) || undefined,
+    bodyOverride: typeof raw.bodyOverride === 'string' ? raw.bodyOverride : undefined,
+  }
+}
+
+function getDraftTorrentEntries(config?: Config.PublishConfig | null) {
+  if (!config?.torrentEntries?.length) {
+    return [] as PublishTorrentEntry[]
+  }
+
+  return config.torrentEntries
+    .map((entry, index) => normalizePublishTorrentEntry(entry, index))
+    .filter((entry): entry is PublishTorrentEntry => Boolean(entry))
+}
+
+function getDraftActiveTorrentEntry(config?: Config.PublishConfig | null) {
+  const entries = getDraftTorrentEntries(config)
+  if (!entries.length) {
+    return null
+  }
+
+  return (
+    entries.find(entry => entry.id === config?.activeTorrentId) ??
+    entries.find(entry => entry.enabled !== false) ??
+    entries[0]
+  )
+}
+
 function normalizeSiteFieldDefaults(value: unknown): SiteFieldForm {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return {}
@@ -204,6 +251,8 @@ function normalizeSiteFieldValue(field: SiteFieldSchemaEntry, value: unknown): S
       return value === true || value === false ? value : undefined
     case 'number':
       return normalizeSiteFieldNumber(value)
+    case 'textarea':
+      return typeof value === 'string' ? value : ''
     case 'select':
     case 'text':
     default:
@@ -217,6 +266,7 @@ function serializeSiteFieldValue(field: SiteFieldSchemaEntry, value: unknown): S
       return value === true || value === false ? value : undefined
     case 'number':
       return normalizeSiteFieldNumber(value)
+    case 'textarea':
     case 'select':
     case 'text':
     default: {
@@ -339,15 +389,15 @@ function normalizeTitleMatchForm(config?: SeriesTitleMatchConfig | null) {
   }
 
   titleMatchForm.fileNamePattern = normalized.fileNamePattern
-  titleMatchForm.episodeTemplate = normalized.episodeTemplate || '<ep>'
-  titleMatchForm.variantTemplate = normalized.variantTemplate || '<res>p-<sub>'
-  titleMatchForm.titleTemplate = normalized.titleTemplate || ''
-  titleMatchForm.releaseTeamTemplate = normalized.releaseTeamTemplate || ''
-  titleMatchForm.sourceTypeTemplate = normalized.sourceTypeTemplate || '<source>'
-  titleMatchForm.resolutionTemplate = normalized.resolutionTemplate || '<res>p'
-  titleMatchForm.videoCodecTemplate = normalized.videoCodecTemplate || '<video>'
-  titleMatchForm.audioCodecTemplate = normalized.audioCodecTemplate || '<audio>'
-  titleMatchForm.subtitleTemplate = normalized.subtitleTemplate || '<sub>'
+  titleMatchForm.episodeTemplate = normalized.episodeTemplate ?? '<ep>'
+  titleMatchForm.variantTemplate = normalized.variantTemplate ?? '<res>p-<sub>'
+  titleMatchForm.titleTemplate = normalized.titleTemplate ?? ''
+  titleMatchForm.releaseTeamTemplate = normalized.releaseTeamTemplate ?? ''
+  titleMatchForm.sourceTypeTemplate = normalized.sourceTypeTemplate ?? '<source>'
+  titleMatchForm.resolutionTemplate = normalized.resolutionTemplate ?? '<res>p'
+  titleMatchForm.videoCodecTemplate = normalized.videoCodecTemplate ?? '<video>'
+  titleMatchForm.audioCodecTemplate = normalized.audioCodecTemplate ?? '<audio>'
+  titleMatchForm.subtitleTemplate = normalized.subtitleTemplate ?? '<sub>'
   titleMatchForm.titleTagMappings = normalizeTitleTagMappings(normalized.titleTagMappings)
   titleMatchForm.targetSites = sortSiteIds(normalized.targetSites ?? [])
   savedTitleMatchFingerprint.value = buildTitleMatchFingerprint()
@@ -408,6 +458,15 @@ const selectedBangumiSites = computed(() =>
 const currentProgress = computed(() =>
   summarizeTargetSiteProgress(form.targetSites, activeVariant.value?.publishResults),
 )
+const currentTorrentEntryCount = computed(() => {
+  const entries = getDraftTorrentEntries(draftConfig.value)
+  if (entries.length > 0) {
+    const enabledEntries = entries.filter(entry => entry.enabled !== false)
+    return enabledEntries.length > 0 ? enabledEntries.length : entries.length
+  }
+
+  return form.torrentPath.trim() ? 1 : 0
+})
 
 const currentStructureLabel = computed(() =>
   activeEpisode.value && activeVariant.value
@@ -459,8 +518,8 @@ const titleMatchPreview = computed(() => {
     }
   }
 
-  const episodeLabel = renderSeriesTitleTemplate(config.episodeTemplate || '<ep>', variables)
-  const variantName = renderSeriesTitleTemplate(config.variantTemplate || '<res>p-<sub>', variables)
+  const episodeLabel = renderSeriesEpisodeTemplate(config.episodeTemplate, variables)
+  const variantName = renderSeriesVariantTemplate(config.variantTemplate, variables)
   const sourceType = renderSeriesTitleTemplate(config.sourceTypeTemplate, variables)
   const resolution = renderSeriesTitleTemplate(config.resolutionTemplate, variables)
   const videoCodec = renderSeriesTitleTemplate(config.videoCodecTemplate, variables)
@@ -583,14 +642,46 @@ function composePublishTitle(options?: {
   })
 }
 
+function buildTorrentEntryPayloadFromForm() {
+  const existingEntries = getDraftTorrentEntries(draftConfig.value)
+  if (existingEntries.length <= 1) {
+    return undefined
+  }
+
+  const activeEntry = getDraftActiveTorrentEntry(draftConfig.value) ?? existingEntries[0]
+  const activeTorrentPath = form.torrentPath.trim()
+  const activeTorrentName = getFileName(activeTorrentPath)
+  const nextEntries = existingEntries.map(entry => {
+    if (entry.id !== activeEntry.id) {
+      return entry
+    }
+
+    return {
+      ...entry,
+      name: activeTorrentName || entry.name,
+      path: activeTorrentPath,
+      titleOverride: form.titleOverride.trim() || undefined,
+    } satisfies PublishTorrentEntry
+  })
+
+  return {
+    activeTorrentId: activeEntry.id,
+    torrentEntries: nextEntries,
+  }
+}
+
 function buildConfigFromForm() {
   const targetSites = sortSiteIds(form.targetSites)
   const siteFieldDefaults = buildSiteFieldDefaultsPayload()
   const bodyMarkdown = normalizeMarkdown(form.bodyMarkdown).trim()
+  const activeTorrentPath = form.torrentPath.trim()
+  const torrentEntryPayload = buildTorrentEntryPayloadFromForm()
 
   return {
-    torrentName: getFileName(form.torrentPath.trim()),
-    torrentPath: form.torrentPath.trim(),
+    torrentName: getFileName(activeTorrentPath),
+    torrentPath: activeTorrentPath,
+    activeTorrentId: torrentEntryPayload?.activeTorrentId,
+    torrentEntries: torrentEntryPayload?.torrentEntries,
     category_bangumi: form.categoryBangumi,
     category_nyaa: form.categoryNyaa,
     siteFieldDefaults: Object.keys(siteFieldDefaults).length ? siteFieldDefaults : undefined,
@@ -628,6 +719,7 @@ function buildDirtyFingerprint() {
 function initializeFormFromConfig(config: Config.PublishConfig) {
   const content = readEpisodeContent(config)
   const siteFieldDefaults = normalizeSiteFieldDefaults(config.siteFieldDefaults)
+  const activeTorrentEntry = getDraftActiveTorrentEntry(config)
 
   form.seriesTitleCN = normalizeOptionalString(content.seriesTitleCN)
   form.seriesTitleEN = normalizeOptionalString(content.seriesTitleEN)
@@ -640,7 +732,7 @@ function initializeFormFromConfig(config: Config.PublishConfig) {
   form.audioCodec = normalizeOptionalString(content.audioCodec)
   form.summary = normalizeOptionalString(content.summary)
   form.information = normalizeOptionalString(config.information)
-  form.torrentPath = normalizeOptionalString(config.torrentPath)
+  form.torrentPath = normalizeOptionalString(activeTorrentEntry?.path ?? config.torrentPath)
   form.targetSites = sortSiteIds(config.targetSites ?? content.targetSites ?? [])
   form.siteFieldDefaults = siteFieldDefaults
   form.bodyMarkdown = normalizeMarkdown(config.bodyTemplate || content.summary || '')
@@ -1084,6 +1176,9 @@ onMounted(() => {
               <StatusChip tone="info">{{ currentStructureLabel }}</StatusChip>
               <StatusChip tone="warning">{{ episodes.length }} {{ '\u96c6' }}</StatusChip>
               <StatusChip tone="success">{{ totalVariantCount }} {{ '\u4e2a\u7248\u672c' }}</StatusChip>
+              <StatusChip v-if="currentTorrentEntryCount > 1" tone="info">
+                {{ currentTorrentEntryCount }} {{ '\u4e2a\u8d44\u6e90' }}
+              </StatusChip>
               <StatusChip v-if="currentProgress.publishedSiteIds.length" tone="success">
                 {{ '\u5df2\u53d1' }} {{ currentProgress.publishedSiteIds.length }}
               </StatusChip>
@@ -1514,7 +1609,11 @@ onMounted(() => {
             </div>
 
             <div v-if="section.fields.length" class="series-studio__field-grid">
-              <label v-for="field in section.fields" :key="field.key" class="series-studio__field">
+              <label
+                v-for="field in section.fields"
+                :key="field.key"
+                :class="['series-studio__field', { 'series-studio__field--wide': field.control === 'textarea' }]"
+              >
                 <span class="series-studio__field-label">
                   {{ resolveSiteFieldLabel(field) }}
                   <span v-if="field.mode === 'required'" class="series-studio__required">{{ '\u5fc5\u586b' }}</span>
@@ -1534,6 +1633,15 @@ onMounted(() => {
                     :value="option.value"
                   />
                 </el-select>
+
+                <el-input
+                  v-else-if="field.control === 'textarea'"
+                  :model-value="readSiteFieldValue(section.site.id, field)"
+                  type="textarea"
+                  :rows="field.rows ?? 4"
+                  :placeholder="resolveSiteFieldPlaceholder(field)"
+                  @update:model-value="value => updateSiteFieldValue(section.site.id, field, value)"
+                />
 
                 <el-input
                   v-else-if="field.control === 'text'"
@@ -1670,13 +1778,19 @@ onMounted(() => {
   line-height: 1.08;
 }
 
-.series-studio__field-label,
-.series-studio__site-count {
-  color: var(--accent);
+.series-studio__field-label {
+  color: color-mix(in srgb, var(--text-secondary) 82%, var(--accent) 18%);
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.series-studio__site-count {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .series-studio__site-text,
@@ -1758,6 +1872,7 @@ onMounted(() => {
 
 .series-studio__field-grid {
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  align-items: start;
 }
 
 .series-studio__bangumi-results {
@@ -1811,13 +1926,20 @@ onMounted(() => {
 .series-studio__site-card.is-target,
 .series-studio__episode-chip.is-active,
 .series-studio__variant-card.is-active,
-.series-studio__site-fields-card,
-.series-studio__bangumi-card,
 .series-studio__bangumi-result.is-selected {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border-soft));
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--brand-soft) 74%, white 26%), rgba(255, 255, 255, 0.64)),
     color-mix(in srgb, var(--bg-panel) 92%, white 8%);
+}
+
+.series-studio__site-fields-card,
+.series-studio__bangumi-card {
+  border-color: color-mix(in srgb, var(--accent) 16%, var(--border-soft));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.58)),
+    color-mix(in srgb, var(--bg-panel) 94%, white 6%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 .series-studio__episode-chip {
@@ -1856,6 +1978,11 @@ onMounted(() => {
 .series-studio__field {
   display: grid;
   gap: 8px;
+  align-content: start;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 10%, var(--border-soft));
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .series-studio__mapping-row {
@@ -1916,9 +2043,17 @@ onMounted(() => {
 
 .series-studio__required {
   margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warning-soft) 78%, white 22%);
   color: var(--warning);
   font-size: 11px;
   letter-spacing: normal;
+}
+
+.series-studio__site-fields-head {
+  padding-bottom: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 12%, var(--border-soft));
 }
 
 .series-studio__switch-row {

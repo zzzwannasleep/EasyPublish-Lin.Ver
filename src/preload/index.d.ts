@@ -58,12 +58,14 @@ export interface ProjectAPI {
   listProjects: () => Promise<string>
   getProject: (msg: string) => Promise<string>
   getSeriesWorkspace: (msg: string) => Promise<string>
+  getSeriesEpisodeReviewBundle: (msg: string) => Promise<string>
   saveSeriesTitleMatchConfig: (msg: string) => Promise<string>
   importSeriesMatchedTorrents: (msg: string) => Promise<string>
   duplicateSeriesVariant: (msg: string) => Promise<string>
   removeSeriesVariant: (msg: string) => Promise<string>
   activateSeriesVariant: (msg: string) => Promise<string>
   syncSeriesVariantFromDraft: (msg: string) => Promise<string>
+  recordSeriesVariantPublishResult: (msg: string) => Promise<string>
   getProjectStats: () => Promise<string>
   removeProject: (msg: string) => Promise<string>
 }

@@ -53,12 +53,14 @@ type ProjectHandlers = {
   listProjects: () => Asyncish<unknown>
   getProject: (msg: string) => Asyncish<unknown>
   getSeriesWorkspace: (msg: string) => Asyncish<unknown>
+  getSeriesEpisodeReviewBundle: (msg: string) => Asyncish<unknown>
   saveSeriesTitleMatchConfig: (msg: string) => Asyncish<unknown>
   importSeriesMatchedTorrents: (msg: string) => Asyncish<unknown>
   duplicateSeriesVariant: (msg: string) => Asyncish<unknown>
   removeSeriesVariant: (msg: string) => Asyncish<unknown>
   activateSeriesVariant: (msg: string) => Asyncish<unknown>
   syncSeriesVariantFromDraft: (msg: string) => Asyncish<unknown>
+  recordSeriesVariantPublishResult: (msg: string) => Asyncish<unknown>
   getProjectStats: () => Asyncish<unknown>
   removeProject: (msg: string) => Asyncish<unknown>
 }
@@ -141,12 +143,14 @@ export function registerIpcHandlers({ Global, BT, Forum, Project, Site, Log, Tas
   ipcMain.handle('project_listProjects', () => Project.listProjects())
   ipcMain.handle('project_getProject', (_event, msg) => Project.getProject(msg))
   ipcMain.handle('project_getSeriesWorkspace', (_event, msg) => Project.getSeriesWorkspace(msg))
+  ipcMain.handle('project_getSeriesEpisodeReviewBundle', (_event, msg) => Project.getSeriesEpisodeReviewBundle(msg))
   ipcMain.handle('project_saveSeriesTitleMatchConfig', (_event, msg) => Project.saveSeriesTitleMatchConfig(msg))
   ipcMain.handle('project_importSeriesMatchedTorrents', (_event, msg) => Project.importSeriesMatchedTorrents(msg))
   ipcMain.handle('project_duplicateSeriesVariant', (_event, msg) => Project.duplicateSeriesVariant(msg))
   ipcMain.handle('project_removeSeriesVariant', (_event, msg) => Project.removeSeriesVariant(msg))
   ipcMain.handle('project_activateSeriesVariant', (_event, msg) => Project.activateSeriesVariant(msg))
   ipcMain.handle('project_syncSeriesVariantFromDraft', (_event, msg) => Project.syncSeriesVariantFromDraft(msg))
+  ipcMain.handle('project_recordSeriesVariantPublishResult', (_event, msg) => Project.recordSeriesVariantPublishResult(msg))
   ipcMain.handle('project_getProjectStats', () => Project.getProjectStats())
   ipcMain.handle('project_removeProject', (_event, msg) => Project.removeProject(msg))
 

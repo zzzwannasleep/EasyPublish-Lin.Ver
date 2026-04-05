@@ -8,7 +8,12 @@ import type { BangumiSubjectSearchItem, SiteCatalogEntry, SiteId } from '../../s
 import { createSiteRegistry } from '../sites/registry'
 import { createCredentialStore } from '../storage/credential-store'
 import { createProjectStore } from '../storage/project-store'
-import { applyPublishTorrentEntry, buildEpisodeDerivedContent, getSelectedPublishTorrentEntries } from './episode-publish-support'
+import {
+  applyPublishTorrentEntry,
+  buildEpisodeDerivedContent,
+  getActivePublishTorrentEntry,
+  getSelectedPublishTorrentEntries,
+} from './episode-publish-support'
 
 interface CreateSiteServiceOptions {
   siteRegistry: ReturnType<typeof createSiteRegistry>
@@ -122,8 +127,12 @@ export function createSiteService(options: CreateSiteServiceOptions) {
 
     const overrides = normalizeBatchEntries(input.batchEntries)
     const inputDescription = typeof input.description === 'string' ? input.description : ''
-    const shouldUseDerivedDescription =
-      typeof context.defaultDescription === 'string' && inputDescription.trim() === context.defaultDescription.trim()
+    const activeEntry = getActivePublishTorrentEntry(context.config)
+    const activeDerivedDescription =
+      activeEntry ? buildEpisodeDerivedContent(applyPublishTorrentEntry(context.config, activeEntry), activeEntry.bodyOverride).html : ''
+    const shouldReuseSharedDescription =
+      inputDescription.trim() !== '' &&
+      inputDescription.trim() !== activeDerivedDescription.trim()
 
     return selectedEntries.map(entry => {
       const override = resolveBatchEntryOverride(overrides, entry)
@@ -142,9 +151,9 @@ export function createSiteService(options: CreateSiteServiceOptions) {
           ...input,
           title: resolvedTitle,
           torrentPath: override?.torrentPath.trim() || entry.path,
-          description: shouldUseDerivedDescription
-            ? buildEpisodeDerivedContent(nextConfig, nextEntry.bodyOverride).html
-            : inputDescription,
+          description: shouldReuseSharedDescription
+            ? inputDescription
+            : buildEpisodeDerivedContent(nextConfig, nextEntry.bodyOverride).html,
         } as Record<string, unknown>,
       }
     })

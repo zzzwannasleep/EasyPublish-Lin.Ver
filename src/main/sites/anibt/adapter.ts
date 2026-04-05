@@ -44,9 +44,10 @@ const ANIBT_FIELD_SCHEMAS: SiteFieldSchemaEntry[] = [
     key: 'languageText',
     labelKey: 'sites.form.language',
     helpKey: 'seriesWorkspace.profileEditor.siteFields.anibtLanguageHelp',
-    control: 'text',
+    control: 'textarea',
     mode: 'optional',
     placeholderKey: 'sites.form.languagePlaceholder',
+    rows: 3,
   },
   {
     key: 'subtitle',
@@ -82,12 +83,22 @@ const ANIBT_FIELD_SCHEMAS: SiteFieldSchemaEntry[] = [
     step: 1,
   },
   {
+    key: 'notes',
+    labelKey: 'sites.form.notes',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.anibtNotesHelp',
+    control: 'textarea',
+    mode: 'optional',
+    placeholderKey: 'sites.form.notesPlaceholder',
+    rows: 4,
+  },
+  {
     key: 'trackersText',
     labelKey: 'sites.form.trackers',
     helpKey: 'seriesWorkspace.profileEditor.siteFields.anibtTrackersHelp',
-    control: 'text',
+    control: 'textarea',
     mode: 'optional',
     placeholderKey: 'sites.form.trackersPlaceholder',
+    rows: 4,
   },
 ]
 
@@ -366,7 +377,7 @@ function describeAnibtSite(profile: SiteProfile): SiteCatalogEntry {
     notes: [
       'Publishes through the Anibt release API with Bearer token authentication.',
       'The adapter uploads the selected .torrent directly through multipart/form-data instead of converting it into a magnet payload locally.',
-      'Shared description content is sent as optional release notes, and optional Anibt metadata such as episode, language, subtitle, format, version, and resolution are supported.',
+      'Shared description content is sent as optional release notes unless you override it with Anibt-specific notes, and optional metadata such as episode, language, subtitle, format, version, and resolution are supported.',
     ],
     customFieldMap: profile.customFieldMap,
     fieldSchemas: cloneSiteFieldSchemas(ANIBT_FIELD_SCHEMAS),

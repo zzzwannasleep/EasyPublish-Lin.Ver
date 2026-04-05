@@ -16,7 +16,7 @@ const props = defineProps<{
 
 const siteCatalog = ref<SiteCatalogEntry[]>([])
 const loadError = ref('')
-const SITE_ORDER: SiteId[] = ['bangumi', 'mikan', 'miobt', 'nyaa', 'acgrip', 'dmhy', 'acgnx_a', 'acgnx_g']
+const SITE_ORDER: SiteId[] = ['bangumi', 'mikan', 'anibt', 'miobt', 'nyaa', 'acgrip', 'dmhy', 'acgnx_a', 'acgnx_g']
 const form = reactive({
   targetSites: [...new Set((props.initialTargetSiteIds ?? []).filter(Boolean))] as SiteId[],
   siteFieldDefaults: normalizeSiteFieldDefaults(props.initialSiteFieldDefaults) as SiteFieldForm,
@@ -50,6 +50,7 @@ function updateSiteFieldValue(siteId: SiteId, field: SiteFieldSchemaEntry, value
   const entry = ensureSiteFieldEntry(siteId)
   if (field.control === 'checkbox') entry[field.key] = value === true || value === false ? value : undefined
   else if (field.control === 'number') entry[field.key] = typeof value === 'number' ? value : undefined
+  else if (field.control === 'textarea') entry[field.key] = typeof value === 'string' ? value : ''
   else entry[field.key] = typeof value === 'string' ? value.trim() : ''
 }
 
@@ -177,6 +178,13 @@ onMounted(async () => {
             >
               <el-option v-for="option in field.options ?? []" :key="option.value" :label="option.label" :value="option.value" />
             </el-select>
+            <el-input
+              v-else-if="field.control === 'textarea'"
+              :model-value="readSiteFieldValue(section.site.id, field)"
+              type="textarea"
+              :rows="field.rows ?? 4"
+              @update:model-value="value => updateSiteFieldValue(section.site.id, field, value)"
+            />
             <el-input
               v-else-if="field.control === 'text'"
               :model-value="readSiteFieldValue(section.site.id, field)"

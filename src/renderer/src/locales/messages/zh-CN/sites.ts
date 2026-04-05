@@ -55,6 +55,8 @@ const sites = {
   'sites.form.version': '版本号',
   'sites.form.versionPlaceholder': 'v2',
   'sites.form.fileSize': '文件大小（字节）',
+  'sites.form.notes': '\u53d1\u5e03\u9875\u8bf4\u660e',
+  'sites.form.notesPlaceholder': '\u652f\u6301 Markdown\uff0c\u4f8b\u5982 **\u7c97\u4f53**\u3001\u5217\u8868\u548c\u94fe\u63a5\u3002',
   'sites.form.bangumiId': 'Bangumi ID',
   'sites.form.teamId': '发布方式',
   'sites.form.subtitleGroupId': '字幕组 ID',

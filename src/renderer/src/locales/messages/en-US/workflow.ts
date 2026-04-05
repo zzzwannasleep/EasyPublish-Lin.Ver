@@ -119,11 +119,17 @@ const workflow = {
     'This page reloads the current draft, rechecks every target site, and then runs a sequential publish with a live progress bar.',
   'stage.review.confirm.hero.torrents': '{count} Torrents',
   'stage.review.confirm.hero.targetSites': '{count} Target Sites',
+  'stage.review.confirm.hero.selected': '{count} Selected This Run',
   'stage.review.confirm.hero.published': '{count} Published',
   'stage.review.confirm.alerts.titleMissing': 'Some torrents are still missing publish titles.',
   'stage.review.confirm.sections.siteChecks.title': 'Site Checks',
   'stage.review.confirm.sections.siteChecks.targets': 'Current targets: {sites}',
+  'stage.review.confirm.sections.siteChecks.selectedTargets': 'Publishing this run: {sites}',
+  'stage.review.confirm.sections.siteChecks.scopeTitle': 'Choose the sites to publish this time',
+  'stage.review.confirm.sections.siteChecks.scopeHint':
+    'Only the selected sites will be checked and published. Unselected sites stay on the project without blocking this run.',
   'stage.review.confirm.sections.siteChecks.empty': 'No target sites found in the current draft.',
+  'stage.review.confirm.sections.siteChecks.emptySelection': 'No sites are selected for this publish run yet.',
   'stage.review.confirm.sections.torrentReview.title': 'Torrent Review',
   'stage.review.confirm.sections.torrentReview.description':
     'Confirm the final title, the body source, and the target sites for each torrent.',
@@ -177,6 +183,7 @@ const workflow = {
   'stage.review.confirm.progress.runningLegacy': 'Running legacy publish flow...',
   'stage.review.confirm.progress.runningAdapter': 'Running adapter publish flow...',
   'stage.review.confirm.progress.completedReturning': 'Publish completed. Returning to the editor...',
+  'stage.review.confirm.errors.selectSites': 'Select at least one site to publish first.',
   'stage.review.confirm.errors.fixBlockedSites': 'Fix blocked sites before publishing.',
   'stage.review.confirm.errors.noPublishableSites': 'There are no publishable sites.',
   'stage.review.confirm.errors.failedSitesSummary': 'Finished with {count} failed site(s).',
@@ -531,6 +538,8 @@ const workflow = {
     'Prefill the optional Anibt version string, for example v2.',
   'seriesWorkspace.profileEditor.siteFields.anibtFileSizeHelp':
     'Prefill the resource file size in bytes. If left empty, Anibt can derive it from the uploaded torrent.',
+  'seriesWorkspace.profileEditor.siteFields.anibtNotesHelp':
+    'Prefill Anibt-specific release notes here. If left empty, the shared project description will still be converted to Markdown and sent as notes.',
   'seriesWorkspace.profileEditor.siteFields.anibtTrackersHelp':
     'Prefill Anibt trackers here only when you want to override the list. If left empty, Anibt can derive trackers from the uploaded torrent.',
   'seriesWorkspace.profileEditor.siteFields.mikanSubtitleGroupIdHelp':

@@ -42,6 +42,7 @@ interface SitePublishDraftForm {
   subtitle: string
   format: string
   version: string
+  notes: string
   posterUrl: string
   emuleResource: string
   smallDescription: string
@@ -445,6 +446,7 @@ function createEmptyDraft(): SitePublishDraftForm {
     subtitle: '',
     format: '',
     version: '',
+    notes: '',
     posterUrl: '',
     emuleResource: '',
     smallDescription: '',
@@ -633,6 +635,7 @@ function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefa
   draft.subtitle = readStoredString(siteFieldDefaults.subtitle)
   draft.format = readStoredString(siteFieldDefaults.format)
   draft.version = readStoredString(siteFieldDefaults.version)
+  draft.notes = readStoredString(siteFieldDefaults.notes)
   draft.fileSize = readStoredNumber(siteFieldDefaults.fileSize)
   draft.trackersText = readStoredTrackersText(siteFieldDefaults.trackers ?? siteFieldDefaults.trackersText)
   draft.posterUrl = readStoredString(siteFieldDefaults.posterUrl)
@@ -1033,6 +1036,7 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
     const language = parseTextList(draft.languageText)
     return {
       ...baseInput,
+      notes: readOptionalString(draft.notes),
       trackers: trackers.length > 0 ? trackers : undefined,
       bangumiId: draft.bangumiId,
       episodeKey: readOptionalString(draft.episodeKey),
@@ -1938,6 +1942,15 @@ onMounted(() => {
                     <el-input-number v-model="ensureDraft(site.id).fileSize" :controls="false" :min="1" :step="1" />
                   </el-form-item>
                 </div>
+
+                <el-form-item :label="t('sites.form.notes')">
+                  <el-input
+                    v-model="ensureDraft(site.id).notes"
+                    type="textarea"
+                    :rows="4"
+                    :placeholder="t('sites.form.notesPlaceholder')"
+                  />
+                </el-form-item>
 
                 <el-form-item :label="t('sites.form.language')">
                   <el-input

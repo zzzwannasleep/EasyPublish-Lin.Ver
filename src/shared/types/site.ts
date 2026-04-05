@@ -65,7 +65,7 @@ export interface SiteProfile {
   customFieldMap?: Record<string, string>
 }
 
-export type SiteFieldSchemaControl = 'select' | 'text' | 'number' | 'checkbox'
+export type SiteFieldSchemaControl = 'select' | 'text' | 'textarea' | 'number' | 'checkbox'
 
 export type SiteFieldSchemaMode = 'required' | 'optional' | 'readonly'
 
@@ -83,6 +83,7 @@ export interface SiteFieldSchemaEntry {
   mode: SiteFieldSchemaMode
   options?: SiteFieldSchemaOption[]
   placeholderKey?: string
+  rows?: number
   min?: number
   max?: number
   step?: number

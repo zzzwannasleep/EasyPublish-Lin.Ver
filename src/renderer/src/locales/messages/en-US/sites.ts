@@ -55,6 +55,8 @@ const sites = {
   'sites.form.version': 'Version',
   'sites.form.versionPlaceholder': 'v2',
   'sites.form.fileSize': 'File Size (bytes)',
+  'sites.form.notes': 'Release Notes',
+  'sites.form.notesPlaceholder': 'Supports Markdown such as **bold**, lists, and links.',
   'sites.form.bangumiId': 'Bangumi ID',
   'sites.form.teamId': 'Publish Team',
   'sites.form.subtitleGroupId': 'Subtitle Group ID',
@@ -109,7 +111,7 @@ const sites = {
   'nexus.site.sharedFields': 'This site uses the shared title, description, torrent, NFO, and anonymous settings above.',
   'nexus.site.sharedFieldsMikan': 'This adapter uses the shared title, description, and torrent file above.',
   'nexus.site.sharedFieldsAnibt':
-    'This adapter uses the shared title, description, and torrent above, then uploads the torrent file directly to Anibt. The description is converted to Markdown and sent as notes.',
+    'This adapter uses the shared title, description, and torrent above, then uploads the torrent file directly to Anibt. The shared description is converted to Markdown and used as notes unless you override it below.',
   'nexus.site.sharedFieldsDmhy':
     'This adapter uses the shared title, description, and torrent file above. Category, publish team, and DMHY-specific options are configured below.',
   'nexus.site.sharedFieldsNyaa':
@@ -119,7 +121,7 @@ const sites = {
   'nexus.site.noRequiredFields': 'This adapter does not require any site-specific fields yet.',
   'nexus.site.mikanOptionalHint': 'bangumiId and subtitleGroupId must be filled together. If you enter more than 10 trackers, only the first 10 will be sent.',
   'nexus.site.anibtOptionalHint':
-    'Bangumi ID is required. The adapter now uploads the torrent file directly. Episode, resolution, language, subtitle, format, version, and file size are optional. Leave trackers or file size empty if you want Anibt to derive them from the uploaded torrent.',
+    'Bangumi ID is required. The adapter uploads the torrent file directly. Episode, resolution, language, subtitle, format, version, file size, and release notes are optional. Leave trackers or file size empty if you want Anibt to derive them from the uploaded torrent.',
   'nexus.site.dmhyOptionalHint':
     'If poster URL is empty, the adapter will try to use the first image from the description. Team ID 0 means personal publishing.',
   'nexus.site.nyaaOptionalHint':

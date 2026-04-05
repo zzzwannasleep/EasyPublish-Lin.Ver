@@ -11,7 +11,9 @@ import {
   normalizeMatchedSubtitleProfile,
   normalizeMatchedVideoProfile,
   resolveSeriesTitleMappedTagBindings,
+  renderSeriesEpisodeTemplate,
   renderSeriesTitleTemplate,
+  renderSeriesVariantTemplate,
   stripTorrentExtension,
 } from '../../../../shared/utils/series-title-match'
 
@@ -75,8 +77,8 @@ const preview = computed(() => {
     return { fileName: currentFileName, matched: false as const }
   }
 
-  const episodeLabel = renderSeriesTitleTemplate(form.episodeTemplate || '<ep>', variables)
-  const variantName = renderSeriesTitleTemplate(form.variantTemplate || '<res>p-<sub>', variables)
+  const episodeLabel = renderSeriesEpisodeTemplate(form.episodeTemplate, variables)
+  const variantName = renderSeriesVariantTemplate(form.variantTemplate, variables)
   const sourceType = renderSeriesTitleTemplate(form.sourceTypeTemplate, variables)
   const resolution = renderSeriesTitleTemplate(form.resolutionTemplate, variables)
   const videoCodec = renderSeriesTitleTemplate(form.videoCodecTemplate, variables)

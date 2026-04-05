@@ -113,11 +113,16 @@ const workflow = {
   'stage.review.confirm.hero.description': '这个页面会重新加载当前草稿、重新检查每个目标站点，然后按顺序执行发布并显示实时进度。',
   'stage.review.confirm.hero.torrents': '{count} 个种子',
   'stage.review.confirm.hero.targetSites': '{count} 个目标站点',
+  'stage.review.confirm.hero.selected': '本次 {count} 个站点',
   'stage.review.confirm.hero.published': '{count} 个已发布',
   'stage.review.confirm.alerts.titleMissing': '仍有部分种子缺少发布标题。',
   'stage.review.confirm.sections.siteChecks.title': '站点检查',
   'stage.review.confirm.sections.siteChecks.targets': '当前目标站点：{sites}',
+  'stage.review.confirm.sections.siteChecks.selectedTargets': '本次发布站点：{sites}',
+  'stage.review.confirm.sections.siteChecks.scopeTitle': '选择这次要发布的站点',
+  'stage.review.confirm.sections.siteChecks.scopeHint': '只会检查和发布这里选中的站点；未选中的站点会保留在项目里，但不会阻塞这次发布。',
   'stage.review.confirm.sections.siteChecks.empty': '当前草稿中没有找到目标站点。',
+  'stage.review.confirm.sections.siteChecks.emptySelection': '当前还没有选择要发布的站点。',
   'stage.review.confirm.sections.torrentReview.title': '种子检查',
   'stage.review.confirm.sections.torrentReview.description': '确认每个种子的最终标题、正文来源和目标站点。',
   'stage.review.confirm.sections.torrentReview.empty': '当前草稿中没有找到启用的种子。',
@@ -170,6 +175,7 @@ const workflow = {
   'stage.review.confirm.progress.runningLegacy': '正在运行旧版发布流程……',
   'stage.review.confirm.progress.runningAdapter': '正在运行适配器发布流程……',
   'stage.review.confirm.progress.completedReturning': '发布完成，正在返回编辑页……',
+  'stage.review.confirm.errors.selectSites': '请先选择至少一个要发布的站点。',
   'stage.review.confirm.errors.fixBlockedSites': '请先处理被阻塞的站点，再执行发布。',
   'stage.review.confirm.errors.noPublishableSites': '当前没有可发布的站点。',
   'stage.review.confirm.errors.failedSitesSummary': '发布结束，但有 {count} 个站点失败。',
@@ -708,6 +714,8 @@ const workflow = {
   'seriesWorkspace.variants.card.removeActiveSuccess':
     '已删除当前激活版本“{variant}”，编辑器已收起；如需继续修改，请重新载入其他版本。',
   'seriesWorkspace.variants.card.titleEmpty': '沿用当前草稿标题',
+  'seriesWorkspace.profileEditor.siteFields.anibtNotesHelp':
+    '\u4e3a Anibt \u9884\u586b\u53d1\u5e03\u9875\u8bf4\u660e\u3002\u82e5\u7559\u7a7a\uff0c\u53d1\u5e03\u65f6\u4ecd\u4f1a\u6cbf\u7528\u9879\u76ee\u5171\u4eab\u6b63\u6587\u8f6c\u6210\u7684 Markdown notes\u3002',
 } as const
 
 export default workflow
