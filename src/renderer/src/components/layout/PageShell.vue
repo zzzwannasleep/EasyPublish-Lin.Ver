@@ -70,7 +70,11 @@ const chrome = useAppChrome()
           <el-switch v-model="chrome.proxyForm.status" />
         </el-form-item>
         <el-form-item :label="t('app.proxy.type')">
-          <el-select v-model="chrome.proxyForm.type" :placeholder="t('common.selectProtocol')">
+          <el-select
+            v-model="chrome.proxyForm.type"
+            :teleported="false"
+            :placeholder="t('common.selectProtocol')"
+          >
             <el-option label="HTTP" value="http" />
             <el-option label="HTTPS" value="https" />
             <el-option label="SOCKS5" value="socks" />
