@@ -468,6 +468,10 @@ const workflow = {
   'seriesWorkspace.profileEditor.siteFields.bangumiCategory': 'Bangumi 分类',
   'seriesWorkspace.profileEditor.siteFields.nyaaCategory': 'Nyaa 分类',
   'seriesWorkspace.profileEditor.siteFields.bangumiHelp': '为 Bangumi 预填默认分类。应用到当前集时会直接写入新版本配置。',
+  'seriesWorkspace.profileEditor.siteFields.bangumiBtSyncKeyHelp':
+    '预填 Bangumi 的 BT Sync Key；留空时按普通发种处理。',
+  'seriesWorkspace.profileEditor.siteFields.bangumiTeamSyncHelp':
+    '打开代表使用团队身份发种，关闭代表使用个人身份发种。',
   'seriesWorkspace.profileEditor.siteFields.nyaaHelp': '为 Nyaa 预填默认分类。应用到当前集时会直接写入新版本配置。',
   'seriesWorkspace.profileEditor.siteFields.mikanTrackersHelp':
     '为 Mikan 预填 trackers，每行一条；超过 10 条时，实际只会发送前 10 条。',

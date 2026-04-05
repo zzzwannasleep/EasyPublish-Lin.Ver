@@ -405,10 +405,6 @@ const selectedBangumiSites = computed(() =>
     .map(siteId => availableSites.value.find(site => site.id === siteId) ?? null)
     .filter((site): site is SiteCatalogEntry => Boolean(site)),
 )
-const unavailableSelectedSites = computed(() =>
-  form.targetSites.filter(siteId => !availableSites.value.some(site => site.id === siteId)),
-)
-
 const currentProgress = computed(() =>
   summarizeTargetSiteProgress(form.targetSites, activeVariant.value?.publishResults),
 )
@@ -1123,12 +1119,8 @@ onMounted(() => {
           <div class="series-studio__section-head">
             <div>
               <h3 class="series-studio__section-title">{{ '\u6807\u9898\u5339\u914d\u81ea\u52a8\u8bc6\u522b' }}</h3>
-              <p class="series-studio__match-text">
-                {{ '\u5148\u628a\u6587\u4ef6\u540d\u91cc\u7684\u5173\u952e\u4fe1\u606f\u6620\u5c04\u6210\u53d8\u91cf\uff0c\u540e\u9762\u5bfc\u5165 .torrent \u65f6\u5c31\u4f1a\u81ea\u52a8\u5efa\u5267\u96c6\u3001\u5efa\u7248\u672c\uff0c\u5e76\u56de\u586b\u6807\u9898\u548c\u53c2\u6570\u3002' }}
-              </p>
             </div>
             <div class="series-studio__hero-meta">
-              <StatusChip tone="info">{{ '\u53c2\u8003 OKPGUI \u601d\u8def' }}</StatusChip>
               <StatusChip v-if="isTitleMatchDirty" tone="warning">{{ '\u5339\u914d\u65b9\u6848\u672a\u4fdd\u5b58' }}</StatusChip>
             </div>
           </div>
@@ -1167,10 +1159,6 @@ onMounted(() => {
               <el-input v-model="titleMatchForm.resolutionTemplate" placeholder="<res>p" />
             </label>
             <label class="series-studio__field">
-              <span class="series-studio__field-label">{{ '\u89c6\u9891\u7f16\u7801\u6a21\u677f' }}</span>
-              <el-input v-model="titleMatchForm.videoCodecTemplate" placeholder="<video>" />
-            </label>
-            <label class="series-studio__field">
               <span class="series-studio__field-label">{{ '\u97f3\u9891\u7f16\u7801\u6a21\u677f' }}</span>
               <el-input v-model="titleMatchForm.audioCodecTemplate" placeholder="<audio>" />
             </label>
@@ -1181,6 +1169,10 @@ onMounted(() => {
             <label class="series-studio__field">
               <span class="series-studio__field-label">{{ '\u5236\u4f5c\u7ec4\u6a21\u677f' }}</span>
               <el-input v-model="titleMatchForm.releaseTeamTemplate" placeholder="<team>" />
+            </label>
+            <label class="series-studio__field">
+              <span class="series-studio__field-label">{{ '\u89c6\u9891\u7f16\u7801\u6a21\u677f' }}</span>
+              <el-input v-model="titleMatchForm.videoCodecTemplate" placeholder="<video>" />
             </label>
           </div>
 
@@ -1425,9 +1417,6 @@ onMounted(() => {
 
         <div v-else class="series-studio__empty">{{ '\u5148\u6253\u5f00\u4e00\u4e2a\u7248\u672c\uff0c\u518d\u9009\u62e9\u7ad9\u70b9' }}</div>
 
-        <div v-if="unavailableSelectedSites.length" class="series-studio__tip">
-          {{ '\u5f53\u524d\u8349\u7a3f\u91cc\u8fd8\u6709\u8fd9\u4e9b\u7ad9\u70b9\uff0c\u4f46\u5b83\u4eec\u73b0\u5728\u6ca1\u6709\u901a\u8fc7\u767b\u5f55\u68c0\u67e5\uff1a' }}{{ unavailableSelectedSites.map(siteId => getSiteLabel(siteId)).join(' / ') }}
-        </div>
       </section>
       <section class="series-studio__section">
         <div class="series-studio__section-head">

@@ -487,6 +487,10 @@ const workflow = {
   'seriesWorkspace.profileEditor.siteFields.nyaaCategory': 'Nyaa Category',
   'seriesWorkspace.profileEditor.siteFields.bangumiHelp':
     'Prefill the default Bangumi category. It will be written into new variant configs when this profile is applied.',
+  'seriesWorkspace.profileEditor.siteFields.bangumiBtSyncKeyHelp':
+    'Prefill the Bangumi BT Sync Key here. Leave it empty to publish normally.',
+  'seriesWorkspace.profileEditor.siteFields.bangumiTeamSyncHelp':
+    'When enabled, publish with the team identity; when disabled, publish with the personal identity.',
   'seriesWorkspace.profileEditor.siteFields.nyaaHelp':
     'Prefill the default Nyaa category. It will be written into new variant configs when this profile is applied.',
   'seriesWorkspace.profileEditor.siteFields.mikanTrackersHelp':

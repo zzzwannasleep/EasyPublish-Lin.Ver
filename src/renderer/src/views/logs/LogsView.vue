@@ -224,18 +224,17 @@ onMounted(() => {
   <PageShell>
     <div class="flex min-h-full flex-col gap-4">
       <section
-        class="surface-panel flex flex-col gap-3 px-4 py-4 lg:px-5 lg:py-5 xl:flex-row xl:items-end xl:justify-between"
+        class="surface-panel flex flex-col gap-3 px-4 py-4 lg:px-5 lg:py-5 xl:flex-row xl:items-center xl:justify-between"
       >
-        <div class="max-w-3xl">
-          <div class="eyebrow-text">{{ t('logs.hero.eyebrow') }}</div>
-          <h1
-            class="mt-2 font-display text-[clamp(1.2rem,1.6vw,1.55rem)] leading-tight tracking-[-0.03em] text-copy-primary"
-          >
-            {{ t('logs.hero.title') }}
-          </h1>
-          <p class="mt-2 text-[13px] leading-5 text-copy-secondary">{{ t('logs.hero.summary') }}</p>
+        <div class="flex flex-wrap gap-3">
+          <el-button plain @click="loadData">{{ t('common.refresh') }}</el-button>
+          <el-button plain :loading="isExportingDiagnostics" @click="exportDiagnostics">
+            {{ t('logs.actions.export') }}
+          </el-button>
+          <el-button plain :disabled="!logDirectory" @click="openLogsFolder">
+            {{ t('logs.actions.openFolder') }}
+          </el-button>
         </div>
-
         <div class="flex flex-wrap gap-2">
           <StatusChip tone="success">{{
             t('logs.hero.fileCount', { count: fileCount })
@@ -248,102 +247,81 @@ onMounted(() => {
 
       <section class="grid gap-4 xl:grid-cols-12">
         <div class="xl:col-span-4">
-          <AppPanel
-            :eyebrow="t('logs.panel.files.eyebrow')"
-            :title="t('logs.panel.files.title')"
-            :description="t('logs.panel.files.description')"
-          >
-            <div class="mb-4 flex flex-wrap gap-3">
-              <el-button plain @click="loadData">{{ t('common.refresh') }}</el-button>
-              <el-button plain :loading="isExportingDiagnostics" @click="exportDiagnostics">
-                {{ t('logs.actions.export') }}
-              </el-button>
-              <el-button plain :disabled="!logDirectory" @click="openLogsFolder">
-                {{ t('logs.actions.openFolder') }}
-              </el-button>
-            </div>
-
+          <AppPanel class="logs-panel" :title="t('logs.panel.files.title')">
             <div
               v-if="errorMessage"
-              class="surface-subtle px-4 py-8 text-center text-sm leading-6 text-danger"
+              class="logs-state surface-subtle text-center text-sm leading-6 text-danger"
             >
               {{ errorMessage }}
             </div>
             <div
               v-else-if="isLoading && files.length === 0"
-              class="surface-subtle px-4 py-8 text-center text-sm leading-6 text-copy-secondary"
+              class="logs-state surface-subtle text-center text-sm leading-6 text-copy-secondary"
             >
               {{ t('logs.empty.loadingFiles') }}
             </div>
             <div
               v-else-if="files.length === 0"
-              class="surface-subtle px-4 py-8 text-center text-sm leading-6 text-copy-secondary"
+              class="logs-state surface-subtle text-center text-sm leading-6 text-copy-secondary"
             >
               {{ t('logs.empty.noFiles') }}
             </div>
-            <div v-else class="grid gap-3">
-              <button
-                v-for="file in files"
-                :key="file.path"
-                :class="[
-                  'logs-file-button surface-tile w-full px-4 py-4 text-left',
-                  file.path === selectedFilePath ? 'logs-file-button--active' : ''
-                ]"
-                type="button"
-                @click="readLog(file.path)"
-              >
-                <div class="font-semibold text-copy-primary">{{ file.name }}</div>
-                <div class="mt-1 text-xs leading-6 text-copy-secondary">
-                  {{ formatProjectTimestamp(file.updatedAt) }} / {{ formatBytes(file.size) }}
-                </div>
-              </button>
+            <div v-else class="logs-list-scroll">
+              <div class="grid gap-3">
+                <button
+                  v-for="file in files"
+                  :key="file.path"
+                  :class="[
+                    'logs-file-button surface-tile w-full px-4 py-4 text-left',
+                    file.path === selectedFilePath ? 'logs-file-button--active' : ''
+                  ]"
+                  type="button"
+                  @click="readLog(file.path)"
+                >
+                  <div class="font-semibold text-copy-primary">{{ file.name }}</div>
+                  <div class="mt-1 text-xs leading-6 text-copy-secondary">
+                    {{ formatProjectTimestamp(file.updatedAt) }} / {{ formatBytes(file.size) }}
+                  </div>
+                </button>
+              </div>
             </div>
           </AppPanel>
         </div>
 
         <div class="xl:col-span-8">
-          <AppPanel
-            :eyebrow="t('logs.panel.viewer.eyebrow')"
-            :title="t('logs.panel.viewer.title')"
-            :description="t('logs.panel.viewer.description')"
-          >
-            <div
-              v-if="selectedFile"
-              class="flex flex-col gap-3 border-b border-border-soft pb-4 sm:flex-row sm:items-start sm:justify-between"
-            >
-              <div>
-                <div class="font-semibold text-copy-primary">{{ selectedFile.name }}</div>
-                <div class="mt-1 text-xs leading-6 text-copy-secondary">
-                  {{ formatProjectTimestamp(selectedFile.updatedAt) }} /
-                  {{ formatBytes(selectedFile.size) }}
+          <AppPanel class="logs-panel" :title="t('logs.panel.viewer.title')">
+            <div v-if="selectedFile" class="logs-viewer-stack">
+              <div
+                class="flex flex-col gap-3 border-b border-border-soft pb-4 sm:flex-row sm:items-start sm:justify-between"
+              >
+                <div>
+                  <div class="font-semibold text-copy-primary">{{ selectedFile.name }}</div>
+                  <div class="mt-1 text-xs leading-6 text-copy-secondary">
+                    {{ formatProjectTimestamp(selectedFile.updatedAt) }} /
+                    {{ formatBytes(selectedFile.size) }}
+                  </div>
                 </div>
+                <StatusChip :tone="selectedFileLoading ? 'warning' : 'info'">
+                  {{ selectedFileLoading ? t('logs.status.reading') : t('logs.status.loaded') }}
+                </StatusChip>
               </div>
-              <StatusChip :tone="selectedFileLoading ? 'warning' : 'info'">
-                {{ selectedFileLoading ? t('logs.status.reading') : t('logs.status.loaded') }}
-              </StatusChip>
+
+              <pre class="logs-code-block logs-viewer-scroll">{{
+                selectedContent
+              }}</pre>
             </div>
 
             <div
               v-else
-              class="surface-subtle px-4 py-8 text-center text-sm leading-6 text-copy-secondary"
+              class="logs-state surface-subtle text-center text-sm leading-6 text-copy-secondary"
             >
               {{ t('logs.empty.selectFile') }}
             </div>
-
-            <pre
-              v-if="selectedFile"
-              class="logs-code-block mt-4 min-h-[420px] max-h-[720px] overflow-auto rounded-[22px] border border-border-soft p-4 text-sm leading-6 whitespace-pre-wrap break-words text-copy-primary"
-              >{{ selectedContent }}</pre
-            >
           </AppPanel>
         </div>
       </section>
 
-      <AppPanel
-        :eyebrow="t('logs.panel.failures.eyebrow')"
-        :title="t('logs.panel.failures.title')"
-        :description="t('logs.panel.failures.description')"
-      >
+      <AppPanel :title="t('logs.panel.failures.title')">
         <div
           v-if="latestFailures.length === 0"
           class="surface-subtle px-4 py-8 text-center text-sm leading-6 text-copy-secondary"
@@ -419,6 +397,53 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.logs-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: clamp(28rem, 72vh, 56rem);
+}
+
+.logs-panel :deep(.app-panel__content) {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.logs-list-scroll,
+.logs-viewer-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  contain: layout paint;
+}
+
+.logs-list-scroll {
+  padding-right: 0.25rem;
+}
+
+.logs-viewer-stack {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.logs-state {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.logs-file-button {
+  contain: layout paint;
+}
+
 .logs-file-button--active {
   border-color: var(--border-strong);
   background: var(--surface-brand-fill);
@@ -426,5 +451,21 @@ onMounted(() => {
 
 .logs-code-block {
   background: var(--surface-code-fill);
+  margin-top: 1rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 22px;
+  padding: 1rem;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.75;
+  font-family:
+    'SFMono-Regular',
+    Consolas,
+    'Liberation Mono',
+    Menlo,
+    monospace;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
 }
 </style>

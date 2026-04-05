@@ -37,14 +37,14 @@ const BANGUMI_FIELD_SCHEMAS: SiteFieldSchemaEntry[] = [
   {
     key: 'btSyncKey',
     labelKey: 'sites.form.btSyncKey',
-    helpKey: 'seriesWorkspace.profileEditor.siteFields.bangumiHelp',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.bangumiBtSyncKeyHelp',
     control: 'text',
     mode: 'optional',
   },
   {
     key: 'teamSync',
     labelKey: 'sites.flags.teamSync',
-    helpKey: 'seriesWorkspace.profileEditor.siteFields.bangumiHelp',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.bangumiTeamSyncHelp',
     control: 'checkbox',
     mode: 'optional',
   },
