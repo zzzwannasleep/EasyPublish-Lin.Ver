@@ -7,6 +7,7 @@ export type BuiltInSiteId = (typeof builtinSiteIds)[number]
 export type SiteId = string
 
 export type SiteAdapterKind =
+  | 'acgnx'
   | 'bangumi'
   | 'mikan'
   | 'anibt'
@@ -355,38 +356,26 @@ export const defaultSiteProfiles: SiteProfile[] = [
   },
   {
     id: 'acgnx_a',
-    name: 'AcgnX Asia',
-    adapter: 'nexusphp',
+    name: '末日动漫',
+    adapter: 'acgnx',
     baseUrl: 'https://share.acgnx.se',
     capabilities: [
       'torrent_publish',
-      'cookie_auth',
       'token_auth',
-      'username_password_auth',
-      'metadata_sections',
-      'metadata_tags',
-      'metadata_sub_categories',
       'content_preview',
       'raw_response',
-      'nfo_upload',
     ],
   },
   {
     id: 'acgnx_g',
-    name: 'AcgnX Global',
-    adapter: 'nexusphp',
+    name: 'AcgnX',
+    adapter: 'acgnx',
     baseUrl: 'https://www.acgnx.se',
     capabilities: [
       'torrent_publish',
-      'cookie_auth',
       'token_auth',
-      'username_password_auth',
-      'metadata_sections',
-      'metadata_tags',
-      'metadata_sub_categories',
       'content_preview',
       'raw_response',
-      'nfo_upload',
     ],
   },
   {

@@ -116,6 +116,8 @@ const sites = {
     'This adapter uses the shared title, description, and torrent file above. Category, publish team, and DMHY-specific options are configured below.',
   'nexus.site.sharedFieldsNyaa':
     'This adapter uses the shared title, description, torrent, and anonymous option above. Nyaa category, information field, and release flags are configured below.',
+  'nexus.site.sharedFieldsAcgnx':
+    'This adapter uses the shared title, description, torrent, and anonymous option above. Category can be overridden here, otherwise the legacy Bangumi / Nyaa mapping is reused automatically.',
   'nexus.site.requiredSection': 'Required Fields',
   'nexus.site.optionalSection': 'Fields to Fill',
   'nexus.site.noRequiredFields': 'This adapter does not require any site-specific fields yet.',
@@ -132,6 +134,8 @@ const sites = {
   'nexus.site.manualTypeHint': 'If metadata is unavailable, you can still enter the required site IDs manually.',
   'nexus.site.acgripManualHint':
     'AcgRip publishes through the web upload form. Choose the AcgRip category here; title, description, and torrent file come from the current draft only.',
+  'nexus.site.acgnxManualHint':
+    'sort_id follows the AcgnX Public Upload API category table. Leave it empty to reuse the existing Bangumi / Nyaa fallback mapping.',
   'nexus.site.dmhyManualHint':
     'If metadata is unavailable, you can still choose a built-in DMHY category here. After login, load metadata to get the publish-team dropdown. Use team ID 0 for personal publishing.',
   'nexus.actions.validateAccount': 'Validate account',

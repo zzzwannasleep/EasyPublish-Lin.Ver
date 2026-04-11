@@ -245,12 +245,16 @@ function isAcgripSite(site: SiteCatalogEntry) {
   return site.adapter === 'acgrip'
 }
 
+function isAcgnxSite(site: SiteCatalogEntry) {
+  return site.adapter === 'acgnx'
+}
+
 function supportsMetadata(site: SiteCatalogEntry) {
   return site.capabilitySet.metadata.sections
 }
 
 function hasSiteSpecificRequiredFields(site: SiteCatalogEntry) {
-  return (site.fieldSchemas ?? []).some(field => field.mode === 'required')
+  return isAcgnxSite(site) || (site.fieldSchemas ?? []).some(field => field.mode === 'required')
 }
 
 function hasOptionalSiteFields(site: SiteCatalogEntry) {
@@ -345,6 +349,10 @@ function getSharedFieldText(site: SiteCatalogEntry) {
 
   if (isNyaaSite(site)) {
     return t('nexus.site.sharedFieldsNyaa')
+  }
+
+  if (isAcgnxSite(site)) {
+    return t('nexus.site.sharedFieldsAcgnx')
   }
 
   return t('nexus.site.sharedFields')
@@ -1085,6 +1093,15 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
     }
   }
 
+  if (site?.adapter === 'acgnx') {
+    return {
+      ...baseInput,
+      categoryBangumi: draft.categoryBangumi.trim() || undefined,
+      categoryCode: draft.categoryCode.trim() || undefined,
+      url: draft.url.trim() || undefined,
+    }
+  }
+
   return {
     ...baseInput,
     smallDescription: draft.smallDescription.trim() || undefined,
@@ -1598,6 +1615,29 @@ onMounted(() => {
                 <el-select
                   v-if="getSiteFieldOptions(site.id, 'typeId').length > 0"
                   v-model="ensureDraft(site.id).typeId"
+                >
+                  <el-option
+                    v-for="option in getSiteFieldOptions(site.id, 'typeId')"
+                    :key="option.value"
+                    :label="option.label"
+                    :value="Number(option.value)"
+                  />
+                </el-select>
+                <el-input-number v-else v-model="ensureDraft(site.id).typeId" :controls="false" :min="1" />
+              </el-form-item>
+            </div>
+          </div>
+
+          <div v-else-if="isAcgnxSite(site)" class="nexus-site-card__manual">
+            <div class="nexus-site-card__hint">
+              {{ t('nexus.site.acgnxManualHint') }}
+            </div>
+            <div class="nexus-form__grid">
+              <el-form-item :label="t('sites.form.category')">
+                <el-select
+                  v-if="getSiteFieldOptions(site.id, 'typeId').length > 0"
+                  v-model="ensureDraft(site.id).typeId"
+                  clearable
                 >
                   <el-option
                     v-for="option in getSiteFieldOptions(site.id, 'typeId')"

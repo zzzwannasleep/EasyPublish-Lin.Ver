@@ -2,7 +2,7 @@ import { safeStorage } from 'electron'
 import log from 'electron-log'
 import fs from 'fs/promises'
 import { dirname } from 'path'
-import { defaultUserData } from './defaults'
+import { defaultManagedPtSites, defaultUserData } from './defaults'
 
 const SECURE_VALUE_PREFIX = 'secure:v1:'
 
@@ -54,6 +54,62 @@ function getDefaultAcgnxApiConfig(): Config.AcgnXAPIConfig {
       token: '',
     },
   }
+}
+
+function migrateLegacyAcgnxPtSites(
+  ptSites: Config.PTSiteConfig[],
+  legacyAcgnxApi: Config.AcgnXAPIConfig | undefined,
+) {
+  return ptSites.map(site => {
+    if (site.id === 'acgnx_a') {
+      return {
+        ...site,
+        apiUid: site.apiUid || legacyAcgnxApi?.asia.uid || '',
+        apiToken: site.apiToken || legacyAcgnxApi?.asia.token || '',
+      }
+    }
+
+    if (site.id === 'acgnx_g') {
+      return {
+        ...site,
+        apiUid: site.apiUid || legacyAcgnxApi?.global.uid || '',
+        apiToken: site.apiToken || legacyAcgnxApi?.global.token || '',
+      }
+    }
+
+    return site
+  })
+}
+
+function normalizePtSites(data: Config.UserData | null | undefined) {
+  const sourceSites = data?.ptSites ?? []
+  const mergedSites = defaultManagedPtSites.map(defaultSite => {
+    const current = sourceSites.find(site => site.id === defaultSite.id)
+    return {
+      ...defaultSite,
+      ...(current ?? {}),
+    }
+  })
+
+  const customSites = sourceSites.filter(site => !defaultManagedPtSites.some(defaultSite => defaultSite.id === site.id))
+
+  return migrateLegacyAcgnxPtSites(
+    [...mergedSites, ...customSites].map(site => ({
+      id: site.id,
+      name: site.name,
+      adapter: site.adapter,
+      baseUrl: site.baseUrl,
+      enabled: site.enabled ?? true,
+      apiUid: site.apiUid ?? '',
+      username: site.username ?? '',
+      password: site.password ?? '',
+      apiToken: site.apiToken ?? '',
+      lastCheckAt: site.lastCheckAt,
+      healthStatus: site.healthStatus,
+      statusMessage: site.statusMessage,
+    })),
+    data?.acgnxAPI,
+  )
 }
 
 function isEncryptionAvailable() {
@@ -125,19 +181,7 @@ function normalizeUserData(data: Config.UserData | null | undefined): Config.Use
       ...(source.forum ?? {}),
       cookies: source.forum?.cookies ?? defaults.forum.cookies,
     },
-    ptSites: (source.ptSites ?? []).map(site => ({
-      id: site.id,
-      name: site.name,
-      adapter: site.adapter,
-      baseUrl: site.baseUrl,
-      enabled: site.enabled ?? true,
-      username: site.username ?? '',
-      password: site.password ?? '',
-      apiToken: site.apiToken ?? '',
-      lastCheckAt: site.lastCheckAt,
-      healthStatus: site.healthStatus,
-      statusMessage: site.statusMessage,
-    })),
+    ptSites: normalizePtSites(source),
     info: defaults.info.map(defaultInfo => {
       const current = source.info?.find(item => item.name === defaultInfo.name)
       return {

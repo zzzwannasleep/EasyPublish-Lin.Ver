@@ -920,6 +920,15 @@ function buildPublishInput(row: ReviewSiteRow): SitePublishDraft {
     }
   }
 
+  if (site?.adapter === 'acgnx') {
+    return {
+      ...baseInput,
+      categoryBangumi: draft.categoryBangumi.trim() || undefined,
+      categoryCode: draft.categoryCode.trim() || undefined,
+      url: draft.url.trim() || undefined,
+    }
+  }
+
   return {
     ...baseInput,
     smallDescription: draft.smallDescription.trim() || undefined,

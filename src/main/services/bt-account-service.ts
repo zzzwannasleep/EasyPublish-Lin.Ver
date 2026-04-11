@@ -1044,17 +1044,6 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
     refreshLoginData()
   }
 
-  async function getAcgnXAPIConfig() {
-    return JSON.stringify(getUserDBOrThrow().data.acgnxAPI)
-  }
-
-  async function saveAcgnXAPIConfig(msg: string) {
-    const userDB = getUserDBOrThrow()
-    const config: Message.BT.AcgnXAPIConfig = JSON.parse(msg)
-    userDB.data.acgnxAPI = config
-    await userDB.write()
-  }
-
   async function exportCookies(msg: string) {
     const { canceled, filePath } = await dialog.showSaveDialog({
       filters: [{ name: 'JSON', extensions: ['json'] }],
@@ -1685,8 +1674,6 @@ export function createBtAccountService(options: CreateBtAccountServiceOptions) {
     saveAccountInfo,
     getAccountInfo,
     clearStorage,
-    getAcgnXAPIConfig,
-    saveAcgnXAPIConfig,
     exportCookies,
     importCookies,
   }

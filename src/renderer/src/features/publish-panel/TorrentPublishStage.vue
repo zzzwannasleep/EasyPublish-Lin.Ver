@@ -18,14 +18,7 @@ const shouldShowAdapterPanel = computed(() => {
     return false
   }
 
-  return (
-      project.value.projectMode !== 'episode' ||
-      project.value.targetSites.includes('bangumi') ||
-      project.value.targetSites.includes('miobt') ||
-      project.value.targetSites.includes('mikan') ||
-      project.value.targetSites.includes('dmhy') ||
-      project.value.targetSites.includes('nyaa')
-  )
+  return project.value.projectMode !== 'episode' || project.value.targetSites.some(siteId => siteId !== 'forum')
 })
 
 const notes = computed(() => [

@@ -24,7 +24,8 @@ interface CreateSiteServiceOptions {
 
 export function createSiteService(options: CreateSiteServiceOptions) {
   const { siteRegistry, credentialStore, projectStore, notifyProjectDataChanged } = options
-  const ptAdapters = new Set(['nexusphp', 'unit3d'])
+  const ptAdapters = new Set(['acgnx', 'nexusphp', 'unit3d'])
+  const builtInManagedPtSiteIds = new Set(['acgnx_a', 'acgnx_g'])
 
   function readOptionalString(value: unknown) {
     return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
@@ -239,11 +240,12 @@ export function createSiteService(options: CreateSiteServiceOptions) {
           const credentials = credentialStore.getSiteCredentialRecord(site.id)
           return {
             ...site,
-            builtIn: false,
+            builtIn: builtInManagedPtSiteIds.has(site.id),
             accountAuthMode: account.authMode,
             accountStatus: account.healthStatus,
             accountMessage: account.legacyStatus,
             lastCheckAt: account.lastCheckAt,
+            apiUid: credentials.apiUid,
             username: credentials.username,
             password: credentials.password,
             apiToken: credentials.apiToken,
@@ -645,11 +647,12 @@ export function createSiteService(options: CreateSiteServiceOptions) {
         ok({
           site: {
             ...site,
-            builtIn: !credentialStore.getCustomPtSite(site.id),
+            builtIn: builtInManagedPtSiteIds.has(site.id),
             accountAuthMode: account.authMode,
             accountStatus: account.healthStatus,
             accountMessage: account.legacyStatus,
             lastCheckAt: account.lastCheckAt,
+            apiUid: credentials.apiUid,
             username: credentials.username,
             password: credentials.password,
             apiToken: credentials.apiToken,

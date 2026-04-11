@@ -8,7 +8,6 @@ import {
   Lock,
   RefreshRight,
   Timer,
-  Tools,
   UserFilled,
 } from '@element-plus/icons-vue'
 import StatusChip from './feedback/StatusChip.vue'
@@ -16,6 +15,7 @@ import { useI18n } from '../i18n'
 import { getSiteLabel } from '../services/project/presentation'
 import { siteBridge } from '../services/bridge/site'
 import type { SiteCatalogEntry, SiteId } from '../types/site'
+import type { PtSiteRecord } from '../types/pt-site'
 import { legacyApiStatusText, normalizeLegacyAccountStatus } from '../../../shared/utils/legacy-account-status'
 
 type LegacyAccountType = Exclude<SiteId, 'forum'>
@@ -154,24 +154,54 @@ const siteAccounts = reactive<SiteAccount[]>([
   },
 ])
 
-const acgnxAPIConfig = ref<Config.AcgnXAPIConfig>({
-  enable: false,
-  asia: {
-    uid: '',
-    token: '',
-  },
-  global: {
-    uid: '',
-    token: '',
-  },
-})
-
 const username = ref('')
 const password = ref('')
 const configName = ref('')
 
+function isAdapterManagedBtSite(siteId: LegacyAccountType): siteId is 'acgnx_a' | 'acgnx_g' {
+  return siteId === 'acgnx_a' || siteId === 'acgnx_g'
+}
+
+function getAdapterManagedBtSiteDraft(type: 'acgnx_a' | 'acgnx_g', account: SiteAccount) {
+  return {
+    id: type,
+    name: type === 'acgnx_a' ? '末日动漫' : 'AcgnX',
+    adapter: 'acgnx' as const,
+    baseUrl: type === 'acgnx_a' ? 'https://share.acgnx.se' : 'https://www.acgnx.se',
+    enabled: account.enable,
+    apiUid: account.username.trim(),
+    apiToken: account.apiToken?.trim() ?? '',
+    username: '',
+    password: '',
+  }
+}
+
+function mapManagedBtSiteToAccount(site: PtSiteRecord): Partial<SiteAccount> {
+  const hasApiCredentials = Boolean(site.apiUid?.trim() && site.apiToken?.trim())
+  let status: string = legacyApiStatusText.credentialsMissing
+
+  if (hasApiCredentials) {
+    if (site.accountStatus === 'authenticated' || site.accountStatus === 'unknown' || site.accountStatus === 'checking') {
+      status = legacyApiStatusText.credentialsConfigured
+    } else if (site.accountStatus === 'blocked') {
+      status = site.accountMessage || 'Blocked'
+    } else {
+      status = site.accountMessage || legacyApiStatusText.credentialsRejected
+    }
+  }
+
+  return {
+    time: site.lastCheckAt ?? '',
+    status,
+    username: site.apiUid ?? '',
+    password: '',
+    apiToken: site.apiToken ?? '',
+    enable: site.enabled,
+  }
+}
+
 function usesApiToken(siteId: LegacyAccountType) {
-  return siteId === 'mikan' || siteId === 'anibt' || siteId === 'miobt'
+  return siteId === 'mikan' || siteId === 'anibt' || siteId === 'miobt' || isAdapterManagedBtSite(siteId)
 }
 
 function supportsBrowserLogin(siteId: LegacyAccountType) {
@@ -179,7 +209,7 @@ function supportsBrowserLogin(siteId: LegacyAccountType) {
 }
 
 function usesApiUid(siteId: LegacyAccountType) {
-  return siteId === 'miobt'
+  return siteId === 'miobt' || isAdapterManagedBtSite(siteId)
 }
 
 function getUsernameLabel(siteId: LegacyAccountType) {
@@ -297,8 +327,30 @@ function getAccountTimeLabel(value: string) {
 async function loadData() {
   isLoading.value = true
   try {
+    let managedBtSites = new Map<string, PtSiteRecord>()
+    try {
+      const managedSitesResult = await siteBridge.listManagedPtSites()
+      if (managedSitesResult.ok) {
+        managedBtSites = new Map(
+          managedSitesResult.data.sites
+            .filter(site => site.id === 'acgnx_a' || site.id === 'acgnx_g')
+            .map(site => [site.id, site]),
+        )
+      }
+    } catch {
+      managedBtSites = new Map()
+    }
+
     await Promise.all(
       siteAccounts.map(async (item, index) => {
+        if (isAdapterManagedBtSite(item.type)) {
+          const managedSite = managedBtSites.get(item.type)
+          if (managedSite) {
+            Object.assign(siteAccounts[index], mapManagedBtSiteToAccount(managedSite))
+          }
+          return
+        }
+
         const msg: Message.BT.AccountType = { type: item.type }
         const result = await window.BTAPI.getAccountInfo(JSON.stringify(msg))
         const info: Message.BT.AccountInfo = JSON.parse(result)
@@ -312,19 +364,6 @@ async function loadData() {
 
 window.BTAPI.refreshLoginData(loadData)
 
-async function getAcgnXAPIConfig() {
-  const config: Message.BT.AcgnXAPIConfig = JSON.parse(await window.BTAPI.getAcgnXAPIConfig())
-  if (config) {
-    acgnxAPIConfig.value = config
-  }
-}
-
-async function saveAcgnXAPIConfig() {
-  const msg: Message.BT.AcgnXAPIConfig = acgnxAPIConfig.value
-  window.BTAPI.saveAcgnXAPIConfig(JSON.stringify(msg))
-  ElMessage.success(t('accounts.api.saved'))
-}
-
 function exportCookies(type: LegacyAccountType) {
   const msg: Message.BT.AccountType = { type }
   window.BTAPI.exportCookies(JSON.stringify(msg))
@@ -336,9 +375,42 @@ function importCookies(type: LegacyAccountType) {
 }
 
 async function checkLoginStatus(type: LegacyAccountType | 'all') {
+  if (type === 'all') {
+    await Promise.all(visibleSiteAccounts.value.map(account => checkLoginStatus(account.type)))
+    return
+  }
+
+  if (isAdapterManagedBtSite(type)) {
+    const saved = await saveAccountInfo(type, true)
+    if (!saved) {
+      return
+    }
+
+    const result = await siteBridge.validateAccount(type)
+    if (!result.ok) {
+      ElMessage.error(result.error.message)
+      return
+    }
+
+    await loadData()
+
+    if (result.data.status === 'authenticated') {
+      ElMessage.success(result.data.message || `${getSiteLabel(type)} credentials validated`)
+      return
+    }
+
+    if (result.data.status === 'unauthenticated') {
+      ElMessage.warning(result.data.message || `${getSiteLabel(type)} credentials were rejected`)
+      return
+    }
+
+    ElMessage.error(result.data.message || `${getSiteLabel(type)} validation failed`)
+    return
+  }
+
   const msg: Message.BT.AccountType = { type }
   const raw = await window.BTAPI.checkLoginStatus(JSON.stringify(msg))
-  if (!raw || type === 'all') {
+  if (!raw) {
     return
   }
 
@@ -380,9 +452,29 @@ async function checkLoginStatus(type: LegacyAccountType | 'all') {
   }
 }
 
-function saveAccountInfo(type: LegacyAccountType) {
-  const msg: Message.BT.AccountInfo = siteAccounts.find(item => item.type === type)!
+async function saveAccountInfo(type: LegacyAccountType, silent = true) {
+  const account = siteAccounts.find(item => item.type === type)
+  if (!account) {
+    return false
+  }
+
+  if (isAdapterManagedBtSite(type)) {
+    const result = await siteBridge.saveManagedPtSite(getAdapterManagedBtSiteDraft(type, account))
+    if (!result.ok) {
+      ElMessage.error(result.error.message)
+      return false
+    }
+
+    Object.assign(account, mapManagedBtSiteToAccount(result.data.site))
+    if (!silent) {
+      ElMessage.success(t('accounts.pt.messages.saved'))
+    }
+    return true
+  }
+
+  const msg: Message.BT.AccountInfo = account
   window.BTAPI.saveAccountInfo(JSON.stringify(msg))
+  return true
 }
 
 function openLoginWindow(type: LegacyAccountType) {
@@ -522,7 +614,7 @@ function createConfig() {
 }
 
 onMounted(() => {
-  void Promise.all([loadData(), getForumAccountInfo(), getConfigName(), getAcgnXAPIConfig(), loadForumSite()])
+  void Promise.all([loadData(), getForumAccountInfo(), getConfigName(), loadForumSite()])
 })
 </script>
 
@@ -731,58 +823,6 @@ onMounted(() => {
           <el-button type="primary" plain @click="createConfig">
             {{ t('accounts.actions.createConfig') }}
           </el-button>
-        </footer>
-      </article>
-
-      <article class="account-settings__card account-settings__card--wide">
-        <header class="account-settings__header">
-          <div class="account-settings__icon">
-            <el-icon><Tools /></el-icon>
-          </div>
-          <div>
-            <h3 class="account-settings__title">{{ t('accounts.api.title') }}</h3>
-            <p class="account-settings__text">{{ t('accounts.api.description') }}</p>
-          </div>
-        </header>
-
-        <div class="account-settings__toggle">
-          <el-checkbox v-model="acgnxAPIConfig.enable" border @change="saveAcgnXAPIConfig">
-            {{ t('accounts.api.enable') }}
-          </el-checkbox>
-        </div>
-
-        <div v-if="acgnxAPIConfig.enable" class="account-settings__nested-grid">
-          <section class="account-settings__subcard">
-            <h4 class="account-settings__subcard-title">{{ t('accounts.api.asia') }}</h4>
-            <div class="account-settings__form">
-              <label class="account-field">
-                <span class="account-field__label">{{ t('accounts.fields.apiUid') }}</span>
-                <el-input v-model="acgnxAPIConfig.asia.uid" />
-              </label>
-              <label class="account-field">
-                <span class="account-field__label">{{ t('accounts.fields.apiToken') }}</span>
-                <el-input v-model="acgnxAPIConfig.asia.token" />
-              </label>
-            </div>
-          </section>
-
-          <section class="account-settings__subcard">
-            <h4 class="account-settings__subcard-title">{{ t('accounts.api.global') }}</h4>
-            <div class="account-settings__form">
-              <label class="account-field">
-                <span class="account-field__label">{{ t('accounts.fields.apiUid') }}</span>
-                <el-input v-model="acgnxAPIConfig.global.uid" />
-              </label>
-              <label class="account-field">
-                <span class="account-field__label">{{ t('accounts.fields.apiToken') }}</span>
-                <el-input v-model="acgnxAPIConfig.global.token" />
-              </label>
-            </div>
-          </section>
-        </div>
-
-        <footer v-if="acgnxAPIConfig.enable" class="account-settings__actions">
-          <el-button type="primary" @click="saveAcgnXAPIConfig">{{ t('common.save') }}</el-button>
         </footer>
       </article>
     </section>

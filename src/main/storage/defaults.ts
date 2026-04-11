@@ -15,6 +15,32 @@ function createDefaultLoginInfo(name: string): Config.LoginInfo {
   }
 }
 
+function createDefaultManagedPtSite(
+  id: string,
+  name: string,
+  baseUrl: string,
+  adapter: Config.PTSiteConfig['adapter'],
+): Config.PTSiteConfig {
+  return {
+    id,
+    name,
+    adapter,
+    baseUrl,
+    enabled: true,
+    apiUid: '',
+    username: '',
+    password: '',
+    apiToken: '',
+    healthStatus: 'unknown',
+    statusMessage: '尚未校验账号',
+  }
+}
+
+export const defaultManagedPtSites: Config.PTSiteConfig[] = [
+  createDefaultManagedPtSite('acgnx_a', '末日动漫', 'https://share.acgnx.se', 'acgnx'),
+  createDefaultManagedPtSite('acgnx_g', 'AcgnX', 'https://www.acgnx.se', 'acgnx'),
+]
+
 export const defaultUserData: Config.UserData = {
   proxyConfig: {
     status: false,
@@ -34,7 +60,7 @@ export const defaultUserData: Config.UserData = {
       token: '',
     },
   },
-  ptSites: [],
+  ptSites: defaultManagedPtSites,
   forum: {
     username: '',
     password: '',

@@ -114,6 +114,7 @@ const sites = {
     '这个适配器会使用上方通用字段中的标题、简介和种子文件，并直接把 torrent 作为种子上传到 Anibt；通用简介会转成 Markdown 后作为 notes 发送。',
   'nexus.site.sharedFieldsDmhy': '这个适配器会使用上方通用字段中的标题、简介和种子文件，分类、发布方式与附加字段在下方填写。',
   'nexus.site.sharedFieldsNyaa': '这个适配器会使用上方通用字段中的标题、简介、种子和匿名设置；Nyaa 分类、信息栏与标记在下方填写。',
+  'nexus.site.sharedFieldsAcgnx': '这个适配器会使用上方通用字段里的标题、简介、种子和匿名设置。分类可以在这里手动覆盖，不填时会自动沿用原先的 Bangumi / Nyaa 映射。',
   'nexus.site.requiredSection': '站点必填项',
   'nexus.site.optionalSection': '填写项目',
   'nexus.site.noRequiredFields': '这个适配器当前还没有站点专属必填字段。',
@@ -127,6 +128,7 @@ const sites = {
   'nexus.site.manualResolutionId': 'Resolution ID',
   'nexus.site.manualTypeHint': '如果暂时拿不到站点元数据，也可以先手动填写站点要求的 ID。',
   'nexus.site.acgripManualHint': 'AcgRip 会按网页上传表单提交。这里明确选择 AcgRip 分类即可，其余字段只使用当前填写的标题、简介和种子文件。',
+  'nexus.site.acgnxManualHint': 'sort_id 对应 AcgnX Public Upload API 的分类表。不填时会自动复用当前项目里的 Bangumi / Nyaa 分类映射。',
   'nexus.site.dmhyManualHint':
     '如果暂时拿不到 DMHY 元数据，也可以先在这里直接选择内置分类。登录后再加载元数据，就能读取中文“发布方式”下拉；填 0 表示个人发布。',
   'nexus.actions.validateAccount': '检测账号',

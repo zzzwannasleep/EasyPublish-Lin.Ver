@@ -34,9 +34,9 @@ export interface SiteAccount {
 
 export interface SiteCredentialRecord {
   siteId: SiteId
+  apiUid?: string
   username?: string
   password?: string
   apiToken?: string
   cookies?: StoredCookie[]
 }
-

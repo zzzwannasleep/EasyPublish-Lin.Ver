@@ -19,13 +19,13 @@ const legacyTorrentSiteIds = [
   'nyaa',
   'acgrip',
   'dmhy',
-  'acgnx_a',
-  'acgnx_g',
 ] as const
 
-const legacyPtSiteIds = ['acgrip', 'dmhy', 'acgnx_a', 'acgnx_g'] as const
+const legacyPtSiteIds = ['acgrip', 'dmhy'] as const
+const builtInManagedPtSiteIds = ['acgnx_a', 'acgnx_g'] as const
 
 const ptCapabilitiesByAdapter: Record<PtSiteAdapterKind, SiteCapability[]> = {
+  acgnx: ['torrent_publish', 'token_auth', 'content_preview', 'raw_response'],
   nexusphp: [
     'torrent_publish',
     'cookie_auth',
@@ -47,6 +47,10 @@ function isLegacySite(siteId: string): siteId is (typeof legacyTorrentSiteIds)[n
 
 function isLegacyPtSite(siteId: string): siteId is (typeof legacyPtSiteIds)[number] {
   return legacyPtSiteIds.includes(siteId as (typeof legacyPtSiteIds)[number])
+}
+
+function isBuiltInManagedPtSite(siteId: string): siteId is (typeof builtInManagedPtSiteIds)[number] {
+  return builtInManagedPtSiteIds.includes(siteId as (typeof builtInManagedPtSiteIds)[number])
 }
 
 function mapHealthStatus(info: Config.LoginInfo): SiteAccount['healthStatus'] {
@@ -139,19 +143,6 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
       return getSiteLoginInfo(siteId).apiToken || undefined
     }
 
-    const acgnxAPI = getUserDBOrThrow().data.acgnxAPI
-    if (!acgnxAPI?.enable) {
-      return undefined
-    }
-
-    if (siteId === 'acgnx_a') {
-      return acgnxAPI.asia.token || undefined
-    }
-
-    if (siteId === 'acgnx_g') {
-      return acgnxAPI.global.token || undefined
-    }
-
     return undefined
   }
 
@@ -189,7 +180,7 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
 
       return {
         siteId,
-        authMode: site.apiToken ? 'api_token' : 'username_password',
+        authMode: site.apiToken || site.apiUid ? 'api_token' : 'username_password',
         username: site.username,
         enabled: site.enabled,
         lastCheckAt: site.lastCheckAt,
@@ -245,6 +236,7 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
 
       return {
         siteId,
+        apiUid: site.apiUid || undefined,
         username: site.username || undefined,
         password: site.password || undefined,
         apiToken: site.apiToken || undefined,
@@ -312,7 +304,9 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
   }
 
   function listCustomSiteProfiles(): SiteProfile[] {
-    return getCustomPtSites().map(createCustomPtSiteProfile)
+    return getCustomPtSites()
+      .filter(site => !isBuiltInManagedPtSite(site.id))
+      .map(createCustomPtSiteProfile)
   }
 
   async function saveManagedPtSite(draft: PtSiteDraft) {
@@ -328,7 +322,7 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
     }
 
     const adapter = draft.adapter
-    if (adapter !== 'nexusphp' && adapter !== 'unit3d') {
+    if (adapter !== 'acgnx' && adapter !== 'nexusphp' && adapter !== 'unit3d') {
       throw new Error(`Unsupported PT adapter: ${draft.adapter}`)
     }
 
@@ -349,6 +343,7 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
       adapter,
       baseUrl,
       enabled: draft.enabled,
+      apiUid: draft.apiUid?.trim() ?? '',
       username: draft.username?.trim() ?? '',
       password: draft.password ?? '',
       apiToken: draft.apiToken?.trim() ?? '',
@@ -365,12 +360,51 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
     }
 
     userDB.data.ptSites = ptSites
+
+    if (id === 'acgnx_a') {
+      userDB.data.acgnxAPI = {
+        ...(userDB.data.acgnxAPI ?? {
+          enable: false,
+          asia: { uid: '', token: '' },
+          global: { uid: '', token: '' },
+        }),
+        enable: Boolean(nextSite.apiUid || nextSite.apiToken || userDB.data.acgnxAPI?.global.uid || userDB.data.acgnxAPI?.global.token),
+        asia: {
+          uid: nextSite.apiUid ?? '',
+          token: nextSite.apiToken ?? '',
+        },
+        global: {
+          uid: userDB.data.acgnxAPI?.global.uid ?? '',
+          token: userDB.data.acgnxAPI?.global.token ?? '',
+        },
+      }
+    }
+
+    if (id === 'acgnx_g') {
+      userDB.data.acgnxAPI = {
+        ...(userDB.data.acgnxAPI ?? {
+          enable: false,
+          asia: { uid: '', token: '' },
+          global: { uid: '', token: '' },
+        }),
+        enable: Boolean(userDB.data.acgnxAPI?.asia.uid || userDB.data.acgnxAPI?.asia.token || nextSite.apiUid || nextSite.apiToken),
+        asia: {
+          uid: userDB.data.acgnxAPI?.asia.uid ?? '',
+          token: userDB.data.acgnxAPI?.asia.token ?? '',
+        },
+        global: {
+          uid: nextSite.apiUid ?? '',
+          token: nextSite.apiToken ?? '',
+        },
+      }
+    }
+
     await userDB.write()
     return id
   }
 
   async function removeManagedPtSite(siteId: SiteId) {
-    if (isLegacyPtSite(siteId)) {
+    if (isLegacyPtSite(siteId) || isBuiltInManagedPtSite(siteId)) {
       throw new Error('Built-in PT sites cannot be removed')
     }
 

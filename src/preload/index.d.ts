@@ -31,8 +31,6 @@ export interface BTAPI {
   getAccountInfo: (msg: string) => Promise<string>
   importCookies: (msg: string) => void
   exportCookies: (msg: string) => void
-  getAcgnXAPIConfig: () => Promise<string>
-  saveAcgnXAPIConfig: (msg: string) => void
   clearStorage: () => void
   removeValidation: () => void
   publish: (msg: string) => Promise<string>

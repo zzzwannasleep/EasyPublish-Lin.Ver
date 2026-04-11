@@ -1,6 +1,7 @@
 import { defaultSiteProfiles } from '../../shared/types/site'
 import type { SiteAdapterKind, SiteCatalogEntry, SiteId, SiteProfile } from '../../shared/types/site'
 import type { SiteAdapter } from './adapter'
+import { createAcgnxAdapter } from './acgnx/adapter'
 import { createAcgripAdapter } from './acgrip/adapter'
 import { createAnibtAdapter } from './anibt/adapter'
 import { createBangumiAdapter } from './bangumi/adapter'
@@ -19,6 +20,7 @@ interface CreateSiteRegistryOptions {
 export function createSiteRegistry(options: CreateSiteRegistryOptions = {}) {
   const { getCustomProfiles } = options
   const adapters: SiteAdapter[] = [
+    createAcgnxAdapter(),
     createBangumiAdapter(),
     createMikanAdapter(),
     createAnibtAdapter(),

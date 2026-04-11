@@ -12,6 +12,7 @@ interface PtSiteForm {
   adapter: PtSiteAdapterKind
   baseUrl: string
   enabled: boolean
+  apiUid: string
   username: string
   password: string
   apiToken: string
@@ -35,6 +36,7 @@ function createEmptyForm(): PtSiteForm {
     adapter: 'nexusphp',
     baseUrl: '',
     enabled: true,
+    apiUid: '',
     username: '',
     password: '',
     apiToken: '',
@@ -47,6 +49,7 @@ function toForm(site: PtSiteRecord): PtSiteForm {
     adapter: site.adapter as PtSiteAdapterKind,
     baseUrl: site.baseUrl,
     enabled: site.enabled,
+    apiUid: site.apiUid ?? '',
     username: site.username ?? '',
     password: site.password ?? '',
     apiToken: site.apiToken ?? '',
@@ -91,10 +94,23 @@ function buildDraft(siteId?: SiteId): PtSiteDraft {
     adapter: source.adapter,
     baseUrl: source.baseUrl.trim(),
     enabled: source.enabled,
+    apiUid: source.apiUid.trim(),
     username: source.username.trim(),
     password: source.password,
     apiToken: source.apiToken.trim(),
   }
+}
+
+function usesApiUid(adapter: PtSiteAdapterKind) {
+  return adapter === 'acgnx'
+}
+
+function usesPassword(adapter: PtSiteAdapterKind) {
+  return adapter !== 'acgnx'
+}
+
+function usesApiToken(adapter: PtSiteAdapterKind) {
+  return adapter === 'acgnx' || adapter === 'nexusphp' || adapter === 'unit3d'
 }
 
 async function loadSites() {
@@ -108,8 +124,9 @@ async function loadSites() {
       return
     }
 
-    sites.value = result.data.sites
-    syncForms(result.data.sites)
+    const customSites = result.data.sites.filter(site => !site.builtIn)
+    sites.value = customSites
+    syncForms(customSites)
   } catch (error) {
     ElMessage.error((error as Error).message)
     sites.value = []
@@ -335,6 +352,10 @@ function getSiteStatus(site: PtSiteRecord) {
 }
 
 function getAdapterLabel(adapter: PtSiteAdapterKind) {
+  if (adapter === 'acgnx') {
+    return t('accounts.pt.adapter.acgnx')
+  }
+
   return adapter === 'unit3d' ? t('accounts.pt.adapter.unit3d') : t('accounts.pt.adapter.nexusphp')
 }
 
@@ -405,7 +426,16 @@ onMounted(() => {
           <el-input v-model="creator.baseUrl" :placeholder="t('accounts.pt.fields.siteUrlPlaceholder')" />
         </label>
 
-        <label class="pt-field">
+        <label v-if="usesApiUid(creator.adapter)" class="pt-field">
+          <span class="pt-field__label">{{ t('accounts.fields.apiUid') }}</span>
+          <el-input v-model="creator.apiUid">
+            <template #prefix>
+              <el-icon><UserFilled /></el-icon>
+            </template>
+          </el-input>
+        </label>
+
+        <label v-if="usesPassword(creator.adapter)" class="pt-field">
           <span class="pt-field__label">{{ t('accounts.fields.username') }}</span>
           <el-input v-model="creator.username">
             <template #prefix>
@@ -414,7 +444,7 @@ onMounted(() => {
           </el-input>
         </label>
 
-        <label class="pt-field">
+        <label v-if="usesPassword(creator.adapter)" class="pt-field">
           <span class="pt-field__label">{{ t('accounts.fields.password') }}</span>
           <el-input v-model="creator.password" show-password type="password">
             <template #prefix>
@@ -423,7 +453,7 @@ onMounted(() => {
           </el-input>
         </label>
 
-        <label class="pt-field">
+        <label v-if="usesApiToken(creator.adapter)" class="pt-field">
           <span class="pt-field__label">{{ t('accounts.fields.apiToken') }}</span>
           <el-input v-model="creator.apiToken">
             <template #prefix>
@@ -514,6 +544,7 @@ onMounted(() => {
           <label class="pt-field">
             <span class="pt-field__label">{{ t('accounts.pt.fields.adapter') }}</span>
             <el-select v-model="forms[site.id].adapter" :disabled="site.builtIn">
+              <el-option value="acgnx" :label="t('accounts.pt.adapter.acgnx')" />
               <el-option value="nexusphp" :label="t('accounts.pt.adapter.nexusphp')" />
               <el-option value="unit3d" :label="t('accounts.pt.adapter.unit3d')" />
             </el-select>
@@ -524,7 +555,16 @@ onMounted(() => {
             <el-input v-model="forms[site.id].baseUrl" :disabled="site.builtIn" />
           </label>
 
-          <label class="pt-field">
+          <label v-if="usesApiUid(forms[site.id].adapter)" class="pt-field">
+            <span class="pt-field__label">{{ t('accounts.fields.apiUid') }}</span>
+            <el-input v-model="forms[site.id].apiUid">
+              <template #prefix>
+                <el-icon><UserFilled /></el-icon>
+              </template>
+            </el-input>
+          </label>
+
+          <label v-if="usesPassword(forms[site.id].adapter)" class="pt-field">
             <span class="pt-field__label">{{ t('accounts.fields.username') }}</span>
             <el-input v-model="forms[site.id].username">
               <template #prefix>
@@ -533,7 +573,7 @@ onMounted(() => {
             </el-input>
           </label>
 
-          <label class="pt-field">
+          <label v-if="usesPassword(forms[site.id].adapter)" class="pt-field">
             <span class="pt-field__label">{{ t('accounts.fields.password') }}</span>
             <el-input v-model="forms[site.id].password" show-password type="password">
               <template #prefix>
@@ -542,7 +582,7 @@ onMounted(() => {
             </el-input>
           </label>
 
-          <label v-if="!site.builtIn" class="pt-field">
+          <label v-if="usesApiToken(forms[site.id].adapter)" class="pt-field">
             <span class="pt-field__label">{{ t('accounts.fields.apiToken') }}</span>
             <el-input v-model="forms[site.id].apiToken">
               <template #prefix>

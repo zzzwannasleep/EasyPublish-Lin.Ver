@@ -23,7 +23,6 @@ type BTHandlers = {
   getTorrentList: () => Asyncish<unknown>
   checkLoginStatus: (msg: string) => Asyncish<unknown>
   getAccountInfo: (msg: string) => Asyncish<unknown>
-  getAcgnXAPIConfig: () => Asyncish<unknown>
   publish: (msg: string) => Asyncish<unknown>
   getBangumiTags: (msg: string) => Asyncish<unknown>
   searchBangumiTags: (msg: string) => Asyncish<unknown>
@@ -37,7 +36,6 @@ type BTHandlers = {
   removeValidation: () => Asyncish<void>
   exportCookies: (msg: string) => Asyncish<void>
   importCookies: (msg: string) => Asyncish<void>
-  saveAcgnXAPIConfig: (msg: string) => Asyncish<void>
 }
 
 type ForumHandlers = {
@@ -125,7 +123,6 @@ export function registerIpcHandlers({ Global, BT, Forum, Project, Site, Log, Tas
   ipcMain.handle('BT_getTorrentList', () => BT.getTorrentList())
   ipcMain.handle('BT_checkLoginStatus', (_event, msg) => BT.checkLoginStatus(msg))
   ipcMain.handle('BT_getAccountInfo', (_event, msg) => BT.getAccountInfo(msg))
-  ipcMain.handle('BT_getAcgnXAPIConfig', () => BT.getAcgnXAPIConfig())
   ipcMain.handle('BT_publish', (_event, msg) => BT.publish(msg))
   ipcMain.handle('BT_getBangumiTags', (_event, msg) => BT.getBangumiTags(msg))
   ipcMain.handle('BT_searchBangumiTags', (_event, msg) => BT.searchBangumiTags(msg))
@@ -194,7 +191,6 @@ export function registerIpcHandlers({ Global, BT, Forum, Project, Site, Log, Tas
   ipcMain.on('BT_removeValidation', () => BT.removeValidation())
   ipcMain.on('BT_exportCookies', (_event, msg) => BT.exportCookies(msg))
   ipcMain.on('BT_importCookies', (_event, msg) => BT.importCookies(msg))
-  ipcMain.on('BT_saveAcgnXAPIConfig', (_event, msg) => BT.saveAcgnXAPIConfig(msg))
 
   ipcMain.on('task_removeTask', (_event, msg) => Task.removeTask(msg))
   ipcMain.on('task_setTaskProcess', (_event, msg) => Task.setTaskProcess(msg))

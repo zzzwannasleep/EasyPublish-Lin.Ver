@@ -63,9 +63,10 @@ declare namespace Config {
   type PTSiteConfig = {
     id: string
     name: string
-    adapter: 'nexusphp' | 'unit3d'
+    adapter: 'acgnx' | 'nexusphp' | 'unit3d'
     baseUrl: string
     enabled: boolean
+    apiUid?: string
     username: string
     password: string
     apiToken?: string

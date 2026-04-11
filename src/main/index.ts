@@ -241,12 +241,6 @@ namespace BT {
   export async function clearStorage() {
     return btAccountService.clearStorage()
   }
-  export async function getAcgnXAPIConfig() {
-    return btAccountService.getAcgnXAPIConfig()
-  }
-  export async function saveAcgnXAPIConfig(msg: string) {
-    return btAccountService.saveAcgnXAPIConfig(msg)
-  }
   export async function exportCookies(msg: string) {
     return btAccountService.exportCookies(msg)
   }
