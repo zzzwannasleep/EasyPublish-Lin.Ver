@@ -3,17 +3,13 @@ export interface IElectronAPI {
 
 export interface GlobalAPI {
   winHandle: (msg: string) => void
-  getConfigName: () => Promise<string>
   getProxyConfig: () => Promise<string>
   setProxyConfig: (config: string) => void
   getFilePath: (msg: string) => Promise<string>
   getFilePaths: (msg: string) => Promise<string>
   getFolderPath: () => Promise<string>
   openFolder: (msg: string) => void
-  changeConfig: () => void
-  createConfig: () => void
   writeClipboard: (msg: string) => void
-  setConfigName: (msg: string) => void
   readFileContent: () => Promise<string>
   html2markdown: (msg: string) => Promise<string>
   html2bbcode: (msg: string) => Promise<string>
@@ -40,8 +36,6 @@ export interface BTAPI {
 }
 
 export interface ForumAPI {
-  saveAccountInfo: (msg: string) => Promise<unknown>
-  getAccountInfo: () => Promise<string>
   searchPosts: (msg: string) => Promise<string>
   publish: (msg: string) => Promise<string>
   rsPublish: (msg: string) => Promise<string>

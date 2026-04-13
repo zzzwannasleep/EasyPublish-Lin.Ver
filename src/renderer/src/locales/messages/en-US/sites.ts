@@ -156,6 +156,11 @@ const sites = {
     'This adapter uses the shared title, description, and torrent file above. Bangumi category, publish identity, optional tags, BT sync key, and team sync are configured below.',
   'nexus.site.bangumiOptionalHint':
     'Choose personal or team publishing in the required fields above. Tags and BT sync key are optional; team sync is only available when publishing as a team.',
+  'sites.form.anonymousPost': 'Anonymous Publish',
+  'sites.form.teamPost': 'Alliance Publish',
+  'sites.values.teamPublish': 'Alliance Publish',
+  'nexus.site.sharedFieldsAcgnxArchive':
+    'This adapter uses the shared title, description, and torrent file above. Category, anonymous publish, and alliance publish can be configured below.',
 } as const
 
 export default sites

@@ -42,6 +42,20 @@ const ACGNX_FIELD_SCHEMAS: SiteFieldSchemaEntry[] = [
       value: option.value,
     })),
   },
+  {
+    key: 'anonymousPost',
+    labelKey: 'sites.form.anonymousPost',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.acgnxAnonymousPostHelp',
+    control: 'checkbox',
+    mode: 'optional',
+  },
+  {
+    key: 'teamPost',
+    labelKey: 'sites.form.teamPost',
+    helpKey: 'seriesWorkspace.profileEditor.siteFields.acgnxTeamPostHelp',
+    control: 'checkbox',
+    mode: 'optional',
+  },
 ]
 
 interface AcgnxApiResponse {
@@ -76,6 +90,10 @@ function toPositiveNumber(value: unknown): number | undefined {
 
 function toStringValue(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined
+}
+
+function toBoolean(value: unknown) {
+  return value === true || value === 'true' || value === '1' || value === 1
 }
 
 function parseAcgnxResponse(payload: unknown): AcgnxApiResponse | undefined {
@@ -177,6 +195,8 @@ function parseDraft(profile: SiteProfile, payload: Record<string, unknown>): Sit
   const description = typeof payload.description === 'string' ? payload.description : ''
   const torrentPath = toStringValue(payload.torrentPath)
   const typeId = resolveSortId(profile, payload)
+  const hasExplicitAnonymousPost = 'anonymousPost' in payload || 'Anonymous_Post' in payload
+  const hasExplicitTeamPost = 'teamPost' in payload || 'Team_Post' in payload
 
   if (!title || !torrentPath || !typeId) {
     throw new Error('AcgnX publish draft is incomplete')
@@ -191,9 +211,11 @@ function parseDraft(profile: SiteProfile, payload: Record<string, unknown>): Sit
     description,
     torrentPath,
     anonymous: payload.anonymous === true,
+    anonymousPost: hasExplicitAnonymousPost ? toBoolean(payload.anonymousPost ?? payload.Anonymous_Post) : toBoolean(payload.anonymous),
     url: toStringValue(payload.url),
     emuleResource: toStringValue(payload.emuleResource),
     btSyncKey: toStringValue(payload.btSyncKey),
+    teamPost: hasExplicitTeamPost ? toBoolean(payload.teamPost ?? payload.Team_Post) : false,
     subCategories: {},
   }
 }
@@ -283,8 +305,8 @@ export function createAcgnxAdapter(): SiteAdapter {
       formData.append('bt_file', new Blob([torrent], { type: 'application/x-bittorrent' }), basename(draft.torrentPath))
       formData.append('title', draft.title)
       formData.append('intro', draft.description)
-      formData.append('Anonymous_Post', draft.anonymous ? '1' : '0')
-      formData.append('Team_Post', draft.anonymous ? '0' : '1')
+      formData.append('Anonymous_Post', draft.anonymousPost ? '1' : '0')
+      formData.append('Team_Post', draft.teamPost ? '1' : '0')
       formData.append('uid', apiUid)
       formData.append('api_token', apiToken)
 

@@ -799,6 +799,10 @@ const workflow = {
   'seriesWorkspace.future.text': 'Next, this workspace can grow batch helpers like inherit-from-previous and preset-generated 1080p/2160p subtitle variants.',
   'seriesWorkspace.publish.title': 'Current Flow',
   'seriesWorkspace.publish.text': 'It still uses the short Edit -> Torrent Publish -> Completion flow. Once a variant is loaded, editor saves now sync back to that active variant automatically.',
+  'seriesWorkspace.profileEditor.siteFields.acgnxAnonymousPostHelp':
+    'Prefill MoRi Anime Anonymous_Post. Enable it when this site should publish anonymously by default.',
+  'seriesWorkspace.profileEditor.siteFields.acgnxTeamPostHelp':
+    'Prefill MoRi Anime Team_Post. Enable it when this site should publish under the alliance identity by default.',
 } as const
 
 export default workflow

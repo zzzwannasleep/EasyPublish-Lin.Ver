@@ -716,6 +716,10 @@ const workflow = {
   'seriesWorkspace.variants.card.titleEmpty': '沿用当前草稿标题',
   'seriesWorkspace.profileEditor.siteFields.anibtNotesHelp':
     '\u4e3a Anibt \u9884\u586b\u53d1\u5e03\u9875\u8bf4\u660e\u3002\u82e5\u7559\u7a7a\uff0c\u53d1\u5e03\u65f6\u4ecd\u4f1a\u6cbf\u7528\u9879\u76ee\u5171\u4eab\u6b63\u6587\u8f6c\u6210\u7684 Markdown notes\u3002',
+  'seriesWorkspace.profileEditor.siteFields.acgnxAnonymousPostHelp':
+    '\u9884\u586b\u672b\u65e5\u52a8\u6f2b Anonymous_Post\uff0c\u5f00\u542f\u540e\u9ed8\u8ba4\u4ee5\u533f\u540d\u540d\u4e49\u53d1\u5e03\u3002',
+  'seriesWorkspace.profileEditor.siteFields.acgnxTeamPostHelp':
+    '\u9884\u586b\u672b\u65e5\u52a8\u6f2b Team_Post\uff0c\u5f00\u542f\u540e\u9ed8\u8ba4\u4ee5\u8054\u76df\u540d\u4e49\u53d1\u5e03\u3002',
 } as const
 
 export default workflow

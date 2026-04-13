@@ -4,7 +4,6 @@ type Asyncish<T = unknown> = T | Promise<T>
 
 type GlobalHandlers = {
   getProxyConfig: () => Asyncish<unknown>
-  getConfigName: () => Asyncish<unknown>
   getFilePath: (msg: string) => Asyncish<unknown>
   getFilePaths: (msg: string) => Asyncish<unknown>
   getFolderPath: () => Asyncish<unknown>
@@ -14,9 +13,6 @@ type GlobalHandlers = {
   setProxyConfig: (msg: string) => Asyncish<void>
   openFolder: (msg: string) => Asyncish<void>
   writeClipboard: (msg: string) => Asyncish<void>
-  setConfigName: (msg: string) => Asyncish<void>
-  changeConfig: () => Asyncish<void>
-  createConfig: () => Asyncish<void>
 }
 
 type BTHandlers = {
@@ -38,11 +34,9 @@ type BTHandlers = {
 }
 
 type ForumHandlers = {
-  getAccountInfo: () => Asyncish<unknown>
   searchPosts: (msg: string) => Asyncish<unknown>
   publish: (msg: string) => Asyncish<unknown>
   rsPublish: (msg: string) => Asyncish<unknown>
-  saveAccountInfo: (msg: string) => Asyncish<void>
 }
 
 type ProjectHandlers = {
@@ -113,7 +107,6 @@ type IpcHandlerRegistry = {
 
 export function registerIpcHandlers({ Global, BT, Forum, Project, Site, Log, Task }: IpcHandlerRegistry): void {
   ipcMain.handle('global_getProxyConfig', () => Global.getProxyConfig())
-  ipcMain.handle('global_getConfigName', () => Global.getConfigName())
   ipcMain.handle('global_getFilePath', (_event, msg) => Global.getFilePath(msg))
   ipcMain.handle('global_getFilePaths', (_event, msg) => Global.getFilePaths(msg))
   ipcMain.handle('global_getFolderPath', () => Global.getFolderPath())
@@ -131,8 +124,6 @@ export function registerIpcHandlers({ Global, BT, Forum, Project, Site, Log, Tas
   ipcMain.handle('BT_getTorrentDetail', (_event, msg) => BT.getTorrentDetail(msg))
   ipcMain.handle('BT_updateTorrent', (_event, msg) => BT.updateTorrent(msg))
 
-  ipcMain.handle('forum_getAccountInfo', () => Forum.getAccountInfo())
-  ipcMain.handle('forum_saveAccountInfo', (_event, msg) => Forum.saveAccountInfo(msg))
   ipcMain.handle('forum_searchPosts', (_event, msg) => Forum.searchPosts(msg))
   ipcMain.handle('forum_publish', (_event, msg) => Forum.publish(msg))
   ipcMain.handle('forum_rsPublish', (_event, msg) => Forum.rsPublish(msg))
@@ -183,9 +174,6 @@ export function registerIpcHandlers({ Global, BT, Forum, Project, Site, Log, Tas
   ipcMain.on('global_setProxyConfig', (_event, msg) => Global.setProxyConfig(msg))
   ipcMain.on('global_openFolder', (_event, msg) => Global.openFolder(msg))
   ipcMain.on('global_writeClipboard', (_event, msg) => Global.writeClipboard(msg))
-  ipcMain.on('global_setConfigName', (_event, msg) => Global.setConfigName(msg))
-  ipcMain.on('global_changeConfig', () => Global.changeConfig())
-  ipcMain.on('global_createConfig', () => Global.createConfig())
 
   ipcMain.on('BT_loginAccount', (_event, msg) => BT.loginAccount(msg))
   ipcMain.on('BT_openLoginWindow', (_event, msg) => BT.openLoginWindow(msg))

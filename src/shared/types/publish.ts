@@ -70,8 +70,10 @@ export interface SitePublishDraft {
   syncKey?: string
   btSyncKey?: string
   anonymous?: boolean
+  anonymousPost?: boolean
   complete?: boolean
   remake?: boolean
+  teamPost?: boolean
   teamSync?: boolean
   publishIdentity?: string
   bangumiTagIds?: string[]

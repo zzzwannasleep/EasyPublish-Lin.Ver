@@ -3,7 +3,6 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import {
   Connection,
   Delete,
-  FolderOpened,
   Key,
   Lock,
   RefreshRight,
@@ -14,7 +13,7 @@ import StatusChip from './feedback/StatusChip.vue'
 import { useI18n } from '../i18n'
 import { getSiteLabel } from '../services/project/presentation'
 import { siteBridge } from '../services/bridge/site'
-import type { SiteCatalogEntry, SiteId } from '../types/site'
+import type { SiteId } from '../types/site'
 import type { PtSiteRecord } from '../types/pt-site'
 import { legacyApiStatusText, normalizeLegacyAccountStatus } from '../../../shared/utils/legacy-account-status'
 
@@ -23,13 +22,11 @@ type LegacyAccountType = Exclude<SiteId, 'forum'>
 const props = withDefaults(
   defineProps<{
     siteIds?: LegacyAccountType[]
-    showSettings?: boolean
     titleKey?: string
     descriptionKey?: string
   }>(),
   {
     siteIds: undefined,
-    showSettings: true,
     titleKey: 'accounts.bt.title',
     descriptionKey: 'accounts.bt.description',
   },
@@ -49,8 +46,6 @@ type SiteAccount = {
 
 const { t } = useI18n()
 const isLoading = ref(false)
-const forumSite = ref<SiteCatalogEntry | null>(null)
-const forumAccountLoading = ref(false)
 
 const siteAccounts = reactive<SiteAccount[]>([
   {
@@ -153,11 +148,6 @@ const siteAccounts = reactive<SiteAccount[]>([
     index: 9,
   },
 ])
-
-const username = ref('')
-const password = ref('')
-const configName = ref('')
-
 function isAdapterManagedBtSite(siteId: LegacyAccountType): siteId is 'acgnx_a' | 'acgnx_g' {
   return siteId === 'acgnx_a' || siteId === 'acgnx_g'
 }
@@ -486,135 +476,8 @@ function clearStorage() {
   window.BTAPI.clearStorage()
 }
 
-async function loadForumSite() {
-  try {
-    const result = await siteBridge.getSite('forum')
-    forumSite.value = result.ok ? result.data.site : null
-  } catch {
-    forumSite.value = null
-  }
-}
-
-function getForumAccountTone(): 'neutral' | 'info' | 'success' | 'warning' | 'danger' {
-  switch (forumSite.value?.accountStatus) {
-    case 'authenticated':
-      return 'success'
-    case 'checking':
-      return 'info'
-    case 'unauthenticated':
-    case 'blocked':
-      return 'warning'
-    case 'error':
-      return 'danger'
-    default:
-      return 'neutral'
-  }
-}
-
-function getForumAccountLabel() {
-  switch (forumSite.value?.accountStatus) {
-    case 'authenticated':
-      return t('accounts.pt.account.authenticated')
-    case 'checking':
-      return t('accounts.pt.account.checking')
-    case 'unauthenticated':
-      return t('accounts.pt.account.unauthenticated')
-    case 'blocked':
-      return t('accounts.pt.account.blocked')
-    case 'error':
-      return t('accounts.pt.account.error')
-    default:
-      return t('accounts.pt.account.unknown')
-  }
-}
-
-function getForumAccountText() {
-  switch (forumSite.value?.accountStatus) {
-    case 'authenticated':
-      return forumSite.value.accountMessage || t('accounts.pt.account.authenticatedText')
-    case 'checking':
-      return forumSite.value.accountMessage || t('accounts.pt.account.checkingText')
-    case 'unauthenticated':
-      return forumSite.value.accountMessage || t('accounts.pt.account.unauthenticatedText')
-    case 'blocked':
-      return forumSite.value.accountMessage || t('accounts.pt.account.blockedText')
-    case 'error':
-      return forumSite.value.accountMessage || t('accounts.pt.account.errorText')
-    default:
-      return forumSite.value?.accountMessage || t('accounts.pt.account.unknownText')
-  }
-}
-
-function getForumLastCheckedLabel() {
-  return forumSite.value?.lastCheckAt || t('accounts.status.never')
-}
-
-async function saveForumAccountInfo(refreshStatus = true) {
-  const msg: Message.Forum.AccountInfo = {
-    username: username.value,
-    password: password.value,
-  }
-  await window.forumAPI.saveAccountInfo(JSON.stringify(msg))
-  if (refreshStatus) {
-    await loadForumSite()
-  }
-}
-
-async function getForumAccountInfo() {
-  const msg: Message.Forum.AccountInfo = JSON.parse(await window.forumAPI.getAccountInfo())
-  username.value = msg.username
-  password.value = msg.password
-}
-
-async function checkForumAccount() {
-  forumAccountLoading.value = true
-  try {
-    await saveForumAccountInfo(false)
-    const result = await siteBridge.validateAccount('forum')
-    if (!result.ok) {
-      ElMessage.error(result.error.message)
-      return
-    }
-
-    await loadForumSite()
-    if (result.data.status === 'authenticated') {
-      ElMessage.success(result.data.message || t('accounts.pt.account.authenticatedText'))
-      return
-    }
-
-    if (result.data.status === 'unauthenticated') {
-      ElMessage.warning(result.data.message || t('accounts.pt.account.unauthenticatedText'))
-      return
-    }
-
-    ElMessage.error(result.data.message || t('accounts.pt.account.errorText'))
-  } catch (error) {
-    ElMessage.error((error as Error).message)
-  } finally {
-    forumAccountLoading.value = false
-  }
-}
-
-async function getConfigName() {
-  const { name }: Message.Global.ConfigName = JSON.parse(await window.globalAPI.getConfigName())
-  configName.value = name
-}
-
-function setConfigName() {
-  const msg: Message.Global.ConfigName = { name: configName.value }
-  window.globalAPI.setConfigName(JSON.stringify(msg))
-}
-
-function changeConfig() {
-  window.globalAPI.changeConfig()
-}
-
-function createConfig() {
-  window.globalAPI.createConfig()
-}
-
 onMounted(() => {
-  void Promise.all([loadData(), getForumAccountInfo(), getConfigName(), loadForumSite()])
+  void loadData()
 })
 </script>
 
@@ -737,95 +600,6 @@ onMounted(() => {
       </article>
     </section>
 
-    <section v-if="showSettings" class="account-settings">
-      <article class="account-settings__card">
-        <header class="account-settings__header">
-          <div class="account-settings__header-main">
-            <div class="account-settings__icon">
-              <el-icon><UserFilled /></el-icon>
-            </div>
-            <div>
-              <h3 class="account-settings__title">{{ t('accounts.mainSite.title') }}</h3>
-              <p class="account-settings__text">{{ t('accounts.mainSite.description') }}</p>
-            </div>
-          </div>
-          <StatusChip :tone="getForumAccountTone()">
-            {{ getForumAccountLabel() }}
-          </StatusChip>
-        </header>
-
-        <div class="account-card__meta">
-          <article class="account-card__meta-card">
-            <div class="account-card__meta-label">
-              <el-icon><Timer /></el-icon>
-              <span>{{ t('accounts.fields.lastChecked') }}</span>
-            </div>
-            <div class="account-card__meta-value">{{ getForumLastCheckedLabel() }}</div>
-          </article>
-          <article class="account-card__meta-card">
-            <div class="account-card__meta-label">
-              <el-icon><Connection /></el-icon>
-              <span>{{ t('accounts.pt.fields.accountStatus') }}</span>
-            </div>
-            <div class="account-settings__text">{{ getForumAccountText() }}</div>
-          </article>
-        </div>
-
-        <div class="account-settings__form">
-          <label class="account-field">
-            <span class="account-field__label">{{ t('accounts.fields.username') }}</span>
-            <el-input
-              v-model="username"
-              :placeholder="t('accounts.mainSite.usernamePlaceholder')"
-              @blur="saveForumAccountInfo"
-            />
-          </label>
-
-          <label class="account-field">
-            <span class="account-field__label">{{ t('accounts.fields.appPassword') }}</span>
-            <el-input
-              v-model="password"
-              show-password
-              type="password"
-              :placeholder="t('accounts.mainSite.passwordPlaceholder')"
-              @blur="saveForumAccountInfo"
-            />
-          </label>
-        </div>
-
-        <footer class="account-settings__actions">
-          <el-button type="primary" :loading="forumAccountLoading" @click="checkForumAccount">
-            {{ t('accounts.pt.actions.checkAccount') }}
-          </el-button>
-        </footer>
-      </article>
-
-      <article class="account-settings__card">
-        <header class="account-settings__header">
-          <div class="account-settings__icon">
-            <el-icon><FolderOpened /></el-icon>
-          </div>
-          <div>
-            <h3 class="account-settings__title">{{ t('accounts.config.title') }}</h3>
-            <p class="account-settings__text">{{ t('accounts.config.description') }}</p>
-          </div>
-        </header>
-
-        <div class="account-settings__form">
-          <label class="account-field">
-            <span class="account-field__label">{{ t('accounts.fields.currentConfig') }}</span>
-            <el-input v-model="configName" :placeholder="t('accounts.config.placeholder')" @blur="setConfigName" />
-          </label>
-        </div>
-
-        <footer class="account-settings__actions">
-          <el-button plain @click="changeConfig">{{ t('accounts.actions.switchConfig') }}</el-button>
-          <el-button type="primary" plain @click="createConfig">
-            {{ t('accounts.actions.createConfig') }}
-          </el-button>
-        </footer>
-      </article>
-    </section>
   </div>
 </template>
 
@@ -838,11 +612,8 @@ onMounted(() => {
 
 .account-overview,
 .account-grid,
-.account-settings,
 .account-card__meta,
-.account-card__fields,
-.account-settings__form,
-.account-settings__nested-grid {
+.account-card__fields {
   display: grid;
   gap: 14px;
 }
@@ -854,9 +625,7 @@ onMounted(() => {
 .account-metric,
 .account-toolbar,
 .account-card,
-.account-settings__card,
-.account-card__meta-card,
-.account-settings__subcard {
+.account-card__meta-card {
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   background:
@@ -900,16 +669,14 @@ onMounted(() => {
   min-width: 0;
 }
 
-.account-toolbar__title,
-.account-settings__title {
+.account-toolbar__title {
   font-family: var(--font-display);
   font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.03em;
 }
 
-.account-toolbar__text,
-.account-settings__text {
+.account-toolbar__text {
   margin-top: 8px;
   color: var(--text-secondary);
   font-size: 14px;
@@ -917,8 +684,7 @@ onMounted(() => {
 }
 
 .account-toolbar__actions,
-.account-card__actions,
-.account-settings__actions {
+.account-card__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
@@ -996,72 +762,6 @@ onMounted(() => {
   box-shadow: var(--field-shadow);
 }
 
-.account-settings {
-  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
-}
-
-.account-settings__card {
-  display: grid;
-  gap: 16px;
-  padding: 20px;
-}
-
-.account-settings__card--wide {
-  grid-column: span 2;
-}
-
-.account-settings__header {
-  display: flex;
-  gap: 14px;
-  align-items: flex-start;
-}
-
-.account-settings__header-main {
-  display: flex;
-  gap: 14px;
-  align-items: flex-start;
-}
-
-.account-settings__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
-  background: var(--surface-brand-fill-strong);
-  color: var(--brand);
-  font-size: 18px;
-  flex: none;
-}
-
-.account-settings__toggle {
-  display: flex;
-  justify-content: flex-start;
-}
-
-.account-settings__nested-grid {
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-}
-
-.account-settings__subcard {
-  display: grid;
-  gap: 14px;
-  padding: 16px;
-}
-
-.account-settings__subcard-title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-}
-
-@media (max-width: 1100px) {
-  .account-settings__card--wide {
-    grid-column: span 1;
-  }
-}
-
 @media (max-width: 980px) {
   .account-toolbar,
   .account-card__head {
@@ -1077,25 +777,21 @@ onMounted(() => {
 @media (max-width: 720px) {
   .account-metric,
   .account-toolbar,
-  .account-card,
-  .account-settings__card {
+  .account-card {
     padding: 14px;
   }
 
-  .account-card__meta-card,
-  .account-settings__subcard {
+  .account-card__meta-card {
     padding: 12px;
   }
 
   .account-toolbar__actions,
-  .account-card__actions,
-  .account-settings__actions {
+  .account-card__actions {
     width: 100%;
   }
 
   .account-toolbar__actions :deep(.el-button),
-  .account-card__actions :deep(.el-button),
-  .account-settings__actions :deep(.el-button) {
+  .account-card__actions :deep(.el-button) {
     flex: 1 1 auto;
   }
 }

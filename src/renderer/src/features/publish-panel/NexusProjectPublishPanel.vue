@@ -59,6 +59,7 @@ interface SitePublishDraftForm {
   complete: boolean
   remake: boolean
   anonymous: boolean
+  anonymousPost: boolean
   personalRelease: boolean
   internal: boolean
   refundable: boolean
@@ -66,6 +67,7 @@ interface SitePublishDraftForm {
   doubleup: boolean
   sticky: boolean
   modQueueOptIn: boolean
+  teamPost: boolean
   sectionId?: number
   categoryId?: number
   typeId?: number
@@ -249,6 +251,10 @@ function isAcgnxSite(site: SiteCatalogEntry) {
   return site.adapter === 'acgnx'
 }
 
+function isAcgnxArchiveSite(site: SiteCatalogEntry) {
+  return site.id === 'acgnx_a'
+}
+
 function supportsMetadata(site: SiteCatalogEntry) {
   return site.capabilitySet.metadata.sections
 }
@@ -352,7 +358,7 @@ function getSharedFieldText(site: SiteCatalogEntry) {
   }
 
   if (isAcgnxSite(site)) {
-    return t('nexus.site.sharedFieldsAcgnx')
+    return t(isAcgnxArchiveSite(site) ? 'nexus.site.sharedFieldsAcgnxArchive' : 'nexus.site.sharedFieldsAcgnx')
   }
 
   return t('nexus.site.sharedFields')
@@ -471,6 +477,7 @@ function createEmptyDraft(): SitePublishDraftForm {
     complete: false,
     remake: false,
     anonymous: false,
+    anonymousPost: false,
     personalRelease: false,
     internal: false,
     refundable: false,
@@ -478,6 +485,7 @@ function createEmptyDraft(): SitePublishDraftForm {
     doubleup: false,
     sticky: false,
     modQueueOptIn: false,
+    teamPost: false,
     sectionId: undefined,
     categoryId: undefined,
     typeId: undefined,
@@ -650,6 +658,7 @@ function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefa
   draft.emuleResource = readStoredString(siteFieldDefaults.emuleResource)
   draft.complete = readStoredBoolean(siteFieldDefaults.complete ?? siteFieldDefaults.completed)
   draft.remake = readStoredBoolean(siteFieldDefaults.remake)
+  draft.anonymousPost = readStoredBoolean(siteFieldDefaults.anonymousPost ?? siteFieldDefaults.Anonymous_Post)
   draft.bangumiId = readStoredNumber(siteFieldDefaults.bangumiId)
   draft.subtitleGroupId = readStoredNumber(siteFieldDefaults.subtitleGroupId)
   draft.publishGroupId = readStoredNumber(siteFieldDefaults.publishGroupId)
@@ -672,6 +681,7 @@ function applyStoredSiteFieldDefaults(draft: SitePublishDraftForm, siteFieldDefa
   draft.doubleup = readStoredBoolean(siteFieldDefaults.doubleup)
   draft.sticky = readStoredBoolean(siteFieldDefaults.sticky)
   draft.modQueueOptIn = readStoredBoolean(siteFieldDefaults.modQueueOptIn)
+  draft.teamPost = readStoredBoolean(siteFieldDefaults.teamPost ?? siteFieldDefaults.Team_Post)
 
   return draft
 }
@@ -1096,8 +1106,10 @@ function buildPublishInput(siteId: SiteId): SitePublishDraft {
   if (site?.adapter === 'acgnx') {
     return {
       ...baseInput,
+      anonymousPost: siteId === 'acgnx_a' ? draft.anonymousPost : undefined,
       categoryBangumi: draft.categoryBangumi.trim() || undefined,
       categoryCode: draft.categoryCode.trim() || undefined,
+      teamPost: siteId === 'acgnx_a' ? draft.teamPost : undefined,
       url: draft.url.trim() || undefined,
     }
   }
@@ -1648,6 +1660,26 @@ onMounted(() => {
                 </el-select>
                 <el-input-number v-else v-model="ensureDraft(site.id).typeId" :controls="false" :min="1" />
               </el-form-item>
+              <el-form-item v-if="isAcgnxArchiveSite(site)" :label="t('sites.form.anonymousPost')">
+                <el-radio-group v-model="ensureDraft(site.id).anonymousPost">
+                  <el-radio-button :label="false">
+                    {{ t('seriesWorkspace.profileEditor.siteFields.boolean.false') }}
+                  </el-radio-button>
+                  <el-radio-button :label="true">
+                    {{ t('seriesWorkspace.profileEditor.siteFields.boolean.true') }}
+                  </el-radio-button>
+                </el-radio-group>
+              </el-form-item>
+            </div>
+
+            <div v-if="isAcgnxArchiveSite(site)" class="nexus-form__grid">
+              <el-form-item :label="t('sites.form.teamPost')">
+                <el-radio-group v-model="ensureDraft(site.id).teamPost">
+                  <el-radio-button :label="false">{{ t('sites.values.personalPublish') }}</el-radio-button>
+                  <el-radio-button :label="true">{{ t('sites.values.teamPublish') }}</el-radio-button>
+                </el-radio-group>
+              </el-form-item>
+              <div />
             </div>
           </div>
 
