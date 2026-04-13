@@ -35,10 +35,17 @@ import type { SiteId } from '../../shared/types/site'
 import {
   applySeriesTitleTagTemplateVariables,
   composeSeriesPublishTitle,
+  matchSeriesTitlePattern,
+  normalizeMatchedSubtitleProfile,
+  normalizeMatchedVideoProfile,
   normalizeSeriesTitleMatchConfig,
   normalizeSeriesTitleTagMappings,
   resolveSeriesTitleMappedTagBindings,
+  renderSeriesEpisodeTemplate,
   renderSeriesTitleTemplate,
+  renderSeriesVariantTemplate,
+  resolveSeriesTitleDerivedFields,
+  resolveSeriesTitleDetectedVariables,
   stripTorrentExtension,
 } from '../../shared/utils/series-title-match'
 import { getNowFormatDate } from '../core/utils'
@@ -1128,33 +1135,181 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     return sanitized || fallback
   }
 
+  function normalizeMatchedResolutionValue(value: string) {
+    const normalizedValue = value.trim()
+    if (!normalizedValue) {
+      return ''
+    }
+
+    return /^\d{3,4}$/i.test(normalizedValue) ? `${normalizedValue}p` : normalizedValue
+  }
+
+  function detectSeriesSourceType(value: string) {
+    if (/\bweb[-_. ]?dl\b/i.test(value)) {
+      return 'WEB-DL'
+    }
+
+    if (/\bweb[-_. ]?rip\b/i.test(value)) {
+      return 'WEBRip'
+    }
+
+    if (/\b(?:blu[-_. ]?ray|bdrip|bdmv|bd)\b/i.test(value)) {
+      return 'BluRay'
+    }
+
+    if (/\bdvd(?:rip)?\b/i.test(value)) {
+      return 'DVD'
+    }
+
+    if (/\b(?:hdtv|tvrip|tv)\b/i.test(value)) {
+      return 'TV'
+    }
+
+    return ''
+  }
+
+  function detectSeriesVideoCodec(value: string) {
+    if (/\bav1\b/i.test(value)) {
+      return 'AV1'
+    }
+
+    if (/\b(?:hevc|x265|h\.?265)\b/i.test(value)) {
+      return 'HEVC'
+    }
+
+    if (/\b(?:avc|x264|h\.?264)\b/i.test(value)) {
+      return 'AVC'
+    }
+
+    return ''
+  }
+
+  function detectSeriesAudioCodec(value: string) {
+    if (/\bflac\b/i.test(value)) {
+      return 'FLAC'
+    }
+
+    if (/\baac\b/i.test(value)) {
+      return 'AAC'
+    }
+
+    if (/\bddp(?:\d(?:\.\d)?)?\b/i.test(value)) {
+      return 'DDP'
+    }
+
+    if (/\bac3\b/i.test(value)) {
+      return 'AC3'
+    }
+
+    if (/\bopus\b/i.test(value)) {
+      return 'Opus'
+    }
+
+    return ''
+  }
+
+  function looksLikeSeriesSubtitleText(value: string) {
+    return /(?:简繁|繁日|简日|繁中|简中|内封|内嵌|内挂|双语|chs|cht|jpn|jp|eng|english)/i.test(value)
+  }
+
+  function detectSeriesSubtitle(values: string[]) {
+    return values
+      .map(value => value.trim())
+      .find(value => value && looksLikeSeriesSubtitleText(value)) ?? ''
+  }
+
+  function extractBracketEpisodeLabel(fileName: string) {
+    return stripTorrentExtension(fileName).match(/\[\s*0*(\d{1,3}(?:v\d+)?)\s*\]/i)?.[1]?.trim() ?? ''
+  }
+
   function buildTitleMatchValues(config: SeriesTitleMatchConfig, filePath: string) {
     const fileName = basename(filePath)
-    const matched: Record<string, string> = {}
+    const detectedVariables = resolveSeriesTitleDetectedVariables(fileName)
+    const matchedPatternVariables = config.fileNamePattern?.trim()
+      ? matchSeriesTitlePattern(config.fileNamePattern, fileName)
+      : null
+    const matched: Record<string, string> = {
+      ...detectedVariables,
+      ...(matchedPatternVariables ?? {}),
+    }
     const titleTagBindings = resolveSeriesTitleMappedTagBindings(
       config.titleTagMappings,
       [fileName],
     )
     const titleTags = [...new Set(titleTagBindings.flatMap(binding => binding.labels))]
-    const titleVariables = applySeriesTitleTagTemplateVariables(matched, titleTagBindings)
+    const mappedVariables = applySeriesTitleTagTemplateVariables(matched, titleTagBindings)
+    const derivedFields = resolveSeriesTitleDerivedFields(mappedVariables)
+    const variableTexts = [...Object.values(mappedVariables), ...titleTagBindings.map(binding => binding.value)]
+      .map(value => value.trim())
+      .filter(Boolean)
+    const combinedText = variableTexts.join(' ')
+    const episodeLabel =
+      renderSeriesEpisodeTemplate(config.episodeTemplate, mappedVariables).trim() ||
+      derivedFields.episodeLabel ||
+      extractBracketEpisodeLabel(fileName)
+    const releaseTeam =
+      renderSeriesTitleTemplate(config.releaseTeamTemplate, mappedVariables).trim() || derivedFields.releaseTeam
+    const sourceType =
+      renderSeriesTitleTemplate(config.sourceTypeTemplate, mappedVariables).trim() ||
+      derivedFields.sourceType ||
+      detectSeriesSourceType(combinedText)
+    const resolution = normalizeMatchedResolutionValue(
+      renderSeriesTitleTemplate(config.resolutionTemplate, mappedVariables).trim() ||
+        derivedFields.resolution ||
+        (combinedText.match(/\b(2160|1080|720|480)\s*[pi]?\b/i)?.[1]?.trim() ?? ''),
+    )
+    const videoCodec =
+      renderSeriesTitleTemplate(config.videoCodecTemplate, mappedVariables).trim() ||
+      derivedFields.videoCodec ||
+      detectSeriesVideoCodec(combinedText)
+    const audioCodec =
+      renderSeriesTitleTemplate(config.audioCodecTemplate, mappedVariables).trim() ||
+      derivedFields.audioCodec ||
+      detectSeriesAudioCodec(combinedText)
+    const subtitle =
+      renderSeriesTitleTemplate(config.subtitleTemplate, mappedVariables).trim() ||
+      derivedFields.subtitle ||
+      detectSeriesSubtitle(variableTexts)
+    const resolutionToken = resolution.replace(/p$/i, '')
+    const templateVariables = {
+      ...mappedVariables,
+      ep: episodeLabel || mappedVariables.ep || mappedVariables.episode || '',
+      episode: episodeLabel || mappedVariables.episode || mappedVariables.ep || '',
+      team: releaseTeam || mappedVariables.team || mappedVariables.group || '',
+      releaseteam: releaseTeam || mappedVariables.releaseteam || mappedVariables.team || '',
+      source: sourceType || mappedVariables.source || '',
+      sourcetype: sourceType || mappedVariables.sourcetype || mappedVariables.source || '',
+      res: resolutionToken || mappedVariables.res || mappedVariables.resolution || '',
+      resolution: resolution || mappedVariables.resolution || mappedVariables.res || '',
+      video: videoCodec || mappedVariables.video || '',
+      videocodec: videoCodec || mappedVariables.videocodec || mappedVariables.video || '',
+      audio: audioCodec || mappedVariables.audio || '',
+      audiocodec: audioCodec || mappedVariables.audiocodec || mappedVariables.audio || '',
+      sub: subtitle || mappedVariables.sub || mappedVariables.subtitle || '',
+      subtitle: subtitle || mappedVariables.subtitle || mappedVariables.sub || '',
+    }
+    const variantName =
+      renderSeriesVariantTemplate(config.variantTemplate, templateVariables).trim() ||
+      [sourceType, resolution, videoCodec, audioCodec, subtitle].filter(Boolean).join(' / ')
+    const titleVariables = applySeriesTitleTagTemplateVariables(templateVariables, titleTagBindings)
     const title = renderSeriesTitleTemplate(config.titleTemplate, titleVariables)
 
     return {
       fileName,
-      variables: matched,
-      episodeLabel: '',
-      variantName: '',
+      variables: titleVariables,
+      episodeLabel,
+      variantName,
       title,
-      releaseTeam: '',
-      sourceType: '',
-      resolution: '',
-      videoCodec: '',
-      audioCodec: '',
-      subtitle: '',
+      releaseTeam,
+      sourceType,
+      resolution,
+      videoCodec,
+      audioCodec,
+      subtitle,
       titleTags,
       titleTagBindings,
-      videoProfile: undefined,
-      subtitleProfile: undefined,
+      videoProfile: normalizeMatchedVideoProfile(resolution || videoCodec || combinedText),
+      subtitleProfile: normalizeMatchedSubtitleProfile(subtitle || combinedText),
     }
   }
 
@@ -1665,7 +1820,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
         return JSON.stringify(
           fail(
             'SERIES_TITLE_MATCH_CONFIG_REQUIRED',
-            '\u8bf7\u5148\u586b\u5199\u6587\u4ef6\u540d\u5339\u914d\u6216\u6807\u9898\u6807\u7b7e\u6620\u5c04',
+            '\u8bf7\u5148\u586b\u5199\u4e3b\u6807\u9898\u6a21\u677f\u6216\u6807\u9898\u6807\u7b7e\u6620\u5c04',
           ),
         )
       }

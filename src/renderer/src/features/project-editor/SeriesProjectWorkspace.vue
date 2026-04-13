@@ -65,6 +65,7 @@ const storedTags = ref<Array<{ label: string; value: string }>>([])
 const isLoading = ref(false)
 const isSaving = ref(false)
 const isSavingTitleMatch = ref(false)
+const isImportingTitleTorrent = ref(false)
 const isPreparingReview = ref(false)
 const selectedEpisodeId = ref<number | null>(null)
 const loadError = ref('')
@@ -777,10 +778,10 @@ function openWorkingDirectory() {
   window.globalAPI.openFolder(JSON.stringify({ path: props.project.workingDirectory }))
 }
 
-async function saveTitleMatchConfig() {
+async function saveTitleMatchConfig(options?: { quiet?: boolean }) {
   const config = buildTitleMatchPayload()
   if (!config) {
-    ElMessage.warning('\u8bf7\u5148\u586b\u5199\u6587\u4ef6\u540d\u5339\u914d\u6216\u6807\u9898\u6807\u7b7e\u6620\u5c04')
+    ElMessage.warning('\u8bf7\u5148\u586b\u5199\u4e3b\u6807\u9898\u6a21\u677f\u6216\u6807\u9898\u6807\u7b7e\u6620\u5c04')
     return false
   }
 
@@ -797,7 +798,9 @@ async function saveTitleMatchConfig() {
     }
 
     applyWorkspace(result.data.workspace)
-    ElMessage.success('\u6807\u9898\u5339\u914d\u65b9\u6848\u5df2\u4fdd\u5b58')
+    if (!options?.quiet) {
+      ElMessage.success('\u6807\u9898\u5339\u914d\u65b9\u6848\u5df2\u4fdd\u5b58')
+    }
     return true
   } finally {
     isSavingTitleMatch.value = false
@@ -852,6 +855,87 @@ async function importTitleTagMappings() {
   }
 
   ElMessage.info('\u5bfc\u5165\u5b8c\u6210\uff0c\u4f46\u5f53\u524d\u9879\u76ee\u91cc\u5df2\u7ecf\u90fd\u6709\u8fd9\u4e9b\u6620\u5c04\u4e86')
+}
+
+async function importTorrentAndRecognizeTitle() {
+  const nextTitleMatchConfig = buildTitleMatchPayload()
+  if (!nextTitleMatchConfig) {
+    ElMessage.warning('\u8bf7\u5148\u586b\u5199\u4e3b\u6807\u9898\u6a21\u677f\u6216\u6807\u9898\u6807\u7b7e\u6620\u5c04')
+    return
+  }
+
+  if (isTitleMatchDirty.value) {
+    const savedTitleMatch = await saveTitleMatchConfig({ quiet: true })
+    if (!savedTitleMatch) {
+      return
+    }
+  }
+
+  if (activeVariant.value && isDirty.value) {
+    const savedDraft = await persistDraft({ quiet: true, refresh: false })
+    if (!savedDraft) {
+      return
+    }
+  }
+
+  const dialogResponse = await window.globalAPI.getFilePaths(JSON.stringify({ type: 'torrent' }))
+  const pickedPayload = JSON.parse(dialogResponse) as Message.Global.Paths
+  if (!pickedPayload.paths.length) {
+    return
+  }
+
+  const pickedTorrentPath = pickedPayload.paths[0]
+  isImportingTitleTorrent.value = true
+  try {
+    const importResult = await projectBridge.importSeriesMatchedTorrents({
+      projectId: props.id,
+      filePaths: pickedPayload.paths,
+      activateFirst: true,
+    })
+    if (!importResult.ok) {
+      ElMessage.error(importResult.error.message)
+      return
+    }
+
+    applyWorkspace(importResult.data.workspace)
+    if (importResult.data.activated) {
+      await loadDraftConfig()
+    } else {
+      form.torrentPath = pickedTorrentPath
+      form.titleOverride = ''
+    }
+
+    if (importResult.data.importedCount > 0) {
+      const summaryParts = [`\u5df2\u5bfc\u5165 ${importResult.data.importedCount} \u4e2a .torrent`]
+      if (importResult.data.createdEpisodeCount > 0) {
+        summaryParts.push(`\u65b0\u589e ${importResult.data.createdEpisodeCount} \u96c6`)
+      }
+      if (importResult.data.createdVariantCount > 0) {
+        summaryParts.push(`\u65b0\u5efa ${importResult.data.createdVariantCount} \u4e2a\u7248\u672c`)
+      }
+      if (importResult.data.updatedVariantCount > 0) {
+        summaryParts.push(`\u66f4\u65b0 ${importResult.data.updatedVariantCount} \u4e2a\u5df2\u6709\u7248\u672c`)
+      }
+      if (importResult.data.activated) {
+        summaryParts.push('\u5df2\u81ea\u52a8\u8f7d\u5165\u9996\u4e2a\u8bc6\u522b\u5230\u7684\u7248\u672c')
+      }
+      ElMessage.success(summaryParts.join('\uff0c'))
+    } else {
+      ElMessage.warning('\u6ca1\u6709\u8bc6\u522b\u51fa\u53ef\u5bfc\u5165\u7684 .torrent\uff0c\u8bf7\u68c0\u67e5\u6587\u4ef6\u540d\u662f\u5426\u80fd\u89e3\u6790\u51fa\u5206\u96c6\u6216\u7248\u672c\u4fe1\u606f')
+    }
+
+    if (importResult.data.unmatchedFiles.length) {
+      const preview = importResult.data.unmatchedFiles
+        .slice(0, 2)
+        .map(item => `${item.fileName}\uff1a${item.reason}`)
+        .join('\uff1b')
+      const extraCount = importResult.data.unmatchedFiles.length - 2
+      const suffix = extraCount > 0 ? `\uff0c\u53e6\u5916\u8fd8\u6709 ${extraCount} \u4e2a\u6587\u4ef6\u672a\u5c55\u5f00` : ''
+      ElMessage.warning(`\u6709 ${importResult.data.unmatchedFiles.length} \u4e2a .torrent \u672a\u8bc6\u522b\uff1a${preview}${suffix}`)
+    }
+  } finally {
+    isImportingTitleTorrent.value = false
+  }
 }
 
 function writeBangumiIdToSite(siteId: SiteId, bangumiId: number) {
@@ -1180,6 +1264,9 @@ onMounted(() => {
           <div class="series-studio__section-head">
             <div>
               <h3 class="series-studio__section-title">{{ '\u6807\u9898\u5339\u914d\u81ea\u52a8\u8bc6\u522b' }}</h3>
+              <p class="series-studio__site-text">
+                {{ '\u9009\u62e9\u4e00\u4e2a\u6216\u591a\u4e2a .torrent \u540e\uff0c\u4f1a\u6309\u6807\u9898\u6a21\u677f\u548c\u6620\u5c04\u8bcd\u81ea\u52a8\u5f52\u6863\u5230\u5bf9\u5e94\u5206\u96c6\uff0c\u5e76\u521b\u5efa\u6216\u66f4\u65b0\u7248\u672c\u3002' }}
+              </p>
             </div>
             <div class="series-studio__hero-meta">
               <StatusChip v-if="isTitleMatchDirty" tone="warning">{{ '\u5339\u914d\u65b9\u6848\u672a\u4fdd\u5b58' }}</StatusChip>
@@ -1257,6 +1344,9 @@ onMounted(() => {
 
           <div class="series-studio__match-actions">
             <el-button plain :loading="isSavingTitleMatch" @click="saveTitleMatchConfig">{{ '\u4fdd\u5b58\u5339\u914d\u65b9\u6848' }}</el-button>
+            <el-button type="primary" :loading="isImportingTitleTorrent" @click="importTorrentAndRecognizeTitle">
+              {{ '\u5bfc\u5165 .torrent \u81ea\u52a8\u8bc6\u522b\u5e76\u751f\u6210\u7248\u672c' }}
+            </el-button>
           </div>
         </article>
       </section>
@@ -1362,7 +1452,11 @@ onMounted(() => {
           </div>
 
           <div v-else class="series-studio__empty">
-            {{ selectedEpisode ? '\u8fd9\u4e00\u96c6\u8fd8\u6ca1\u6709\u7248\u672c\uff0c\u5148\u5bfc\u5165\u4e00\u4e2a\u79cd\u5b50\u3002' : '\u8fd8\u6ca1\u6709\u5267\u96c6\uff0c\u5148\u5bfc\u5165\u79cd\u5b50\u521b\u5efa\u7b2c\u4e00\u96c6\u3002' }}
+            {{
+              selectedEpisode
+                ? '\u8fd9\u4e00\u96c6\u8fd8\u6ca1\u6709\u7248\u672c\uff0c\u5bfc\u5165 .torrent \u540e\u4f1a\u6309\u6620\u5c04\u8bcd\u81ea\u52a8\u751f\u6210\u7248\u672c\u3002'
+                : '\u8fd8\u6ca1\u6709\u5267\u96c6\uff0c\u5148\u5bfc\u5165 .torrent\uff0c\u7cfb\u7edf\u4f1a\u6309\u6620\u5c04\u8bcd\u81ea\u52a8\u521b\u5efa\u7b2c\u4e00\u96c6\u548c\u5bf9\u5e94\u7248\u672c\u3002'
+            }}
           </div>
         </div>
       </section>
