@@ -1,6 +1,8 @@
 import type { ApiResult } from '../../types/api'
 import type {
   CreateProjectInput,
+  ExportSeriesTitleTagMappingsInput,
+  ImportSeriesTitleTagMappingsInput,
   ImportSeriesMatchedTorrentsInput,
   ProjectDetailPayload,
   ProjectListPayload,
@@ -10,6 +12,8 @@ import type {
   SeriesEpisodePayload,
   SeriesMatchedTorrentImportPayload,
   SeriesTitleMatchConfigPayload,
+  SeriesTitleTagMappingsExportPayload,
+  SeriesTitleTagMappingsImportPayload,
   SeriesVariantDraftInput,
   SeriesVariantPayload,
   SeriesWorkspacePayload,
@@ -65,6 +69,18 @@ export const projectBridge = {
 
   saveSeriesTitleMatchConfig(input: SaveSeriesTitleMatchConfigInput) {
     return parseResult<SeriesTitleMatchConfigPayload>(window.projectAPI.saveSeriesTitleMatchConfig(JSON.stringify(input)))
+  },
+
+  exportSeriesTitleTagMappings(input: ExportSeriesTitleTagMappingsInput) {
+    return parseResult<SeriesTitleTagMappingsExportPayload>(
+      window.projectAPI.exportSeriesTitleTagMappings(JSON.stringify(input)),
+    )
+  },
+
+  importSeriesTitleTagMappings(input: ImportSeriesTitleTagMappingsInput) {
+    return parseResult<SeriesTitleTagMappingsImportPayload>(
+      window.projectAPI.importSeriesTitleTagMappings(JSON.stringify(input)),
+    )
   },
 
   importSeriesMatchedTorrents(input: ImportSeriesMatchedTorrentsInput) {

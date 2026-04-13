@@ -55,6 +55,8 @@ export interface ProjectAPI {
   getSeriesWorkspace: (msg: string) => Promise<string>
   getSeriesEpisodeReviewBundle: (msg: string) => Promise<string>
   saveSeriesTitleMatchConfig: (msg: string) => Promise<string>
+  exportSeriesTitleTagMappings: (msg: string) => Promise<string>
+  importSeriesTitleTagMappings: (msg: string) => Promise<string>
   importSeriesMatchedTorrents: (msg: string) => Promise<string>
   duplicateSeriesVariant: (msg: string) => Promise<string>
   removeSeriesVariant: (msg: string) => Promise<string>

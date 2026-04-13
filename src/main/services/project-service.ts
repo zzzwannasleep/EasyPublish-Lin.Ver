@@ -5,6 +5,8 @@ import { fail, ok } from '../../shared/types/api'
 import type { PublishResult, PublishState } from '../../shared/types/publish'
 import type {
   CreateProjectInput,
+  ExportSeriesTitleTagMappingsInput,
+  ImportSeriesTitleTagMappingsInput,
   LegacyProjectType,
   MarkupFormat,
   ProjectMode,
@@ -20,6 +22,8 @@ import type {
   SaveSeriesTitleMatchConfigInput,
   ImportSeriesMatchedTorrentsInput,
   SeriesPublishProfileTemplateContext,
+  SeriesTitleTagMappingsExportPayload,
+  SeriesTitleTagMappingsImportPayload,
   SeriesVariantTemplateSubtitleProfile,
   SeriesVariantTemplateVideoProfile,
   SeriesVariantSubtitleProfile,
@@ -31,14 +35,10 @@ import type { SiteId } from '../../shared/types/site'
 import {
   applySeriesTitleTagTemplateVariables,
   composeSeriesPublishTitle,
-  matchSeriesTitlePattern,
-  normalizeMatchedSubtitleProfile,
-  normalizeMatchedVideoProfile,
   normalizeSeriesTitleMatchConfig,
+  normalizeSeriesTitleTagMappings,
   resolveSeriesTitleMappedTagBindings,
-  renderSeriesEpisodeTemplate,
   renderSeriesTitleTemplate,
-  renderSeriesVariantTemplate,
   stripTorrentExtension,
 } from '../../shared/utils/series-title-match'
 import { getNowFormatDate } from '../core/utils'
@@ -1119,81 +1119,42 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     return JSON.parse(fs.readFileSync(configPath, { encoding: 'utf-8' })) as Config.PublishConfig
   }
 
-  function buildTitleTagSourceTexts(payload: {
-    fileName?: string
-    variables?: Record<string, string>
-    episodeLabel?: string
-    variantName?: string
-    releaseTeam?: string
-    sourceType?: string
-    resolution?: string
-    videoCodec?: string
-    audioCodec?: string
-    subtitle?: string
-  }) {
-    return [
-      payload.fileName,
-      ...Object.values(payload.variables ?? {}),
-      payload.episodeLabel,
-      payload.variantName,
-      payload.releaseTeam,
-      payload.sourceType,
-      payload.resolution,
-      payload.videoCodec,
-      payload.audioCodec,
-      payload.subtitle,
-    ]
+  function sanitizeFileName(value: string | undefined, fallback: string) {
+    const sanitized = (value ?? '')
+      .trim()
+      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+      .replace(/\s+/g, ' ')
+      .trim()
+    return sanitized || fallback
   }
 
   function buildTitleMatchValues(config: SeriesTitleMatchConfig, filePath: string) {
     const fileName = basename(filePath)
-    const matched = matchSeriesTitlePattern(config.fileNamePattern, fileName)
-    if (!matched) {
-      return null
-    }
-
-    const episodeLabel = renderSeriesEpisodeTemplate(config.episodeTemplate, matched)
-    const variantName = renderSeriesVariantTemplate(config.variantTemplate, matched)
-    const sourceType = renderSeriesTitleTemplate(config.sourceTypeTemplate, matched)
-    const resolution = renderSeriesTitleTemplate(config.resolutionTemplate, matched)
-    const videoCodec = renderSeriesTitleTemplate(config.videoCodecTemplate, matched)
-    const audioCodec = renderSeriesTitleTemplate(config.audioCodecTemplate, matched)
-    const subtitle = renderSeriesTitleTemplate(config.subtitleTemplate, matched)
-    const releaseTeam = renderSeriesTitleTemplate(config.releaseTeamTemplate, matched)
+    const matched: Record<string, string> = {}
     const titleTagBindings = resolveSeriesTitleMappedTagBindings(
       config.titleTagMappings,
-      buildTitleTagSourceTexts({
-        fileName,
-        variables: matched,
-        episodeLabel,
-        variantName,
-        releaseTeam,
-        sourceType,
-        resolution,
-        videoCodec,
-        audioCodec,
-        subtitle,
-      }),
+      [fileName],
     )
+    const titleTags = [...new Set(titleTagBindings.flatMap(binding => binding.labels))]
     const titleVariables = applySeriesTitleTagTemplateVariables(matched, titleTagBindings)
     const title = renderSeriesTitleTemplate(config.titleTemplate, titleVariables)
 
     return {
       fileName,
       variables: matched,
-      episodeLabel,
-      variantName,
+      episodeLabel: '',
+      variantName: '',
       title,
-      releaseTeam,
-      sourceType,
-      resolution,
-      videoCodec,
-      audioCodec,
-      subtitle,
-      titleTags: titleTagBindings.flatMap(binding => binding.labels),
+      releaseTeam: '',
+      sourceType: '',
+      resolution: '',
+      videoCodec: '',
+      audioCodec: '',
+      subtitle: '',
+      titleTags,
       titleTagBindings,
-      videoProfile: normalizeMatchedVideoProfile(resolution),
-      subtitleProfile: normalizeMatchedSubtitleProfile(subtitle),
+      videoProfile: undefined,
+      subtitleProfile: undefined,
     }
   }
 
@@ -1262,6 +1223,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       videoCodec: values.videoCodec || normalizeOptionalString(content?.videoCodec),
       audioCodec: values.audioCodec || normalizeOptionalString(content?.audioCodec),
       variantName: values.variantName,
+      titleTags: values.titleTags,
     })
 
     return nextConfig
@@ -1699,8 +1661,13 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       }
 
       const titleMatchConfig = cloneSeriesTitleMatchConfig(input.config)
-      if (!titleMatchConfig?.fileNamePattern) {
-        return JSON.stringify(fail('SERIES_TITLE_MATCH_PATTERN_REQUIRED', '\u8bf7\u5148\u586b\u5199\u6587\u4ef6\u540d\u5339\u914d\u89c4\u5219'))
+      if (!titleMatchConfig) {
+        return JSON.stringify(
+          fail(
+            'SERIES_TITLE_MATCH_CONFIG_REQUIRED',
+            '\u8bf7\u5148\u586b\u5199\u6587\u4ef6\u540d\u5339\u914d\u6216\u6807\u9898\u6807\u7b7e\u6620\u5c04',
+          ),
+        )
       }
 
       const workspace = readSeriesWorkspace(project.id, task.path)
@@ -1723,6 +1690,116 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       dialog.showErrorBox('\u4fdd\u5b58\u6807\u9898\u5339\u914d\u5931\u8d25', (err as Error).message)
       return JSON.stringify(
         fail('SERIES_TITLE_MATCH_SAVE_FAILED', '\u65e0\u6cd5\u4fdd\u5b58\u6807\u9898\u5339\u914d\u65b9\u6848', (err as Error).message),
+      )
+    }
+  }
+
+  async function exportSeriesTitleTagMappings(msg: string) {
+    try {
+      const input: ExportSeriesTitleTagMappingsInput = JSON.parse(msg)
+      const { projectId } = input
+      const project = projectStore.getProjectById(projectId)
+      if (!project || project.projectMode !== 'episode') {
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `\u9879\u76ee ${projectId} \u4e0d\u662f\u5267\u96c6\u9879\u76ee`))
+      }
+
+      const mappings = normalizeSeriesTitleTagMappings(input.mappings) ?? []
+      if (!mappings.length) {
+        return JSON.stringify(fail('SERIES_TITLE_TAG_MAPPINGS_EMPTY', '\u8bf7\u5148\u6dfb\u52a0\u81f3\u5c11\u4e00\u6761\u6807\u9898\u6807\u7b7e\u6620\u5c04'))
+      }
+
+      const { canceled, filePath } = await dialog.showSaveDialog({
+        defaultPath: `${sanitizeFileName(project.name, 'series-project')}-title-tag-mappings.json`,
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      })
+      if (canceled || !filePath) {
+        const payload: SeriesTitleTagMappingsExportPayload = {
+          canceled: true,
+          exportedCount: 0,
+        }
+        return JSON.stringify(ok(payload))
+      }
+
+      const bundle = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        projectId,
+        projectName: project.name,
+        mappings: mappings.map(mapping => ({
+          keyword: mapping.keyword,
+          templateToken: mapping.templateToken,
+          label: mapping.label,
+        })),
+      }
+      fs.writeFileSync(filePath, JSON.stringify(bundle, null, 2), { encoding: 'utf-8' })
+
+      const payload: SeriesTitleTagMappingsExportPayload = {
+        filePath,
+        exportedCount: mappings.length,
+      }
+      return JSON.stringify(ok(payload))
+    } catch (err) {
+      dialog.showErrorBox('\u5bfc\u51fa\u6807\u9898\u6807\u7b7e\u6620\u5c04\u5931\u8d25', (err as Error).message)
+      return JSON.stringify(
+        fail(
+          'SERIES_TITLE_TAG_MAPPINGS_EXPORT_FAILED',
+          '\u65e0\u6cd5\u5bfc\u51fa\u6807\u9898\u6807\u7b7e\u6620\u5c04',
+          (err as Error).message,
+        ),
+      )
+    }
+  }
+
+  async function importSeriesTitleTagMappings(msg: string) {
+    try {
+      const input: ImportSeriesTitleTagMappingsInput = JSON.parse(msg)
+      const { projectId } = input
+      const project = projectStore.getProjectById(projectId)
+      if (!project || project.projectMode !== 'episode') {
+        return JSON.stringify(fail('PROJECT_MODE_MISMATCH', `\u9879\u76ee ${projectId} \u4e0d\u662f\u5267\u96c6\u9879\u76ee`))
+      }
+
+      const { canceled, filePaths } = await dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      })
+      if (canceled || !filePaths.length) {
+        const payload: SeriesTitleTagMappingsImportPayload = {
+          canceled: true,
+          importedCount: 0,
+          mappings: [],
+        }
+        return JSON.stringify(ok(payload))
+      }
+
+      const filePath = filePaths[0]
+      const parsed = JSON.parse(fs.readFileSync(filePath, { encoding: 'utf-8' })) as
+        | { mappings?: unknown }
+        | unknown[]
+      const mappings = normalizeSeriesTitleTagMappings(
+        Array.isArray(parsed) ? parsed : parsed?.mappings,
+      ) ?? []
+
+      if (!mappings.length) {
+        return JSON.stringify(
+          fail('SERIES_TITLE_TAG_MAPPINGS_INVALID', '\u5bfc\u5165\u6587\u4ef6\u91cc\u6ca1\u6709\u53ef\u7528\u7684\u6807\u9898\u6807\u7b7e\u6620\u5c04'),
+        )
+      }
+
+      const payload: SeriesTitleTagMappingsImportPayload = {
+        filePath,
+        importedCount: mappings.length,
+        mappings,
+      }
+      return JSON.stringify(ok(payload))
+    } catch (err) {
+      dialog.showErrorBox('\u5bfc\u5165\u6807\u9898\u6807\u7b7e\u6620\u5c04\u5931\u8d25', (err as Error).message)
+      return JSON.stringify(
+        fail(
+          'SERIES_TITLE_TAG_MAPPINGS_IMPORT_FAILED',
+          '\u65e0\u6cd5\u5bfc\u5165\u6807\u9898\u6807\u7b7e\u6620\u5c04',
+          (err as Error).message,
+        ),
       )
     }
   }
@@ -1752,9 +1829,9 @@ export function createProjectService(options: CreateProjectServiceOptions) {
       const timestamp = new Date().toISOString()
       const syncedWorkspace = syncActiveVariantDraft(task.path, readSeriesWorkspace(project.id, task.path), timestamp)
       const titleMatchConfig = cloneSeriesTitleMatchConfig(syncedWorkspace.titleMatchConfig)
-      if (!titleMatchConfig?.fileNamePattern) {
+      if (!titleMatchConfig) {
         return JSON.stringify(
-          fail('SERIES_TITLE_MATCH_NOT_CONFIGURED', '\u8bf7\u5148\u4fdd\u5b58\u6807\u9898\u5339\u914d\u65b9\u6848\uff0c\u518d\u5bfc\u5165 .torrent \u6587\u4ef6'),
+          fail('SERIES_TITLE_MATCH_NOT_CONFIGURED', '\u8bf7\u5148\u4fdd\u5b58\u4e3b\u6807\u9898\u6a21\u677f\u6216\u6807\u9898\u6807\u7b7e\u6620\u5c04\uff0c\u518d\u5bfc\u5165 .torrent \u6587\u4ef6'),
         )
       }
 
@@ -1795,7 +1872,7 @@ export function createProjectService(options: CreateProjectServiceOptions) {
           unmatchedFiles.push({
             path: filePath,
             fileName,
-            reason: '\u6807\u9898\u5339\u914d\u89c4\u5219\u6ca1\u6709\u547d\u4e2d\u8fd9\u4e2a\u6587\u4ef6\u540d',
+            reason: '\u6ca1\u6709\u4ece\u6587\u4ef6\u540d\u91cc\u8bc6\u522b\u51fa\u53ef\u7528\u4fe1\u606f',
           })
           continue
         }
@@ -2425,6 +2502,8 @@ export function createProjectService(options: CreateProjectServiceOptions) {
     getSeriesWorkspace,
     getSeriesEpisodeReviewBundle,
     saveSeriesTitleMatchConfig,
+    exportSeriesTitleTagMappings,
+    importSeriesTitleTagMappings,
     importSeriesMatchedTorrents,
     duplicateSeriesVariant,
     removeSeriesVariant,

@@ -11,6 +11,108 @@ const DEFAULT_TITLE_TAG_TEMPLATE = '<tags>'
 const DEFAULT_EPISODE_TEMPLATE = '<ep>'
 const DEFAULT_VARIANT_TEMPLATE = '<res>p-<sub>'
 const DEFAULT_OPTIONAL_EPISODE_LABEL = '1'
+const SERIES_SOURCE_PATTERNS: Array<{ value: string; pattern: RegExp }> = [
+  { value: 'WEB-DL', pattern: /\bweb[-_. ]?dl\b/i },
+  { value: 'WEBRip', pattern: /\bweb[-_. ]?rip\b/i },
+  { value: 'BluRay', pattern: /\b(?:blu[-_. ]?ray|bdrip|bdmv|bd)\b/i },
+  { value: 'DVD', pattern: /\bdvd(?:rip)?\b/i },
+  { value: 'TV', pattern: /\b(?:hdtv|tvrip|tv)\b/i },
+]
+const SERIES_VIDEO_PATTERNS: Array<{ value: string; pattern: RegExp }> = [
+  { value: 'AV1', pattern: /\bav1\b/i },
+  { value: 'HEVC', pattern: /\b(?:hevc|x265|h\.?265)\b/i },
+  { value: 'AVC', pattern: /\b(?:avc|x264|h\.?264)\b/i },
+]
+const SERIES_AUDIO_PATTERNS: Array<{ value: string; pattern: RegExp }> = [
+  { value: 'FLAC', pattern: /\bflac\b/i },
+  { value: 'AAC', pattern: /\baac\b/i },
+  { value: 'DDP', pattern: /\bddp(?:\d(?:\.\d)?)?\b/i },
+  { value: 'AC3', pattern: /\bac3\b/i },
+  { value: 'Opus', pattern: /\bopus\b/i },
+]
+const SERIES_SUBTITLE_PATTERNS: Array<{ value: string; pattern: RegExp }> = [
+  { value: '简繁日内封', pattern: /(?:简繁|chs[&+/_-]?cht).*(?:日|jpn|jp).*(?:内封|内嵌)|(?:内封|内嵌).*(?:简繁|chs[&+/_-]?cht).*(?:日|jpn|jp)/i },
+  { value: '简繁内封', pattern: /(?:简繁|chs[&+/_-]?cht).*(?:内封|内嵌)|(?:内封|内嵌).*(?:简繁|chs[&+/_-]?cht)/i },
+  { value: '简日双语', pattern: /(?:简|chs).*(?:日|jpn|jp)|(?:日|jpn|jp).*(?:简|chs)/i },
+  { value: '繁日双语', pattern: /(?:繁|cht).*(?:日|jpn|jp)|(?:日|jpn|jp).*(?:繁|cht)/i },
+  { value: '简中', pattern: /\bchs\b|简中|简体/i },
+  { value: '繁中', pattern: /\bcht\b|繁中|繁体/i },
+  { value: '日语', pattern: /\b(?:jpn|jp)\b|日语/i },
+  { value: '英语', pattern: /\b(?:eng|english)\b|英语/i },
+]
+
+function normalizeSeriesFileNameText(fileName: string) {
+  return stripTorrentExtension(fileName).replace(/[._]/g, ' ').trim()
+}
+
+function findSeriesPatternValue(
+  text: string,
+  patterns: Array<{ value: string; pattern: RegExp }>,
+) {
+  const matched = patterns.find(item => item.pattern.test(text))
+  return matched?.value ?? ''
+}
+
+function extractSeriesEpisodeLabelFromFileName(fileName: string) {
+  const text = normalizeSeriesFileNameText(fileName)
+  const patterns = [
+    /\b(?:ep|episode|e)\s*0*(\d{1,3}(?:v\d+)?)\b/i,
+    /第\s*0*(\d{1,3}(?:v\d+)?)\s*[话話集]/i,
+    /-\s*0*(\d{1,3}(?:v\d+)?)\s*(?=[\[(]|$)/i,
+  ]
+
+  for (const pattern of patterns) {
+    const matched = text.match(pattern)?.[1]?.trim()
+    if (matched) {
+      return matched
+    }
+  }
+
+  return ''
+}
+
+function extractSeriesReleaseTeamFromFileName(fileName: string) {
+  const matched = stripTorrentExtension(fileName).match(/^\[([^\]]+)\]/)?.[1]?.trim()
+  if (!matched) {
+    return ''
+  }
+
+  if (/\b(?:2160|1080|720|hevc|avc|aac|flac|web|bd|chs|cht)\b/i.test(matched)) {
+    return ''
+  }
+
+  return matched
+}
+
+function extractSeriesResolutionTokenFromFileName(fileName: string) {
+  const text = normalizeSeriesFileNameText(fileName)
+  return text.match(/\b(2160|1080|720|480)\s*[pi]?\b/i)?.[1]?.trim() ?? ''
+}
+
+function buildSeriesTitleDetectedVariables(fileName: string) {
+  const normalizedFileName = normalizeSeriesFileNameText(fileName)
+  const episodeLabel = extractSeriesEpisodeLabelFromFileName(fileName)
+  const releaseTeam = extractSeriesReleaseTeamFromFileName(fileName)
+  const sourceType = findSeriesPatternValue(normalizedFileName, SERIES_SOURCE_PATTERNS)
+  const resolution = extractSeriesResolutionTokenFromFileName(fileName)
+  const videoCodec = findSeriesPatternValue(normalizedFileName, SERIES_VIDEO_PATTERNS)
+  const audioCodec = findSeriesPatternValue(normalizedFileName, SERIES_AUDIO_PATTERNS)
+  const subtitle = findSeriesPatternValue(normalizedFileName, SERIES_SUBTITLE_PATTERNS)
+
+  return {
+    ep: episodeLabel,
+    episode: episodeLabel,
+    team: releaseTeam,
+    group: releaseTeam,
+    source: sourceType,
+    res: resolution,
+    resolution,
+    video: videoCodec,
+    audio: audioCodec,
+    sub: subtitle,
+    subtitle,
+  }
+}
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -40,7 +142,10 @@ function normalizeTitleTagTemplateToken(value: unknown, fallback = DEFAULT_TITLE
   return fallback
 }
 
-function normalizeTitleTagMappings(value: unknown, legacyTemplateToken = DEFAULT_TITLE_TAG_TEMPLATE): SeriesTitleTagMapping[] | undefined {
+export function normalizeSeriesTitleTagMappings(
+  value: unknown,
+  legacyTemplateToken = DEFAULT_TITLE_TAG_TEMPLATE,
+): SeriesTitleTagMapping[] | undefined {
   if (!Array.isArray(value)) {
     return undefined
   }
@@ -56,6 +161,10 @@ function normalizeTitleTagMappings(value: unknown, legacyTemplateToken = DEFAULT
     .filter(item => item.keyword && item.label)
 
   return mappings.length ? mappings : undefined
+}
+
+function normalizeTitleTagMappings(value: unknown, legacyTemplateToken = DEFAULT_TITLE_TAG_TEMPLATE) {
+  return normalizeSeriesTitleTagMappings(value, legacyTemplateToken)
 }
 
 export function stripTorrentExtension(value: string) {
@@ -134,7 +243,11 @@ export function resolveSeriesTitleMappedTags(
   mappings: SeriesTitleTagMapping[] | undefined,
   texts: Array<string | undefined>,
 ) {
-  return resolveSeriesTitleMappedTagBindings(mappings, texts).flatMap(binding => binding.labels)
+  const labels = new Set<string>()
+  resolveSeriesTitleMappedTagBindings(mappings, texts).forEach(binding => {
+    binding.labels.forEach(label => labels.add(label))
+  })
+  return [...labels]
 }
 
 export function applySeriesTitleTagTemplateVariables(
@@ -203,6 +316,54 @@ export function renderSeriesTitleTemplate(template: string | undefined, variable
   return template.replace(TOKEN_PATTERN, (_match, token: string) => variables[token] ?? '').trim()
 }
 
+export function resolveSeriesTitleDetectedVariables(fileName: string) {
+  return Object.fromEntries(
+    Object.entries(buildSeriesTitleDetectedVariables(fileName)).filter(([, value]) => normalizeText(value)),
+  ) as Record<string, string>
+}
+
+function resolveSeriesTitleVariableValue(variables: Record<string, string>, aliases: string[]) {
+  const normalizedEntries = Object.entries(variables).map(([key, value]) => [key.trim().toLowerCase(), normalizeText(value)] as const)
+  for (const alias of aliases) {
+    const found = normalizedEntries.find(([key]) => key === alias.trim().toLowerCase())
+    if (found?.[1]) {
+      return found[1]
+    }
+  }
+  return ''
+}
+
+function normalizeSeriesResolutionValue(value: string) {
+  const normalizedValue = normalizeText(value)
+  if (!normalizedValue) {
+    return ''
+  }
+
+  return /^\d{3,4}$/i.test(normalizedValue) ? `${normalizedValue}p` : normalizedValue
+}
+
+export function resolveSeriesTitleDerivedFields(variables: Record<string, string>) {
+  const episodeLabel = resolveSeriesTitleVariableValue(variables, ['ep', 'episode', 'episodelabel', 'no'])
+  const releaseTeam = resolveSeriesTitleVariableValue(variables, ['team', 'releaseteam', 'group', 'fansub'])
+  const sourceType = resolveSeriesTitleVariableValue(variables, ['source', 'sourcetype'])
+  const resolution = normalizeSeriesResolutionValue(resolveSeriesTitleVariableValue(variables, ['res', 'resolution']))
+  const videoCodec = resolveSeriesTitleVariableValue(variables, ['video', 'videocodec', 'vcodec'])
+  const audioCodec = resolveSeriesTitleVariableValue(variables, ['audio', 'audiocodec', 'acodec'])
+  const subtitle = resolveSeriesTitleVariableValue(variables, ['sub', 'subtitle', 'subs'])
+  const variantName = [sourceType, resolution, videoCodec, audioCodec, subtitle].filter(Boolean).join(' / ')
+
+  return {
+    episodeLabel,
+    releaseTeam,
+    sourceType,
+    resolution,
+    videoCodec,
+    audioCodec,
+    subtitle,
+    variantName,
+  }
+}
+
 export function renderSeriesEpisodeTemplate(template: string | undefined, variables: Record<string, string>) {
   if (template === undefined) {
     return renderSeriesTitleTemplate(DEFAULT_EPISODE_TEMPLATE, variables)
@@ -226,17 +387,20 @@ export function composeSeriesPublishTitle(input: {
   videoCodec?: string
   audioCodec?: string
   variantName?: string
+  titleTags?: string[]
 }) {
   const releaseTeam = normalizeText(input.releaseTeam)
   const mainTitle = normalizeText(input.mainTitle)
   const seasonLabel = normalizeText(input.seasonLabel)
   const episodeLabel = normalizeText(input.episodeLabel)
+  const titleTagValue = renderSeriesTitleTagValue(input.titleTags)
   const techLabel = [
     normalizeText(input.sourceType),
     normalizeText(input.resolution),
     normalizeText(input.videoCodec),
     normalizeText(input.audioCodec),
     normalizeText(input.variantName),
+    titleTagValue,
   ]
     .filter(Boolean)
     .join(' / ')
@@ -279,7 +443,7 @@ export function normalizeSeriesTitleMatchConfig(value: unknown): SeriesTitleMatc
     updatedAt: normalizeText(raw.updatedAt) || undefined,
   }
 
-  return config.fileNamePattern ? config : undefined
+  return config.fileNamePattern || config.titleTemplate || config.titleTagMappings?.length ? config : undefined
 }
 
 export function normalizeMatchedVideoProfile(

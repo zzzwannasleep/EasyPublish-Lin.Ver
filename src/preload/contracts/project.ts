@@ -10,6 +10,10 @@ export const projectAPI = {
   getSeriesEpisodeReviewBundle: async (msg: string) =>
     await ipcRenderer.invoke('project_getSeriesEpisodeReviewBundle', msg),
   saveSeriesTitleMatchConfig: async (msg: string) => await ipcRenderer.invoke('project_saveSeriesTitleMatchConfig', msg),
+  exportSeriesTitleTagMappings: async (msg: string) =>
+    await ipcRenderer.invoke('project_exportSeriesTitleTagMappings', msg),
+  importSeriesTitleTagMappings: async (msg: string) =>
+    await ipcRenderer.invoke('project_importSeriesTitleTagMappings', msg),
   importSeriesMatchedTorrents: async (msg: string) => await ipcRenderer.invoke('project_importSeriesMatchedTorrents', msg),
   duplicateSeriesVariant: async (msg: string) => await ipcRenderer.invoke('project_duplicateSeriesVariant', msg),
   removeSeriesVariant: async (msg: string) => await ipcRenderer.invoke('project_removeSeriesVariant', msg),

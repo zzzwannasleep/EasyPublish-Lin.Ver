@@ -1,5 +1,7 @@
 export type {
   CreateProjectInput,
+  ExportSeriesTitleTagMappingsInput,
+  ImportSeriesTitleTagMappingsInput,
   ImportSeriesMatchedTorrentsInput,
   MarkupFormat,
   PublishTorrentEntry,
@@ -30,6 +32,8 @@ export type {
   SeriesTitleMatchConfig,
   SeriesTitleTagMapping,
   SeriesTitleMatchConfigPayload,
+  SeriesTitleTagMappingsExportPayload,
+  SeriesTitleTagMappingsImportPayload,
   SeriesProjectWorkspace,
   SeriesVariantSubtitleProfile,
   SeriesVariantDraftInput,

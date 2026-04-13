@@ -149,12 +149,12 @@ export type SeriesVariantTemplate = SeriesPublishProfile
 export interface SeriesTitleTagMapping {
   id?: string
   keyword: string
-  templateToken: string
   label: string
+  templateToken?: string
 }
 
 export interface SeriesTitleMatchConfig {
-  fileNamePattern: string
+  fileNamePattern?: string
   episodeTemplate?: string
   variantTemplate?: string
   titleTemplate?: string
@@ -193,6 +193,15 @@ export interface SeriesVariantDraftInput {
 export interface SaveSeriesTitleMatchConfigInput {
   projectId: number
   config: SeriesTitleMatchConfig
+}
+
+export interface ExportSeriesTitleTagMappingsInput {
+  projectId: number
+  mappings: SeriesTitleTagMapping[]
+}
+
+export interface ImportSeriesTitleTagMappingsInput {
+  projectId: number
 }
 
 export interface ImportSeriesMatchedTorrentsInput {
@@ -245,6 +254,19 @@ export interface SeriesVariantPayload {
 export interface SeriesTitleMatchConfigPayload {
   config: SeriesTitleMatchConfig
   workspace: SeriesProjectWorkspace
+}
+
+export interface SeriesTitleTagMappingsExportPayload {
+  canceled?: boolean
+  filePath?: string
+  exportedCount: number
+}
+
+export interface SeriesTitleTagMappingsImportPayload {
+  canceled?: boolean
+  filePath?: string
+  importedCount: number
+  mappings: SeriesTitleTagMapping[]
 }
 
 export interface SeriesMatchedTorrentImportIssue {

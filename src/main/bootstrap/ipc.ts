@@ -52,6 +52,8 @@ type ProjectHandlers = {
   getSeriesWorkspace: (msg: string) => Asyncish<unknown>
   getSeriesEpisodeReviewBundle: (msg: string) => Asyncish<unknown>
   saveSeriesTitleMatchConfig: (msg: string) => Asyncish<unknown>
+  exportSeriesTitleTagMappings: (msg: string) => Asyncish<unknown>
+  importSeriesTitleTagMappings: (msg: string) => Asyncish<unknown>
   importSeriesMatchedTorrents: (msg: string) => Asyncish<unknown>
   duplicateSeriesVariant: (msg: string) => Asyncish<unknown>
   removeSeriesVariant: (msg: string) => Asyncish<unknown>
@@ -141,6 +143,8 @@ export function registerIpcHandlers({ Global, BT, Forum, Project, Site, Log, Tas
   ipcMain.handle('project_getSeriesWorkspace', (_event, msg) => Project.getSeriesWorkspace(msg))
   ipcMain.handle('project_getSeriesEpisodeReviewBundle', (_event, msg) => Project.getSeriesEpisodeReviewBundle(msg))
   ipcMain.handle('project_saveSeriesTitleMatchConfig', (_event, msg) => Project.saveSeriesTitleMatchConfig(msg))
+  ipcMain.handle('project_exportSeriesTitleTagMappings', (_event, msg) => Project.exportSeriesTitleTagMappings(msg))
+  ipcMain.handle('project_importSeriesTitleTagMappings', (_event, msg) => Project.importSeriesTitleTagMappings(msg))
   ipcMain.handle('project_importSeriesMatchedTorrents', (_event, msg) => Project.importSeriesMatchedTorrents(msg))
   ipcMain.handle('project_duplicateSeriesVariant', (_event, msg) => Project.duplicateSeriesVariant(msg))
   ipcMain.handle('project_removeSeriesVariant', (_event, msg) => Project.removeSeriesVariant(msg))

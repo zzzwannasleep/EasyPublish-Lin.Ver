@@ -7,14 +7,8 @@ import {
   applySeriesTitleTagTemplateVariables,
   composeSeriesPublishTitle,
   getDefaultSeriesTitleTagTemplate,
-  matchSeriesTitlePattern,
-  normalizeMatchedSubtitleProfile,
-  normalizeMatchedVideoProfile,
   resolveSeriesTitleMappedTagBindings,
-  renderSeriesEpisodeTemplate,
   renderSeriesTitleTemplate,
-  renderSeriesVariantTemplate,
-  stripTorrentExtension,
 } from '../../../../shared/utils/series-title-match'
 
 const props = defineProps<{
@@ -26,16 +20,7 @@ const DEFAULT_TITLE_TAG_TEMPLATE = getDefaultSeriesTitleTagTemplate()
 let mappingSeed = 0
 
 const form = reactive<SeriesTitleMatchConfig>({
-  fileNamePattern: '',
-  episodeTemplate: '<ep>',
-  variantTemplate: '<res>p-<sub>',
   titleTemplate: '',
-  releaseTeamTemplate: '',
-  sourceTypeTemplate: '<source>',
-  resolutionTemplate: '<res>p',
-  videoCodecTemplate: '<video>',
-  audioCodecTemplate: '<audio>',
-  subtitleTemplate: '<sub>',
   titleTagMappings: [],
   targetSites: [],
 })
@@ -68,65 +53,27 @@ function showPreviewOnlyMessage(action: string) {
 
 const preview = computed(() => {
   const currentFileName = props.torrentPath?.trim() ? getFileName(props.torrentPath.trim()) : ''
-  if (!form.fileNamePattern || !currentFileName) {
+  if (!currentFileName) {
     return null
   }
 
-  const variables = matchSeriesTitlePattern(form.fileNamePattern, currentFileName)
-  if (!variables) {
-    return { fileName: currentFileName, matched: false as const }
-  }
-
-  const episodeLabel = renderSeriesEpisodeTemplate(form.episodeTemplate, variables)
-  const variantName = renderSeriesVariantTemplate(form.variantTemplate, variables)
-  const sourceType = renderSeriesTitleTemplate(form.sourceTypeTemplate, variables)
-  const resolution = renderSeriesTitleTemplate(form.resolutionTemplate, variables)
-  const videoCodec = renderSeriesTitleTemplate(form.videoCodecTemplate, variables)
-  const audioCodec = renderSeriesTitleTemplate(form.audioCodecTemplate, variables)
-  const subtitle = renderSeriesTitleTemplate(form.subtitleTemplate, variables)
-  const releaseTeam = renderSeriesTitleTemplate(form.releaseTeamTemplate, variables)
-  const titleTagBindings = resolveSeriesTitleMappedTagBindings(form.titleTagMappings, [
-    currentFileName,
-    ...Object.values(variables),
-    episodeLabel,
-    variantName,
-    releaseTeam,
-    sourceType,
-    resolution,
-    videoCodec,
-    audioCodec,
-    subtitle,
-  ])
+  const variables: Record<string, string> = {}
+  const titleTagBindings = resolveSeriesTitleMappedTagBindings(form.titleTagMappings, [currentFileName])
+  const titleTags = [...new Set(titleTagBindings.flatMap(binding => binding.labels))]
   const titleVariables = applySeriesTitleTagTemplateVariables(variables, titleTagBindings)
   const title = renderSeriesTitleTemplate(form.titleTemplate, titleVariables)
   const suggestedTitle =
     title ||
     composeSeriesPublishTitle({
-      releaseTeam,
+      releaseTeam: '',
       mainTitle: props.projectName,
       seasonLabel: '',
-      episodeLabel,
-      sourceType,
-      resolution,
-      videoCodec,
-      audioCodec,
-      variantName: variantName || stripTorrentExtension(currentFileName),
+      titleTags,
     })
 
   return {
     fileName: currentFileName,
-    matched: true as const,
-    episodeLabel,
-    variantName: variantName || stripTorrentExtension(currentFileName),
-    sourceType,
-    resolution,
-    videoCodec,
-    audioCodec,
-    subtitle,
-    videoProfile: normalizeMatchedVideoProfile(resolution),
-    subtitleProfile: normalizeMatchedSubtitleProfile(subtitle),
-    titleTags: titleTagBindings.flatMap(binding => binding.labels),
-    titleTagBindings,
+    titleTags,
     title,
     suggestedTitle,
   }
@@ -138,41 +85,23 @@ const preview = computed(() => {
     <div class="preview-head">
       <div>
         <h3 class="preview-title">标题匹配自动识别</h3>
-        <p class="preview-text">先完整摆一份剧集工作台的标题匹配区，方便你直接看合集 / 电影模式要不要也按这套方式组织。</p>
+        <p class="preview-text">只保留主标题模板，标题标签完全靠映射词命中，不再自动拆文件名字段。</p>
       </div>
       <StatusChip tone="warning">预览态</StatusChip>
     </div>
 
     <div class="preview-grid">
       <label class="field field--wide">
-        <span class="field-label">文件名匹配</span>
-        <el-input v-model="form.fileNamePattern" placeholder="[Group] Movie Title - <ep> [<source>][<res>P][<video>][<sub>]" />
-      </label>
-      <label class="field">
-        <span class="field-label">分集模板</span>
-        <el-input v-model="form.episodeTemplate" placeholder="<ep>" />
-      </label>
-      <label class="field">
-        <span class="field-label">版本模板</span>
-        <el-input v-model="form.variantTemplate" placeholder="<res>p-<sub>" />
-      </label>
-      <label class="field field--wide">
         <span class="field-label">主标题模板</span>
-        <el-input v-model="form.titleTemplate" placeholder="[Group][片名][<source>][<res>P][<video>][<sub>]" />
+        <el-input v-model="form.titleTemplate" placeholder="[Group][片名][<subtag>][<misctag>]" />
       </label>
-      <label class="field"><span class="field-label">来源类型模板</span><el-input v-model="form.sourceTypeTemplate" placeholder="<source>" /></label>
-      <label class="field"><span class="field-label">分辨率模板</span><el-input v-model="form.resolutionTemplate" placeholder="<res>p" /></label>
-      <label class="field"><span class="field-label">字幕模板</span><el-input v-model="form.subtitleTemplate" placeholder="<sub>" /></label>
-      <label class="field"><span class="field-label">制作组模板</span><el-input v-model="form.releaseTeamTemplate" placeholder="<team>" /></label>
-      <label class="field"><span class="field-label">音频编码模板</span><el-input v-model="form.audioCodecTemplate" placeholder="<audio>" /></label>
-      <label class="field"><span class="field-label">视频编码模板</span><el-input v-model="form.videoCodecTemplate" placeholder="<video>" /></label>
     </div>
 
     <div class="card">
       <div class="preview-head">
         <div>
           <div class="field-label">标题标签映射</div>
-          <div class="preview-text">这里也先保留一整块，方便你判断合集 / 电影模式以后要不要把标签映射一起收进工作台。</div>
+          <div class="preview-text">每条规则都可以单独指定模板词，命中后会把标题标签写进对应模板词里。</div>
         </div>
         <el-button plain size="small" @click="addTitleTagMapping">新增映射</el-button>
       </div>
@@ -185,31 +114,18 @@ const preview = computed(() => {
           <el-button text type="danger" @click="removeTitleTagMapping(mapping.id)">删除</el-button>
         </div>
       </div>
-      <div v-else class="empty">暂时还没有映射规则，可以先加一条看看排布。</div>
+      <div v-else class="empty">暂时还没有映射规则，可以先加一条，例如 ASSx2 -> &lt;subtag&gt; -> 简繁日内封。</div>
     </div>
 
     <div v-if="preview" class="chips">
-      <template v-if="preview.matched">
-        <StatusChip tone="success">当前 torrent 可匹配</StatusChip>
-        <span class="preview-text">{{ preview.fileName }} -> {{ preview.episodeLabel || '??' }} / {{ preview.variantName }}</span>
-        <StatusChip v-if="preview.sourceType" tone="neutral">{{ preview.sourceType }}</StatusChip>
-        <StatusChip v-if="preview.resolution" tone="info">{{ preview.resolution }}</StatusChip>
-        <StatusChip v-if="preview.videoCodec" tone="info">{{ preview.videoCodec }}</StatusChip>
-        <StatusChip v-if="preview.audioCodec" tone="neutral">{{ preview.audioCodec }}</StatusChip>
-        <StatusChip v-if="preview.videoProfile" tone="info">{{ preview.videoProfile }}</StatusChip>
-        <StatusChip v-if="preview.subtitleProfile" tone="warning">{{ preview.subtitleProfile }}</StatusChip>
-        <StatusChip v-for="titleTag in preview.titleTags" :key="`${preview.fileName}-${titleTag}`" tone="success">{{ titleTag }}</StatusChip>
-        <span v-if="preview.suggestedTitle" class="preview-text">{{ preview.title ? '模板标题：' : '预览标题：' }}{{ preview.suggestedTitle }}</span>
-      </template>
-      <template v-else>
-        <StatusChip tone="danger">当前 torrent 未命中</StatusChip>
-        <span class="preview-text">{{ preview.fileName }} 没有命中文件名匹配规则。</span>
-      </template>
+      <StatusChip tone="success">当前 torrent 已识别</StatusChip>
+      <span class="preview-text">{{ preview.fileName }}</span>
+      <StatusChip v-for="titleTag in preview.titleTags" :key="`${preview.fileName}-${titleTag}`" tone="success">{{ titleTag }}</StatusChip>
+      <span v-if="preview.suggestedTitle" class="preview-text">{{ preview.title ? '模板标题：' : '预览标题：' }}{{ preview.suggestedTitle }}</span>
     </div>
 
     <div class="actions">
       <el-button plain @click="showPreviewOnlyMessage('标题匹配方案保存')">保存匹配方案</el-button>
-      <el-button type="primary" @click="showPreviewOnlyMessage('导入 .torrent 自动识别')">导入 .torrent 自动识别</el-button>
     </div>
   </section>
 </template>

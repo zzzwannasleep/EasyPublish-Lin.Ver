@@ -32,15 +32,11 @@ import {
   applySeriesTitleTagTemplateVariables,
   composeSeriesPublishTitle,
   getDefaultSeriesTitleTagTemplate,
-  matchSeriesTitlePattern,
-  normalizeMatchedSubtitleProfile,
-  normalizeMatchedVideoProfile,
   normalizeSeriesTitleMatchConfig,
+  normalizeSeriesTitleTagMappings as normalizeSharedTitleTagMappings,
   resolveSeriesTitleMappedTagBindings,
-  renderSeriesEpisodeTemplate,
+  resolveSeriesTitleMappedTags,
   renderSeriesTitleTemplate,
-  renderSeriesVariantTemplate,
-  stripTorrentExtension,
 } from '../../../../shared/utils/series-title-match'
 import SeriesRichTextEditor from './SeriesRichTextEditor.vue'
 
@@ -69,7 +65,6 @@ const storedTags = ref<Array<{ label: string; value: string }>>([])
 const isLoading = ref(false)
 const isSaving = ref(false)
 const isSavingTitleMatch = ref(false)
-const isImportingMatchedTorrents = ref(false)
 const isPreparingReview = ref(false)
 const selectedEpisodeId = ref<number | null>(null)
 const loadError = ref('')
@@ -84,16 +79,7 @@ const bangumiSearchError = ref('')
 const selectedBangumiSubject = ref<BangumiSubjectSearchItem | null>(null)
 
 const titleMatchForm = reactive<SeriesTitleMatchConfig>({
-  fileNamePattern: '',
-  episodeTemplate: '<ep>',
-  variantTemplate: '<res>p-<sub>',
   titleTemplate: '',
-  releaseTeamTemplate: '',
-  sourceTypeTemplate: '<source>',
-  resolutionTemplate: '<res>p',
-  videoCodecTemplate: '<video>',
-  audioCodecTemplate: '<audio>',
-  subtitleTemplate: '<sub>',
   titleTagMappings: [],
   targetSites: [],
 })
@@ -149,7 +135,29 @@ function createTitleTagMapping(value?: Partial<SeriesTitleTagMapping>): SeriesTi
 }
 
 function normalizeTitleTagMappings(value: SeriesTitleTagMapping[] | undefined) {
-  return (value ?? []).map(item => createTitleTagMapping(item))
+  return (normalizeSharedTitleTagMappings(value) ?? []).map(item => createTitleTagMapping(item))
+}
+
+function buildTitleTagMappingsPayload() {
+  return normalizeSharedTitleTagMappings(titleMatchForm.titleTagMappings) ?? []
+}
+
+function mergeTitleTagMappings(mappings: SeriesTitleTagMapping[]) {
+  const existingMappings = normalizeSharedTitleTagMappings(titleMatchForm.titleTagMappings) ?? []
+  const mergedMappings = [...existingMappings, ...(normalizeSharedTitleTagMappings(mappings) ?? [])]
+  const dedupedMappings: SeriesTitleTagMapping[] = []
+  const mappingKeys = new Set<string>()
+
+  mergedMappings.forEach(mapping => {
+    const key = `${mapping.keyword.trim().toLowerCase()}::${mapping.templateToken?.trim() || DEFAULT_TITLE_TAG_TEMPLATE}::${mapping.label.trim()}`
+    if (!key || mappingKeys.has(key)) {
+      return
+    }
+    mappingKeys.add(key)
+    dedupedMappings.push(createTitleTagMapping(mapping))
+  })
+
+  titleMatchForm.titleTagMappings = dedupedMappings
 }
 
 function sortSiteIds(siteIds: SiteId[]) {
@@ -379,30 +387,21 @@ function buildSiteFieldDefaultsPayload() {
 
 function normalizeTitleMatchForm(config?: SeriesTitleMatchConfig | null) {
   const normalized = normalizeSeriesTitleMatchConfig(config) ?? {
-    fileNamePattern: '',
-    episodeTemplate: '<ep>',
-    variantTemplate: '<res>p-<sub>',
     titleTemplate: '',
-    releaseTeamTemplate: '',
-    sourceTypeTemplate: '<source>',
-    resolutionTemplate: '<res>p',
-    videoCodecTemplate: '<video>',
-    audioCodecTemplate: '<audio>',
-    subtitleTemplate: '<sub>',
     titleTagMappings: [],
     targetSites: [],
   }
 
-  titleMatchForm.fileNamePattern = normalized.fileNamePattern
-  titleMatchForm.episodeTemplate = normalized.episodeTemplate ?? '<ep>'
-  titleMatchForm.variantTemplate = normalized.variantTemplate ?? '<res>p-<sub>'
+  titleMatchForm.fileNamePattern = undefined
   titleMatchForm.titleTemplate = normalized.titleTemplate ?? ''
-  titleMatchForm.releaseTeamTemplate = normalized.releaseTeamTemplate ?? ''
-  titleMatchForm.sourceTypeTemplate = normalized.sourceTypeTemplate ?? '<source>'
-  titleMatchForm.resolutionTemplate = normalized.resolutionTemplate ?? '<res>p'
-  titleMatchForm.videoCodecTemplate = normalized.videoCodecTemplate ?? '<video>'
-  titleMatchForm.audioCodecTemplate = normalized.audioCodecTemplate ?? '<audio>'
-  titleMatchForm.subtitleTemplate = normalized.subtitleTemplate ?? '<sub>'
+  titleMatchForm.episodeTemplate = undefined
+  titleMatchForm.variantTemplate = undefined
+  titleMatchForm.releaseTeamTemplate = undefined
+  titleMatchForm.sourceTypeTemplate = undefined
+  titleMatchForm.resolutionTemplate = undefined
+  titleMatchForm.videoCodecTemplate = undefined
+  titleMatchForm.audioCodecTemplate = undefined
+  titleMatchForm.subtitleTemplate = undefined
   titleMatchForm.titleTagMappings = normalizeTitleTagMappings(normalized.titleTagMappings)
   titleMatchForm.targetSites = sortSiteIds(normalized.targetSites ?? [])
   savedTitleMatchFingerprint.value = buildTitleMatchFingerprint()
@@ -418,13 +417,24 @@ function removeTitleTagMapping(mappingId: string | undefined) {
 
 function buildTitleMatchPayload() {
   return normalizeSeriesTitleMatchConfig({
-    ...titleMatchForm,
+    titleTemplate: titleMatchForm.titleTemplate,
+    titleTagMappings: buildTitleTagMappingsPayload(),
     targetSites: sortSiteIds(titleMatchForm.targetSites ?? []),
   })
 }
 
 function buildTitleMatchFingerprint() {
   return JSON.stringify(buildTitleMatchPayload() ?? {})
+}
+
+function resolveTitleTagsForFile(filePath: string | undefined) {
+  const currentFileName = filePath?.trim() ? getFileName(filePath.trim()) : ''
+  const mappings = buildTitleTagMappingsPayload()
+  if (!currentFileName || !mappings.length) {
+    return []
+  }
+
+  return resolveSeriesTitleMappedTags(mappings, [currentFileName])
 }
 
 const episodes = computed(() => workspace.value?.episodes ?? [])
@@ -487,112 +497,41 @@ const currentStructureLabel = computed(() =>
 const isDirty = computed(() => Boolean(draftConfig.value && activeVariant.value && buildDirtyFingerprint() !== savedFingerprint.value))
 const isTitleMatchDirty = computed(() => buildTitleMatchFingerprint() !== savedTitleMatchFingerprint.value)
 
-function buildTitleTagSourceTexts(payload: {
-  fileName?: string
-  variables?: Record<string, string>
-  episodeLabel?: string
-  variantName?: string
-  releaseTeam?: string
-  sourceType?: string
-  resolution?: string
-  videoCodec?: string
-  audioCodec?: string
-  subtitle?: string
-}) {
-  return [
-    payload.fileName,
-    ...Object.values(payload.variables ?? {}),
-    payload.episodeLabel,
-    payload.variantName,
-    payload.releaseTeam,
-    payload.sourceType,
-    payload.resolution,
-    payload.videoCodec,
-    payload.audioCodec,
-    payload.subtitle,
-  ]
-}
-
 const titleMatchPreview = computed(() => {
   const config = buildTitleMatchPayload()
   const currentFileName = form.torrentPath.trim() ? getFileName(form.torrentPath.trim()) : ''
-  if (!config?.fileNamePattern || !currentFileName) {
+  if (!config || !currentFileName) {
     return null
   }
 
-  const variables = matchSeriesTitlePattern(config.fileNamePattern, currentFileName)
-  if (!variables) {
-    return {
-      fileName: currentFileName,
-      matched: false as const,
-    }
-  }
-
-  const episodeLabel = renderSeriesEpisodeTemplate(config.episodeTemplate, variables)
-  const variantName = renderSeriesVariantTemplate(config.variantTemplate, variables)
-  const sourceType = renderSeriesTitleTemplate(config.sourceTypeTemplate, variables)
-  const resolution = renderSeriesTitleTemplate(config.resolutionTemplate, variables)
-  const videoCodec = renderSeriesTitleTemplate(config.videoCodecTemplate, variables)
-  const audioCodec = renderSeriesTitleTemplate(config.audioCodecTemplate, variables)
-  const subtitle = renderSeriesTitleTemplate(config.subtitleTemplate, variables)
-  const releaseTeam = renderSeriesTitleTemplate(config.releaseTeamTemplate, variables)
+  const variables: Record<string, string> = {}
   const titleTagBindings = resolveSeriesTitleMappedTagBindings(
     config.titleTagMappings,
-    buildTitleTagSourceTexts({
-      fileName: currentFileName,
-      variables,
-      episodeLabel,
-      variantName,
-      releaseTeam,
-      sourceType,
-      resolution,
-      videoCodec,
-      audioCodec,
-      subtitle,
-    }),
+    [currentFileName],
   )
+  const titleTags = [...new Set(titleTagBindings.flatMap(binding => binding.labels))]
   const titleVariables = applySeriesTitleTagTemplateVariables(variables, titleTagBindings)
   const title = renderSeriesTitleTemplate(config.titleTemplate, titleVariables)
   const suggestedTitle =
     title ||
     composeSeriesPublishTitle({
-      releaseTeam: releaseTeam || form.releaseTeam.trim(),
+      releaseTeam: form.releaseTeam.trim(),
       mainTitle: form.seriesTitleEN.trim() || form.seriesTitleCN.trim() || form.seriesTitleJP.trim() || props.project.name,
       seasonLabel: form.seasonLabel.trim(),
-      episodeLabel,
-      sourceType,
-      resolution,
-      videoCodec,
-      audioCodec,
-      variantName,
+      titleTags,
     })
 
   return {
     fileName: currentFileName,
-    matched: true as const,
-    variables,
-    episodeLabel,
-    variantName: variantName || stripTorrentExtension(currentFileName),
     title,
-    titleTags: titleTagBindings.flatMap(binding => binding.labels),
+    titleTags,
     titleTagBindings,
     suggestedTitle,
-    sourceType,
-    resolution,
-    videoCodec,
-    audioCodec,
-    subtitle,
-    videoProfile: normalizeMatchedVideoProfile(resolution),
-    subtitleProfile: normalizeMatchedSubtitleProfile(subtitle),
   }
 })
 
 const matchedTitleMatchPreview = computed(() =>
-  titleMatchPreview.value?.matched ? titleMatchPreview.value : null,
-)
-
-const unmatchedTitleMatchPreview = computed(() =>
-  titleMatchPreview.value && !titleMatchPreview.value.matched ? titleMatchPreview.value : null,
+  titleMatchPreview.value ?? null,
 )
 
 watch(
@@ -656,6 +595,7 @@ function composePublishTitle(options?: {
   videoCodec?: string
   audioCodec?: string
   variantName?: string
+  titleTags?: string[]
 }) {
   return composeSeriesPublishTitle({
     releaseTeam: options?.releaseTeam ?? form.releaseTeam.trim(),
@@ -667,6 +607,7 @@ function composePublishTitle(options?: {
     videoCodec: options?.videoCodec ?? form.videoCodec.trim(),
     audioCodec: options?.audioCodec ?? form.audioCodec.trim(),
     variantName: options?.variantName ?? activeVariant.value?.name?.trim() ?? '',
+    titleTags: options?.titleTags ?? resolveTitleTagsForFile(form.torrentPath),
   })
 }
 
@@ -838,8 +779,8 @@ function openWorkingDirectory() {
 
 async function saveTitleMatchConfig() {
   const config = buildTitleMatchPayload()
-  if (!config?.fileNamePattern) {
-    ElMessage.warning('\u8bf7\u5148\u586b\u5199\u6587\u4ef6\u540d\u5339\u914d\u89c4\u5219')
+  if (!config) {
+    ElMessage.warning('\u8bf7\u5148\u586b\u5199\u6587\u4ef6\u540d\u5339\u914d\u6216\u6807\u9898\u6807\u7b7e\u6620\u5c04')
     return false
   }
 
@@ -863,59 +804,54 @@ async function saveTitleMatchConfig() {
   }
 }
 
-async function importMatchedTorrents() {
-  const config = buildTitleMatchPayload()
-  if (!config?.fileNamePattern) {
-    ElMessage.warning('\u8bf7\u5148\u586b\u5199\u6587\u4ef6\u540d\u5339\u914d\u89c4\u5219')
+async function exportTitleTagMappings() {
+  const mappings = buildTitleTagMappingsPayload()
+  if (!mappings.length) {
+    ElMessage.warning('\u8bf7\u5148\u6dfb\u52a0\u81f3\u5c11\u4e00\u6761\u6807\u9898\u6807\u7b7e\u6620\u5c04')
     return
   }
 
-  if (isTitleMatchDirty.value) {
-    const saved = await saveTitleMatchConfig()
-    if (!saved) {
-      return
-    }
-  }
-
-  const response = await window.globalAPI.getFilePaths(JSON.stringify({ type: 'torrent' }))
-  const payload = JSON.parse(response) as Message.Global.Paths
-  if (!payload.paths.length) {
+  const result = await projectBridge.exportSeriesTitleTagMappings({
+    projectId: props.id,
+    mappings,
+  })
+  if (!result.ok) {
+    ElMessage.error(result.error.message)
     return
   }
 
-  isImportingMatchedTorrents.value = true
-  try {
-    const result = await projectBridge.importSeriesMatchedTorrents({
-      projectId: props.id,
-      filePaths: payload.paths,
-      activateFirst: true,
-    })
-
-    if (!result.ok) {
-      ElMessage.error(result.error.message)
-      return
-    }
-
-    applyWorkspace(result.data.workspace)
-    await loadDraftConfig()
-
-    const importSummary = `\u5df2\u8bc6\u522b ${result.data.importedCount} \u4e2a .torrent\uff0c\u65b0\u589e ${result.data.createdEpisodeCount} \u96c6\uff0c${result.data.createdVariantCount} \u4e2a\u7248\u672c`
-    const updatedSummary = result.data.updatedVariantCount
-      ? `\uff0c\u66f4\u65b0 ${result.data.updatedVariantCount} \u4e2a\u5df2\u6709\u7248\u672c`
-      : ''
-
-    if (result.data.unmatchedFiles.length) {
-      const unmatchedNames = result.data.unmatchedFiles.map(item => item.fileName).slice(0, 3).join(' / ')
-      const unmatchedSuffix = result.data.unmatchedFiles.length > 3 ? '\u7b49' : ''
-      ElMessage.warning(
-        `${importSummary}${updatedSummary}\uff0c\u8fd8\u6709 ${result.data.unmatchedFiles.length} \u4e2a\u6587\u4ef6\u672a\u5339\u914d\uff1a${unmatchedNames}${unmatchedSuffix}`,
-      )
-    } else {
-      ElMessage.success(`${importSummary}${updatedSummary}`)
-    }
-  } finally {
-    isImportingMatchedTorrents.value = false
+  if (result.data.canceled) {
+    return
   }
+
+  ElMessage.success(`\u5df2\u5bfc\u51fa ${result.data.exportedCount} \u6761\u6807\u9898\u6807\u7b7e\u6620\u5c04`)
+}
+
+async function importTitleTagMappings() {
+  const result = await projectBridge.importSeriesTitleTagMappings({
+    projectId: props.id,
+  })
+  if (!result.ok) {
+    ElMessage.error(result.error.message)
+    return
+  }
+
+  if (result.data.canceled || !result.data.mappings.length) {
+    return
+  }
+
+  const beforeCount = buildTitleTagMappingsPayload().length
+  mergeTitleTagMappings(result.data.mappings)
+  const addedCount = buildTitleTagMappingsPayload().length - beforeCount
+
+  if (addedCount > 0) {
+    ElMessage.success(
+      `\u5df2\u5bfc\u5165 ${result.data.importedCount} \u6761\u6620\u5c04\uff0c\u65b0\u589e ${addedCount} \u6761\u5230\u5f53\u524d\u9879\u76ee`,
+    )
+    return
+  }
+
+  ElMessage.info('\u5bfc\u5165\u5b8c\u6210\uff0c\u4f46\u5f53\u524d\u9879\u76ee\u91cc\u5df2\u7ecf\u90fd\u6709\u8fd9\u4e9b\u6620\u5c04\u4e86')
 }
 
 function writeBangumiIdToSite(siteId: SiteId, bangumiId: number) {
@@ -1252,52 +1188,11 @@ onMounted(() => {
 
           <div class="series-studio__match-grid">
             <label class="series-studio__field series-studio__field--wide">
-              <span class="series-studio__field-label">{{ '\u6587\u4ef6\u540d\u5339\u914d' }}</span>
-              <el-input
-                v-model="titleMatchForm.fileNamePattern"
-                placeholder="[SweetSub] Oniichan ha Oshimai! - <ep> [<source>][<res>P][<video>][<sub>]"
-              />
-            </label>
-
-            <label class="series-studio__field">
-              <span class="series-studio__field-label">{{ '\u5267\u96c6\u6a21\u677f' }}</span>
-              <el-input v-model="titleMatchForm.episodeTemplate" placeholder="<ep>" />
-            </label>
-            <label class="series-studio__field">
-              <span class="series-studio__field-label">{{ '\u7248\u672c\u6a21\u677f' }}</span>
-              <el-input v-model="titleMatchForm.variantTemplate" placeholder="<res>p-<sub>" />
-            </label>
-            <label class="series-studio__field series-studio__field--wide">
               <span class="series-studio__field-label">{{ '\u4e3b\u6807\u9898\u6a21\u677f' }}</span>
               <el-input
                 v-model="titleMatchForm.titleTemplate"
-                placeholder="[SweetSub][\u756a\u5267\u540d][<ep>][<source>][<res>P][<video>][<sub>]"
+                placeholder="[SweetSub][番剧名][<subtag>][<misctag>]"
               />
-            </label>
-
-            <label class="series-studio__field">
-              <span class="series-studio__field-label">{{ '\u6765\u6e90\u7c7b\u578b\u6a21\u677f' }}</span>
-              <el-input v-model="titleMatchForm.sourceTypeTemplate" placeholder="<source>" />
-            </label>
-            <label class="series-studio__field">
-              <span class="series-studio__field-label">{{ '\u5206\u8fa8\u7387\u6a21\u677f' }}</span>
-              <el-input v-model="titleMatchForm.resolutionTemplate" placeholder="<res>p" />
-            </label>
-            <label class="series-studio__field">
-              <span class="series-studio__field-label">{{ '\u5b57\u5e55\u6a21\u677f' }}</span>
-              <el-input v-model="titleMatchForm.subtitleTemplate" placeholder="<sub>" />
-            </label>
-            <label class="series-studio__field">
-              <span class="series-studio__field-label">{{ '\u5236\u4f5c\u7ec4\u6a21\u677f' }}</span>
-              <el-input v-model="titleMatchForm.releaseTeamTemplate" placeholder="<team>" />
-            </label>
-            <label class="series-studio__field">
-              <span class="series-studio__field-label">{{ '\u97f3\u9891\u7f16\u7801\u6a21\u677f' }}</span>
-              <el-input v-model="titleMatchForm.audioCodecTemplate" placeholder="<audio>" />
-            </label>
-            <label class="series-studio__field">
-              <span class="series-studio__field-label">{{ '\u89c6\u9891\u7f16\u7801\u6a21\u677f' }}</span>
-              <el-input v-model="titleMatchForm.videoCodecTemplate" placeholder="<video>" />
             </label>
           </div>
 
@@ -1306,10 +1201,12 @@ onMounted(() => {
               <div>
                 <div class="series-studio__site-name">{{ '\u6807\u9898\u6807\u7b7e\u6620\u5c04' }}</div>
                 <div class="series-studio__site-text">
-                  {{ '\u6bcf\u6761\u89c4\u5219\u90fd\u53ef\u4ee5\u81ea\u5df1\u6307\u5b9a\u4e00\u4e2a\u6a21\u677f\u8bcd\u3002\u68c0\u6d4b\u5230\u88ab\u6620\u5c04\u8bcd\u540e\uff0c\u5c31\u4f1a\u628a\u6620\u5c04\u7ed3\u679c\u5199\u8fdb\u5bf9\u5e94\u7684\u6a21\u677f\u8bcd\uff0c\u4f60\u53ea\u9700\u5728\u4e3b\u6807\u9898\u6a21\u677f\u91cc\u81ea\u5df1\u6446\u653e\u4f4d\u7f6e\u3002' }}
+                  {{ '\u6bcf\u6761\u89c4\u5219\u90fd\u53ef\u4ee5\u5355\u72ec\u6307\u5b9a\u4e00\u4e2a\u6a21\u677f\u8bcd\uff0c\u547d\u4e2d\u540e\u5c31\u4f1a\u628a\u6807\u9898\u6807\u7b7e\u5199\u8fdb\u5bf9\u5e94\u7684\u6a21\u677f\u8bcd\uff0c\u4f60\u53ea\u9700\u5728\u4e3b\u6807\u9898\u6a21\u677f\u91cc\u81ea\u7531\u6446\u653e\u4f4d\u7f6e\u3002\u4e5f\u53ef\u4ee5\u5728\u9879\u76ee\u4e4b\u95f4\u5bfc\u5165\u5bfc\u51fa\u590d\u7528\u3002' }}
                 </div>
               </div>
               <div class="series-studio__site-actions">
+                <el-button plain size="small" @click="importTitleTagMappings">{{ '\u5bfc\u5165\u6620\u5c04' }}</el-button>
+                <el-button plain size="small" @click="exportTitleTagMappings">{{ '\u5bfc\u51fa\u6620\u5c04' }}</el-button>
                 <el-button plain size="small" @click="addTitleTagMapping">{{ '\u65b0\u589e\u6620\u5c04' }}</el-button>
               </div>
             </div>
@@ -1334,16 +1231,10 @@ onMounted(() => {
 
           <div v-if="titleMatchPreview" class="series-studio__match-preview">
             <template v-if="matchedTitleMatchPreview">
-              <StatusChip tone="success">{{ '\u5f53\u524d torrent \u53ef\u5339\u914d' }}</StatusChip>
+              <StatusChip tone="success">{{ '\u5f53\u524d torrent \u5df2\u8bc6\u522b' }}</StatusChip>
               <span class="series-studio__match-text">
-                {{ matchedTitleMatchPreview.fileName }} -> {{ matchedTitleMatchPreview.episodeLabel || '??' }} / {{ matchedTitleMatchPreview.variantName }}
+                {{ matchedTitleMatchPreview.fileName }}
               </span>
-              <StatusChip v-if="matchedTitleMatchPreview.sourceType" tone="neutral">{{ matchedTitleMatchPreview.sourceType }}</StatusChip>
-              <StatusChip v-if="matchedTitleMatchPreview.resolution" tone="info">{{ matchedTitleMatchPreview.resolution }}</StatusChip>
-              <StatusChip v-if="matchedTitleMatchPreview.videoCodec" tone="info">{{ matchedTitleMatchPreview.videoCodec }}</StatusChip>
-              <StatusChip v-if="matchedTitleMatchPreview.audioCodec" tone="neutral">{{ matchedTitleMatchPreview.audioCodec }}</StatusChip>
-              <StatusChip v-if="matchedTitleMatchPreview.videoProfile" tone="info">{{ matchedTitleMatchPreview.videoProfile }}</StatusChip>
-              <StatusChip v-if="matchedTitleMatchPreview.subtitleProfile" tone="warning">{{ matchedTitleMatchPreview.subtitleProfile }}</StatusChip>
               <StatusChip
                 v-for="titleTag in matchedTitleMatchPreview.titleTags"
                 :key="`${matchedTitleMatchPreview.fileName}-${titleTag}`"
@@ -1362,19 +1253,10 @@ onMounted(() => {
                 {{ matchedTitleMatchPreview.title ? '\u6a21\u677f\u6807\u9898\uff1a' : '\u9884\u89c8\u6807\u9898\uff1a' }}{{ matchedTitleMatchPreview.suggestedTitle }}
               </span>
             </template>
-            <template v-else-if="unmatchedTitleMatchPreview">
-              <StatusChip tone="danger">{{ '\u5f53\u524d torrent \u672a\u547d\u4e2d' }}</StatusChip>
-              <span class="series-studio__match-text">
-                {{ unmatchedTitleMatchPreview.fileName }} {{ '\u6ca1\u6709\u547d\u4e2d\u6587\u4ef6\u540d\u5339\u914d\u89c4\u5219\u3002' }}
-              </span>
-            </template>
           </div>
 
           <div class="series-studio__match-actions">
             <el-button plain :loading="isSavingTitleMatch" @click="saveTitleMatchConfig">{{ '\u4fdd\u5b58\u5339\u914d\u65b9\u6848' }}</el-button>
-            <el-button type="primary" :loading="isImportingMatchedTorrents" @click="importMatchedTorrents">
-              {{ '\u5bfc\u5165 .torrent \u81ea\u52a8\u8bc6\u522b' }}
-            </el-button>
           </div>
         </article>
       </section>

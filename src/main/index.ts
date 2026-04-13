@@ -373,6 +373,12 @@ namespace Project {
   export function saveSeriesTitleMatchConfig(msg: string) {
     return projectService.saveSeriesTitleMatchConfig(msg)
   }
+  export function exportSeriesTitleTagMappings(msg: string) {
+    return projectService.exportSeriesTitleTagMappings(msg)
+  }
+  export function importSeriesTitleTagMappings(msg: string) {
+    return projectService.importSeriesTitleTagMappings(msg)
+  }
   export function importSeriesMatchedTorrents(msg: string) {
     return projectService.importSeriesMatchedTorrents(msg)
   }
