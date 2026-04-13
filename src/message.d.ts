@@ -37,17 +37,6 @@ declare namespace Message {
 
   namespace BT {
 
-    interface ValidationType {
-      type: 'acgnx_a' | 'acgnx_g'
-    }
-
-    interface TurnstilePosition {
-      x: number
-      y: number
-    }
-
-    type AcgnXAPIConfig = Config.AcgnXAPIConfig
-
     interface AccountType {
       type: string
     }
@@ -55,7 +44,6 @@ declare namespace Message {
     interface ValidationInfo {
       type: string
       key?: string
-      position?: TurnstilePosition
     }
 
     interface LoginStatus {

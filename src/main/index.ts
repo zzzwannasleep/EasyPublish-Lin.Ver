@@ -1,4 +1,4 @@
-﻿import { app, BrowserWindow, WebContentsView } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 
@@ -77,12 +77,8 @@ axios.interceptors.request.use(
     else if (config.url!.includes('nyaa.si')) type = 'nyaa'
     else if (config.url!.includes('acg.rip')) type = 'acgrip'
     else if (config.url!.includes('dmhy.org')) type = 'dmhy'
-    else if (config.url!.includes('share.acgnx.se')) type = 'acgnx_a'
-    else if (config.url!.includes('www.acgnx.se')) type = 'acgnx_g'
     else return config
-    const cookies = credentialStore.getSiteCookies(
-      type as 'bangumi' | 'nyaa' | 'acgrip' | 'dmhy' | 'acgnx_a' | 'acgnx_g',
-    )
+    const cookies = credentialStore.getSiteCookies(type as 'bangumi' | 'nyaa' | 'acgrip' | 'dmhy')
     let str = ''
     cookies.forEach(item => {
       str += `${item.name}=${item.value}; `
@@ -111,8 +107,6 @@ axiosRetry(axios, {
 */
 
 let mainWindowWebContent: Electron.WebContents
-let mainWindowContentView: Electron.View
-let window: BrowserWindow
 function createWindow(): void {
   const mainWindow = createMainAppWindow({
     appIcon,
@@ -120,13 +114,8 @@ function createWindow(): void {
     getUserDB: () => userDB,
   })
   mainWindowWebContent = mainWindow.webContents
-  mainWindowContentView = mainWindow.contentView
-  window = mainWindow
 }
 
-//cloudflare-turnstile缂傚倸鍊烽悞锕傚礉閺嶎厹鈧啴宕ㄩ懜顑挎睏濠电偞鍨剁喊宥嗗垔婵傚憡鐓曢柟鐐殔閹冲繘鎮?
-let cfView: WebContentsView
-let cssKey: string[] = []
 
 /*
   闂傚倷娴囬惃顐﹀幢閳轰焦顔勭紓鍌氬€哥粔瀵哥矓閸撲礁鍨濋柨婵嗘啒閺冨牆鐒垫い鎺戝暔娴滆绻涢幋鐐殿暡濠殿垰銈搁弻娑㈠箻濡も偓閹冲繘鎮?
@@ -155,21 +144,12 @@ const Global = createGlobalService({
 })
 const btAccountService = createBtAccountService({
   getUserDB: () => userDB,
-  getMainWindow: () => window,
-  getMainContentView: () => mainWindowContentView,
-  getCloudflareView: () => cfView,
   openSiteLoginWindow: type => createLoginWindow(type),
   refreshLoginData: () => {
     mainWindowWebContent.send('BT_refreshLoginData')
   },
-  notifyValidationRequired: type => {
-    mainWindowWebContent.send('BT_loadValidation', JSON.stringify({ type }))
-  },
   notifyImageCaptchaRequired: () => {
     mainWindowWebContent.send('BT_loadIamgeCaptcha')
-  },
-  notifyCloseValidation: () => {
-    mainWindowWebContent.send('BT_closeValidation')
   },
 })
 const btPublishService = createBtPublishService({
@@ -225,9 +205,6 @@ namespace BT {
   // Delegate BT login actions to the extracted service.
   export async function loginAccount(msg: string) {
     return btAccountService.loginAccount(msg)
-  }
-  export async function removeValidation() {
-    return btAccountService.removeValidation()
   }
   export async function openLoginWindow(msg: string) {
     return btAccountService.openLoginWindow(msg)
@@ -494,13 +471,6 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  cfView = new WebContentsView()
-  cfView.webContents.on('did-finish-load', async () => {
-    cssKey.forEach(item => { cfView.webContents.removeInsertedCSS(item) })
-    cssKey.push(await cfView.webContents.insertCSS('body {overflow: hidden;}'))
-    cssKey.push(await cfView.webContents.insertCSS('.cf-turnstile { position: fixed; left: 0px; top: 0px}'))
-  })
-
   createWindow()
 
   app.on('activate', function () {
@@ -521,4 +491,6 @@ app.on('window-all-closed', () => {
 
 // In this file you can include the rest of your app"s specific main process
 // code. You can also put them in separate files and require them here.
+
+
 

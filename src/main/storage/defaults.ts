@@ -49,17 +49,6 @@ export const defaultUserData: Config.UserData = {
     port: 8080,
   },
   name: 'default',
-  acgnxAPI: {
-    enable: false,
-    asia: {
-      uid: '',
-      token: '',
-    },
-    global: {
-      uid: '',
-      token: '',
-    },
-  },
   ptSites: defaultManagedPtSites,
   forum: {
     username: '',
@@ -85,7 +74,5 @@ export const defaultUserData: Config.UserData = {
     },
     createDefaultLoginInfo('acgrip'),
     createDefaultLoginInfo('dmhy'),
-    createDefaultLoginInfo('acgnx_g'),
-    createDefaultLoginInfo('acgnx_a'),
   ],
 }

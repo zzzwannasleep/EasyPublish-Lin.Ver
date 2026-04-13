@@ -293,16 +293,6 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
     await userDB.write()
   }
 
-  function getAcgnxApiConfig() {
-    return getUserDBOrThrow().data.acgnxAPI
-  }
-
-  async function setAcgnxApiConfig(config: Config.AcgnXAPIConfig) {
-    const userDB = getUserDBOrThrow()
-    userDB.data.acgnxAPI = config
-    await userDB.write()
-  }
-
   function listCustomSiteProfiles(): SiteProfile[] {
     return getCustomPtSites()
       .filter(site => !isBuiltInManagedPtSite(site.id))
@@ -361,44 +351,6 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
 
     userDB.data.ptSites = ptSites
 
-    if (id === 'acgnx_a') {
-      userDB.data.acgnxAPI = {
-        ...(userDB.data.acgnxAPI ?? {
-          enable: false,
-          asia: { uid: '', token: '' },
-          global: { uid: '', token: '' },
-        }),
-        enable: Boolean(nextSite.apiUid || nextSite.apiToken || userDB.data.acgnxAPI?.global.uid || userDB.data.acgnxAPI?.global.token),
-        asia: {
-          uid: nextSite.apiUid ?? '',
-          token: nextSite.apiToken ?? '',
-        },
-        global: {
-          uid: userDB.data.acgnxAPI?.global.uid ?? '',
-          token: userDB.data.acgnxAPI?.global.token ?? '',
-        },
-      }
-    }
-
-    if (id === 'acgnx_g') {
-      userDB.data.acgnxAPI = {
-        ...(userDB.data.acgnxAPI ?? {
-          enable: false,
-          asia: { uid: '', token: '' },
-          global: { uid: '', token: '' },
-        }),
-        enable: Boolean(userDB.data.acgnxAPI?.asia.uid || userDB.data.acgnxAPI?.asia.token || nextSite.apiUid || nextSite.apiToken),
-        asia: {
-          uid: userDB.data.acgnxAPI?.asia.uid ?? '',
-          token: userDB.data.acgnxAPI?.asia.token ?? '',
-        },
-        global: {
-          uid: nextSite.apiUid ?? '',
-          token: nextSite.apiToken ?? '',
-        },
-      }
-    }
-
     await userDB.write()
     return id
   }
@@ -456,7 +408,5 @@ export function createCredentialStore(options: CreateCredentialStoreOptions) {
     recordForumValidation,
     getForumCredentials,
     saveForumCredentials,
-    getAcgnxApiConfig,
-    setAcgnxApiConfig,
   }
 }

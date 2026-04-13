@@ -21,9 +21,21 @@ type StoredForumCredentials = Omit<Config.UserData['forum'], 'password' | 'cooki
   cookies?: StoredSecret
 }
 
-type StoredAcgnxApiConfig = Omit<Config.AcgnXAPIConfig, 'asia' | 'global'> & {
-  asia: Omit<Config.AcgnXAPIConfig['asia'], 'token'> & { token: StoredSecret }
-  global: Omit<Config.AcgnXAPIConfig['global'], 'token'> & { token: StoredSecret }
+type LegacyAcgnxApiConfig = {
+  enable: boolean
+  asia: {
+    uid: string
+    token: string
+  }
+  global: {
+    uid: string
+    token: string
+  }
+}
+
+type StoredAcgnxApiConfig = Omit<LegacyAcgnxApiConfig, 'asia' | 'global'> & {
+  asia: Omit<LegacyAcgnxApiConfig['asia'], 'token'> & { token: StoredSecret }
+  global: Omit<LegacyAcgnxApiConfig['global'], 'token'> & { token: StoredSecret }
 }
 
 type StoredPtSiteConfig = Omit<Config.PTSiteConfig, 'password' | 'apiToken'> & {
@@ -31,7 +43,7 @@ type StoredPtSiteConfig = Omit<Config.PTSiteConfig, 'password' | 'apiToken'> & {
   apiToken?: StoredSecret
 }
 
-type StoredUserData = Omit<Config.UserData, 'info' | 'forum' | 'acgnxAPI' | 'ptSites'> & {
+type StoredUserData = Omit<Config.UserData, 'info' | 'forum' | 'ptSites'> & {
   info: StoredLoginInfo[]
   forum: StoredForumCredentials
   acgnxAPI?: StoredAcgnxApiConfig
@@ -42,23 +54,9 @@ function cloneDefaultUserData(): Config.UserData {
   return JSON.parse(JSON.stringify(defaultUserData)) as Config.UserData
 }
 
-function getDefaultAcgnxApiConfig(): Config.AcgnXAPIConfig {
-  return cloneDefaultUserData().acgnxAPI ?? {
-    enable: false,
-    asia: {
-      uid: '',
-      token: '',
-    },
-    global: {
-      uid: '',
-      token: '',
-    },
-  }
-}
-
 function migrateLegacyAcgnxPtSites(
   ptSites: Config.PTSiteConfig[],
-  legacyAcgnxApi: Config.AcgnXAPIConfig | undefined,
+  legacyAcgnxApi: LegacyAcgnxApiConfig | undefined,
 ) {
   return ptSites.map(site => {
     if (site.id === 'acgnx_a') {
@@ -81,7 +79,9 @@ function migrateLegacyAcgnxPtSites(
   })
 }
 
-function normalizePtSites(data: Config.UserData | null | undefined) {
+type UserDataInput = (Config.UserData & { acgnxAPI?: LegacyAcgnxApiConfig }) | null | undefined
+
+function normalizePtSites(data: UserDataInput) {
   const sourceSites = data?.ptSites ?? []
   const mergedSites = defaultManagedPtSites.map(defaultSite => {
     const current = sourceSites.find(site => site.id === defaultSite.id)
@@ -152,9 +152,26 @@ function decryptSecret<T>(value: StoredSecret, fallback: T): T {
   return value as T
 }
 
-function normalizeUserData(data: Config.UserData | null | undefined): Config.UserData {
+function deserializeLegacyAcgnxApi(raw: StoredAcgnxApiConfig | undefined): LegacyAcgnxApiConfig | undefined {
+  if (!raw) {
+    return undefined
+  }
+
+  return {
+    enable: raw.enable ?? false,
+    asia: {
+      uid: raw.asia?.uid ?? '',
+      token: decryptSecret(raw.asia?.token, ''),
+    },
+    global: {
+      uid: raw.global?.uid ?? '',
+      token: decryptSecret(raw.global?.token, ''),
+    },
+  }
+}
+
+function normalizeUserData(data: UserDataInput): Config.UserData {
   const defaults = cloneDefaultUserData()
-  const defaultAcgnxApi = getDefaultAcgnxApiConfig()
   const source = data ?? defaults
 
   return {
@@ -163,18 +180,6 @@ function normalizeUserData(data: Config.UserData | null | undefined): Config.Use
     proxyConfig: {
       ...defaults.proxyConfig,
       ...(source.proxyConfig ?? {}),
-    },
-    acgnxAPI: {
-      ...defaultAcgnxApi,
-      ...(source.acgnxAPI ?? {}),
-      asia: {
-        ...defaultAcgnxApi.asia,
-        ...(source.acgnxAPI?.asia ?? {}),
-      },
-      global: {
-        ...defaultAcgnxApi.global,
-        ...(source.acgnxAPI?.global ?? {}),
-      },
     },
     forum: {
       ...defaults.forum,
@@ -214,25 +219,14 @@ function serializeUserData(data: Config.UserData): StoredUserData {
       password: encryptSecret(site.password),
       apiToken: encryptSecret(site.apiToken ?? ''),
     })),
-    acgnxAPI: normalized.acgnxAPI
-      ? {
-          ...normalized.acgnxAPI,
-          asia: {
-            ...normalized.acgnxAPI.asia,
-            token: encryptSecret(normalized.acgnxAPI.asia.token),
-          },
-          global: {
-            ...normalized.acgnxAPI.global,
-            token: encryptSecret(normalized.acgnxAPI.global.token),
-          },
-        }
-      : undefined,
   }
 }
 
 function deserializeUserData(raw: StoredUserData | null | undefined): Config.UserData {
-  const normalized = normalizeUserData(raw as Config.UserData | null | undefined)
-  const normalizedAcgnxApi = normalized.acgnxAPI ?? getDefaultAcgnxApiConfig()
+  const normalized = normalizeUserData({
+    ...(raw as unknown as Config.UserData),
+    acgnxAPI: deserializeLegacyAcgnxApi(raw?.acgnxAPI),
+  })
 
   return {
     ...normalized,
@@ -258,17 +252,6 @@ function deserializeUserData(raw: StoredUserData | null | undefined): Config.Use
         apiToken: decryptSecret(storedSite?.apiToken, site.apiToken ?? ''),
       }
     }) ?? [],
-    acgnxAPI: {
-      ...normalizedAcgnxApi,
-      asia: {
-        ...normalizedAcgnxApi.asia,
-        token: decryptSecret(raw?.acgnxAPI?.asia?.token, normalizedAcgnxApi.asia.token),
-      },
-      global: {
-        ...normalizedAcgnxApi.global,
-        token: decryptSecret(raw?.acgnxAPI?.global?.token, normalizedAcgnxApi.global.token),
-      },
-    },
   }
 }
 

@@ -33,7 +33,6 @@ type BTHandlers = {
   openLoginWindow: (msg: string) => Asyncish<void>
   saveAccountInfo: (msg: string) => Asyncish<void>
   clearStorage: () => Asyncish<void>
-  removeValidation: () => Asyncish<void>
   exportCookies: (msg: string) => Asyncish<void>
   importCookies: (msg: string) => Asyncish<void>
 }
@@ -188,7 +187,6 @@ export function registerIpcHandlers({ Global, BT, Forum, Project, Site, Log, Tas
   ipcMain.on('BT_openLoginWindow', (_event, msg) => BT.openLoginWindow(msg))
   ipcMain.on('BT_saveAccountInfo', (_event, msg) => BT.saveAccountInfo(msg))
   ipcMain.on('BT_clearStorage', () => BT.clearStorage())
-  ipcMain.on('BT_removeValidation', () => BT.removeValidation())
   ipcMain.on('BT_exportCookies', (_event, msg) => BT.exportCookies(msg))
   ipcMain.on('BT_importCookies', (_event, msg) => BT.importCookies(msg))
 

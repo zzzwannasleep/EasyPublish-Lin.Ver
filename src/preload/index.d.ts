@@ -20,8 +20,6 @@ export interface GlobalAPI {
 }
 
 export interface BTAPI {
-  loadValidation: (loadValidation: Function) => void
-  closeValidation: (closeValidation: Function) => void
   loadImageCaptcha: (loadImage: Function) => void
   loginAccount: (msg: string) => void
   checkLoginStatus: (msg: string) => Promise<string>
@@ -32,7 +30,6 @@ export interface BTAPI {
   importCookies: (msg: string) => void
   exportCookies: (msg: string) => void
   clearStorage: () => void
-  removeValidation: () => void
   publish: (msg: string) => Promise<string>
   getBangumiTags: (msg: string) => Promise<string>
   searchBangumiTags: (msg: string) => Promise<string>

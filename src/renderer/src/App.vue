@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, useTemplateRef } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import { useDark } from '@vueuse/core'
 import { Compass, Document, DocumentAdd, FolderOpened, House, Key } from '@element-plus/icons-vue'
@@ -150,10 +150,6 @@ onMounted(async () => {
 })
 
 const imageDialogVisible = ref(false)
-const turnstileDialogVisibleAcgnxA = ref(false)
-const turnstileDialogVisibleAcgnxG = ref(false)
-const turnstileValidationAcgnxG = useTemplateRef('turnstileValidationAcgnxG')
-const turnstileValidationAcgnxA = useTemplateRef('turnstileValidationAcgnxA')
 const imgSrc = ref('')
 const imgCaptcha = ref('')
 
@@ -164,23 +160,6 @@ async function refreshImage() {
 
 window.BTAPI.loadImageCaptcha(refreshImage)
 
-async function setValidation(message: string) {
-  const { type } = JSON.parse(message) as Message.BT.ValidationType
-  if (type === 'acgnx_g') {
-    turnstileDialogVisibleAcgnxG.value = true
-    return
-  }
-
-  turnstileDialogVisibleAcgnxA.value = true
-}
-
-window.BTAPI.loadValidation(setValidation)
-
-window.BTAPI.closeValidation(() => {
-  turnstileDialogVisibleAcgnxG.value = false
-  turnstileDialogVisibleAcgnxA.value = false
-})
-
 async function submitCaptcha(type: string) {
   if (type === 'dmhy') {
     const message: Message.BT.ValidationInfo = { type: 'dmhy', key: imgCaptcha.value }
@@ -188,21 +167,6 @@ async function submitCaptcha(type: string) {
     imageDialogVisible.value = false
     return
   }
-}
-
-async function setTurnstilePosition(type: 'acgnx_g' | 'acgnx_a') {
-  const rect =
-    type === 'acgnx_g'
-      ? turnstileValidationAcgnxG.value!.getBoundingClientRect()
-      : turnstileValidationAcgnxA.value!.getBoundingClientRect()
-
-  const position: Message.BT.TurnstilePosition = { x: rect.x, y: rect.y }
-  const message: Message.BT.ValidationInfo = { type, position }
-  window.BTAPI.loginAccount(JSON.stringify(message))
-}
-
-async function removeValidation() {
-  window.BTAPI.removeValidation()
 }
 
 function changeLocale(value: string) {
@@ -255,36 +219,6 @@ provideAppChrome({
         <el-button type="primary" @click="submitCaptcha('dmhy')">{{
           t('app.captcha.submit')
         }}</el-button>
-      </div>
-    </el-dialog>
-
-    <el-dialog
-      v-model="turnstileDialogVisibleAcgnxG"
-      :z-index="3000"
-      align-center
-      destroy-on-close
-      :title="t('app.captcha.acgnxGlobalTitle')"
-      width="380"
-      @opened="setTurnstilePosition('acgnx_g')"
-      @close="removeValidation"
-    >
-      <div class="flex items-center justify-center">
-        <div ref="turnstileValidationAcgnxG" class="h-[65px] w-[300px]">cloudflare-turnstile</div>
-      </div>
-    </el-dialog>
-
-    <el-dialog
-      v-model="turnstileDialogVisibleAcgnxA"
-      :z-index="3001"
-      align-center
-      destroy-on-close
-      :title="t('app.captcha.acgnxAsiaTitle')"
-      width="380"
-      @opened="setTurnstilePosition('acgnx_a')"
-      @close="removeValidation"
-    >
-      <div class="flex items-center justify-center">
-        <div ref="turnstileValidationAcgnxA" class="h-[65px] w-[300px]">cloudflare-turnstile</div>
       </div>
     </el-dialog>
 

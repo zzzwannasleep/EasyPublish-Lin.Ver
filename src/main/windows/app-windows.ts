@@ -29,8 +29,6 @@ function getLoginUrl(type: string) {
   if (type === 'nyaa') return 'https://nyaa.si/login'
   if (type === 'acgrip') return 'https://acg.rip/users/sign_in'
   if (type === 'dmhy') return 'https://www.dmhy.org/user'
-  if (type === 'acgnx_g') return 'https://www.acgnx.se/user.php?o=login'
-  if (type === 'acgnx_a') return 'https://share.acgnx.se/user.php?o=login'
   return 'https://vcb-s.com'
 }
 
@@ -40,8 +38,6 @@ function getCookieStorageUrl(type: string) {
   if (type === 'nyaa') return 'https://nyaa.si'
   if (type === 'acgrip') return 'https://acg.rip'
   if (type === 'dmhy') return 'https://www.dmhy.org'
-  if (type === 'acgnx_g') return 'https://www.acgnx.se'
-  if (type === 'acgnx_a') return 'https://share.acgnx.se'
   return 'https://vcb-s.com'
 }
 
@@ -136,8 +132,6 @@ export function createMainAppWindow(options: CreateMainAppWindowOptions) {
     else if (details.url.includes('nyaa.si')) type = 'nyaa'
     else if (details.url.includes('acg.rip')) type = 'acgrip'
     else if (details.url.includes('dmhy.org')) type = 'dmhy'
-    else if (details.url.includes('share.acgnx.se')) type = 'acgnx_a'
-    else if (details.url.includes('www.acgnx.se')) type = 'acgnx_g'
     else {
       details.requestHeaders['user-agent'] = userAgent
       callback({ requestHeaders: details.requestHeaders })
@@ -231,17 +225,6 @@ export async function openLoginWindow(options: OpenLoginWindowOptions) {
       .catch(err => {
         log.error(err)
       })
-
-    if (accountType.includes('acgnx')) {
-      await browserSession.cookies
-        .get({ name: 'cf_clearance' })
-        .then(cookies => {
-          userDB.data.info.find(item => item.name === accountType)!.cookies.push(...cookies)
-        })
-        .catch(err => {
-          log.error(err)
-        })
-    }
 
     await userDB.write()
   }

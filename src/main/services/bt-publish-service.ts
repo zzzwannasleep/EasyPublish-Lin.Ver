@@ -24,22 +24,13 @@ interface CreateBtPublishServiceOptions {
 }
 
 const DMHY_LINK_MISSING = '\u672A\u627E\u5230\u94FE\u63A5'
-const LOGGED_IN_STATUS = '\u8D26\u53F7\u5DF2\u767B\u5F55'
 const DMHY_UPLOAD_EXISTS = '\u7A2E\u5B50\u5DF2\u5B58\u5728\uFF0C\u8ACB\u4E0D\u8981\u91CD\u8907\u4E0A\u50B3'
 const DMHY_UPLOAD_SUCCESS = '\u4E0A\u50B3\u6210\u529F'
 const DMHY_SUBMIT_LABEL = '\u63D0\u4EA4'
 const DMHY_UPDATE_SUCCESS = '\u4FEE\u6539\u6210\u529F'
-const ACGNX_ASIA_API_ERROR =
-  '\u672B\u65E5\u52A8\u6F2B\uFF1A\u8A8D\u8B49\u5931\u6557\uFF0Capi token\u8207uid\u4E0D\u5339\u914D'
-const ACGNX_ASIA_UPLOAD_SUCCESS = '\u606D\u559C\uFF0C\u8CC7\u6E90\u767C\u4F48\u6210\u529F'
-const ACGNX_ASIA_TORRENT_EXISTS =
-  '\u95A3\u4E0B\u6240\u8981\u4E0A\u8F09\u7684Torrent\u6A94\u6848\u5DF2\u5B58\u5728'
-const ACGNX_GLOBAL_API_ERROR =
-  'AcgnX\uFF1A\u8A8D\u8B49\u5931\u6557\uFF0Capi token\u8207uid\u4E0D\u5339\u914D'
 const ACGRIP_PUBLISH_LABEL = '\u53D1\u5E03'
 const ACGRIP_UPDATE_LABEL = '\u66F4\u65B0'
 const ACGRIP_DUPLICATE_TORRENT = '\u5DF2\u5B58\u5728\u76F8\u540C\u7684\u79CD\u5B50'
-const ACGNX_DATA_UPDATED = '\u64CD\u4F5C\u6210\u529F'
 const MIOBT_POST_API_URL = 'https://www.miobt.com/addon.php?r=api/post/76cad81b'
 const MIOBT_LINK_PREFIX = 'https://www.miobt.com/show-'
 const MIOBT_TORRENT_FIELD_NAMES = ['torrent_file', 'bt_file', 'torrent', 'file'] as const
@@ -80,8 +71,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
       case 'miobt':
       case 'acgrip':
       case 'dmhy':
-      case 'acgnx_a':
-      case 'acgnx_g':
         return type
       default:
         return undefined
@@ -98,10 +87,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
         return 'AcgRip'
       case 'dmhy':
         return 'DMHY'
-      case 'acgnx_a':
-        return 'AcgnX Asia'
-      case 'acgnx_g':
-        return 'AcgnX Global'
       default:
         return type
     }
@@ -208,8 +193,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
     if (type == 'mikan') return await publishMikan(task, config)
     if (type == 'miobt') return await publishMioBt(task, config)
     if (type == 'dmhy') return await publishDmhy(task, config)
-    if (type == 'acgnx_a') return await publishAcgnxA(task, config)
-    if (type == 'acgnx_g') return await publishAcgnxG(task, config)
     if (type == 'acgrip') return await publishAcgrip(task, config)
     return 'failed'
   }
@@ -464,159 +447,7 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
     }
   }
 
-  async function publishAcgnxA(task: Config.Task, config: Config.PublishConfig) {
-    try {
-      const taskDB = getTaskDBOrThrow()
-      const userDB = getUserDBOrThrow()
-      const html = fs.readFileSync(join(task.path, 'bangumi.html'), { encoding: 'utf-8' })
-      const torrent = fs.readFileSync(join(task.path, config.torrentName))
-      const formData = new FormData()
-      if (config.category_bangumi == '54967e14ff43b99e284d0bf7') formData.append('sort_id', '2')
-      else if (config.category_bangumi == '549ef207fe682f7549f1ea90') formData.append('sort_id', '1')
-      else formData.append('sort_id', '19')
-      formData.append('bt_file', new Blob([torrent], { type: 'application/x-bittorrent' }), config.torrentName)
-      formData.append('title', config.title)
-      formData.append('intro', html)
-      formData.append('Anonymous_Post', '0')
-      formData.append('Team_Post', '1')
-      if (userDB.data.acgnxAPI?.enable) {
-        formData.append('uid', userDB.data.acgnxAPI.asia.uid)
-        formData.append('api_token', userDB.data.acgnxAPI.asia.token)
-        formData.append('mod', 'upload')
-        const response = await axios.post('https://share.acgnx.se/user.php?o=api&op=upload', formData, {
-          responseType: 'json',
-        })
-        if (response.data.code == 200) {
-          task.acgnx_a = `https://share.acgnx.se/show-${response.data.infohash}.html`
-          await taskDB.write()
-          return 'success'
-        }
-        if (response.data.code == 302) {
-          task.acgnx_a = `https://share.acgnx.se/show-${response.data.infohash}.html`
-          await taskDB.write()
-          return 'exist'
-        }
-        if (response.data.code == 105) {
-          log.error(ACGNX_ASIA_API_ERROR)
-          if (userDB.data.info.find(item => item.name == 'acgnx_a')!.status != LOGGED_IN_STATUS) {
-            return 'unauthorized'
-          }
-        } else {
-          log.error(response)
-          if (userDB.data.info.find(item => item.name == 'acgnx_a')!.status != LOGGED_IN_STATUS) {
-            return 'failed'
-          }
-        }
-      }
-      formData.delete('uid')
-      formData.delete('api_token')
-      formData.delete('mod')
-      formData.append('op', 'upload')
-      formData.append('emule_resource', '')
-      formData.append('synckey', '')
-      formData.append('discuss_url', '')
-      const response = await axios.post('https://share.acgnx.se/user.php?o=upload', formData, { responseType: 'text' })
-      if (response.status != 200) throw response
-      if ((response.data as string).includes(ACGNX_ASIA_UPLOAD_SUCCESS)) {
-        task.acgnx_a =
-          `https://share.acgnx.se/${(response.data as string).match(/href="([\S]*?)">\u67E5\u770B\u767C\u4F48\u7684\u8CC7\u6E90/)![1]}`
-        await taskDB.write()
-        return 'success'
-      }
-      if ((response.data as string).includes(ACGNX_ASIA_TORRENT_EXISTS)) {
-        if (!task.acgnx_a) {
-          const url = (response.data as string).match(/\u67E5\u770B\u539F\u8CC7\u6E90\u8A73\u60C5\uFF1A<a\shref="([\S]*?)">/)![1]
-          task.acgnx_a = `https://share.acgnx.se/${url}`
-          await taskDB.write()
-        }
-        return 'exist'
-      }
-      log.error(response)
-      return 'failed'
-    } catch (err) {
-      log.error(err)
-      return 'failed'
-    }
-  }
 
-  async function publishAcgnxG(task: Config.Task, config: Config.PublishConfig) {
-    try {
-      const taskDB = getTaskDBOrThrow()
-      const userDB = getUserDBOrThrow()
-      const html = fs.readFileSync(join(task.path, 'bangumi.html'), { encoding: 'utf-8' })
-      const torrent = fs.readFileSync(join(task.path, config.torrentName))
-      const formData = new FormData()
-      if (config.category_nyaa == '1_2') formData.append('sort_id', '2')
-      else if (config.category_nyaa == '1_3') formData.append('sort_id', '4')
-      else if (config.category_nyaa == '1_4') formData.append('sort_id', '3')
-      else if (config.category_nyaa == '4_1') formData.append('sort_id', '14')
-      else if (config.category_nyaa == '4_2') formData.append('sort_id', '16')
-      else formData.append('sort_id', '15')
-      formData.append('bt_file', new Blob([torrent], { type: 'application/x-bittorrent' }), config.torrentName)
-      formData.append('title', config.title)
-      formData.append('intro', html)
-      formData.append('Anonymous_Post', '0')
-      formData.append('Team_Post', '1')
-      if (userDB.data.acgnxAPI?.enable) {
-        formData.append('uid', userDB.data.acgnxAPI.global.uid)
-        formData.append('api_token', userDB.data.acgnxAPI.global.token)
-        formData.append('mod', 'upload')
-        const response = await axios.post('https://www.acgnx.se/user.php?o=api&op=upload', formData, {
-          responseType: 'json',
-        })
-        if (response.data.code == 200) {
-          task.acgnx_g = `https://www.acgnx.se/show-${response.data.infohash}.html`
-          await taskDB.write()
-          return 'success'
-        }
-        if (response.data.code == 302) {
-          task.acgnx_g = `https://www.acgnx.se/show-${response.data.infohash}.html`
-          await taskDB.write()
-          return 'exist'
-        }
-        if (response.data.code == 105) {
-          log.error(ACGNX_GLOBAL_API_ERROR)
-          if (userDB.data.info.find(item => item.name == 'acgnx_g')!.status != LOGGED_IN_STATUS) {
-            return 'unauthorized'
-          }
-        } else {
-          log.error(response)
-          if (userDB.data.info.find(item => item.name == 'acgnx_g')!.status != LOGGED_IN_STATUS) {
-            return 'failed'
-          }
-        }
-      }
-      formData.delete('uid')
-      formData.delete('api_token')
-      formData.delete('mod')
-      formData.append('tos', '1')
-      formData.append('emule_resource', '')
-      formData.append('synckey', '')
-      formData.append('discuss_url', '')
-      formData.append('op', 'upload')
-      const response = await axios.post('https://www.acgnx.se/user.php?o=upload', formData, { responseType: 'text' })
-      if (response.status != 200) throw response
-      if ((response.data as string).includes('Congratulations, upload success')) {
-        task.acgnx_g =
-          `https://www.acgnx.se/${(response.data as string).match(/href="([\S]*?)">View\sThis\sTorrent/)![1]}`
-        await taskDB.write()
-        return 'success'
-      }
-      if ((response.data as string).includes('The Torrent file you are going to upload is already there')) {
-        if (!task.acgnx_g) {
-          const url = (response.data as string).match(/View\soriginal\storrent\sdetails[:\uFF1A]<a\shref="([\S]*?)">/)![1]
-          task.acgnx_g = `https://www.acgnx.se/${url}`
-          await taskDB.write()
-        }
-        return 'exist'
-      }
-      log.error(response)
-      return 'failed'
-    } catch (err) {
-      log.error(err)
-      return 'failed'
-    }
-  }
 
   async function publishAcgrip(task: Config.Task, config: Config.PublishConfig) {
     try {
@@ -757,19 +588,13 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
     if (loginInfo.find(item => item.name == 'dmhy')!.enable) {
       mergeTorrentDetails(result.list, await getDmhyTorrentList(), 'dmhy')
     }
-    if (loginInfo.find(item => item.name == 'acgnx_a')!.enable) {
-      mergeTorrentDetails(result.list, await getAcgnxTorrentList(false), 'acgnx_a')
-    }
-    if (loginInfo.find(item => item.name == 'acgnx_g')!.enable) {
-      mergeTorrentDetails(result.list, await getAcgnxTorrentList(true), 'acgnx_g')
-    }
     return JSON.stringify(result)
   }
 
   function mergeTorrentDetails(
     list: Message.BT.TorrentList['list'],
     items: { title: string; detail: unknown }[],
-    key: 'acgrip' | 'dmhy' | 'acgnx_a' | 'acgnx_g',
+    key: 'acgrip' | 'dmhy',
   ) {
     items.forEach(item => {
       const torrent = list.find(element => element.title == item.title)
@@ -781,33 +606,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
     })
   }
 
-  async function getAcgnxTorrentList(global: boolean) {
-    try {
-      const baseUrl = global ? 'https://www.acgnx.se/' : 'https://share.acgnx.se/'
-      const response = await axios.get(`${baseUrl}user.php?o=data`, { responseType: 'text' })
-      const torrents = (response.data as string).match(/<tr\sclass="alt[12]\stext_center">[\s\S]*?<\/tr>/g) ?? []
-      const result: { title: string; detail: Message.BT.TorrentDetail.AcgnxDetail }[] = []
-      torrents.forEach(item => {
-        const linkMatch = item.match(/<a\shref="(\S*?)"\starget="_blank">(?!<)([\s\S]*?)<\/a>/)
-        const idMatch = item.match(/user.php\?o=data&act=edit&id=(\d+)&type=/)
-        if (!linkMatch || !idMatch) return
-        const [, link, title] = linkMatch
-        const [, id] = idMatch
-        result.push({
-          title: unescapeHtml(title),
-          detail: {
-            id,
-            url: `${baseUrl}${link}`,
-            is_loaded: false,
-          },
-        })
-      })
-      return result
-    } catch (err) {
-      log.error(err)
-      return []
-    }
-  }
 
   async function getDmhyTorrentList() {
     try {
@@ -865,8 +663,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
     const { type, id }: Message.BT.TorrentInfo = JSON.parse(msg)
     let result
     if (type == 'acgrip') result = await getAcgripTorrentDetail(id)
-    if (type == 'acgnx_a') result = await getAcgnxTorrentDetail(false, id)
-    if (type == 'acgnx_g') result = await getAcgnxTorrentDetail(true, id)
     if (type == 'dmhy') result = await getDmhyTorrentDetail(id)
     return JSON.stringify(result)
   }
@@ -893,32 +689,6 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
     }
   }
 
-  async function getAcgnxTorrentDetail(global: boolean, id: string) {
-    try {
-      const url = global
-        ? `https://www.acgnx.se/user.php?o=data&act=edit&id=${id}&type=`
-        : `https://share.acgnx.se/user.php?o=data&act=edit&id=${id}&type=`
-      const response = await axios.get(url, { responseType: 'text' })
-      const data = response.data as string
-      const content = data.match(/<textarea\sid="intro"[\s\S]*?>([\s\S]*?)<\/textarea>/)![1]
-      const sortId = data.match(/<select\sid="sort_id"[\s\S]*?<option\svalue="(\d+)"\sselected="selected">/)![1]
-      const syncKey = data.match(/<input[\s\S]*?id="synckey"[\s\S]*?value="([\s\S]*?)"\s\/>/)![1]
-      const discussUrl = data.match(/<input[\s\S]*?id="discuss_url"[\s\S]*?value="([\s\S]*?)"\s\/>/)![1]
-      const team = data.match(/<input[\s\S]*?name="Team_Post"\svalue="1"[\s\S]*?\/>/)![0]
-      const teamPost = team.includes('checked="checked"') ? '1' : '0'
-      const result: Message.BT.TorrentDetail.AcgnxContent = {
-        content,
-        sort_id: sortId,
-        synckey: syncKey,
-        discuss_url: discussUrl,
-        team_post: teamPost,
-      }
-      return result
-    } catch (err) {
-      log.error(err)
-      return
-    }
-  }
 
   async function getDmhyTorrentDetail(id: string) {
     try {
@@ -946,49 +716,12 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
   async function updateTorrent(msg: string) {
     const { type, id, config, title }: Message.BT.UpdatedContent = JSON.parse(msg)
     let result
-    if (type == 'acgnx_a') result = await updateAcgnxTorrent(false, title, id, config as Message.BT.TorrentDetail.AcgnxContent)
-    if (type == 'acgnx_g') result = await updateAcgnxTorrent(true, title, id, config as Message.BT.TorrentDetail.AcgnxContent)
     if (type == 'dmhy') result = await updateDmhyTorrent(title, id, config as Message.BT.TorrentDetail.DmhyContent)
     if (type == 'acgrip') result = await updateAcgripTorrent(title, id, config as Message.BT.TorrentDetail.AcgripContent)
     const message: Message.Task.Result = { result }
     return JSON.stringify(message)
   }
 
-  async function updateAcgnxTorrent(
-    global: boolean,
-    title: string,
-    id: string,
-    config: Message.BT.TorrentDetail.AcgnxContent,
-  ) {
-    try {
-      const formData = new FormData()
-      formData.append('op', 'edit')
-      formData.append('id', id)
-      formData.append('sort_id', config.sort_id)
-      formData.append('title', title)
-      formData.append('intro', config.content)
-      formData.append('emule_resource', '')
-      formData.append('synckey', config.synckey)
-      formData.append('discuss_url', config.discuss_url)
-      formData.append('Team_Post', config.team_post)
-      if (global) {
-        formData.append('url', 'https%3A%2F%2Fwww.acgnx.se%2Fuser.php%3Fo%3Ddata')
-        formData.append('tos', '1')
-      } else {
-        formData.append('url', 'https%3A%2F%2Fshare.acgnx.se%2Fuser.php%3Fo%3Ddata')
-      }
-      const url = global
-        ? 'https://www.acgnx.se/user.php?o=data&type='
-        : 'https://share.acgnx.se/user.php?o=data&type='
-      const response = await axios.post(url, formData, { responseType: 'text' })
-      if (global && (response.data as string).includes('Successful!')) return 'success'
-      if (!global && (response.data as string).includes(ACGNX_DATA_UPDATED)) return 'success'
-      return 'failed'
-    } catch (err) {
-      log.error(err)
-      return 'failed'
-    }
-  }
 
   async function updateDmhyTorrent(title: string, id: string, config: Message.BT.TorrentDetail.DmhyContent) {
     try {
@@ -1040,3 +773,4 @@ export function createBtPublishService(options: CreateBtPublishServiceOptions) {
     updateTorrent,
   }
 }
+

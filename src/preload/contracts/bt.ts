@@ -1,10 +1,6 @@
 import { ipcRenderer } from 'electron/renderer'
 
 export const BTAPI = {
-  loadValidation: (loadValidation: (msg: string) => void) =>
-    ipcRenderer.on('BT_loadValidation', (_event, msg) => loadValidation(msg)),
-  closeValidation: (closeValidation: () => void) =>
-    ipcRenderer.on('BT_closeValidation', () => closeValidation()),
   refreshLoginData: (loadData: () => void) =>
     ipcRenderer.on('BT_refreshLoginData', () => loadData()),
   loadImageCaptcha: (loadImage: () => void) =>
@@ -24,5 +20,4 @@ export const BTAPI = {
   exportCookies: (msg: string) => ipcRenderer.send('BT_exportCookies', msg),
   importCookies: (msg: string) => ipcRenderer.send('BT_importCookies', msg),
   clearStorage: () => ipcRenderer.send('BT_clearStorage'),
-  removeValidation: () => ipcRenderer.send('BT_removeValidation'),
 }

@@ -44,18 +44,6 @@ declare namespace Config {
     cookies: Cookie[]
   }
 
-  interface AcgnXAPIConfig {
-    enable: boolean
-    asia: {
-      uid: string
-      token: string
-    }
-    global: {
-      uid: string
-      token: string
-    }
-  }
-
   type TaskData = {
     tasks: Task[]
   }
@@ -85,7 +73,6 @@ declare namespace Config {
   type UserData = {
     info: LoginInfo[]
     name?: string
-    acgnxAPI?: AcgnXAPIConfig
     ptSites?: PTSiteConfig[]
     proxyConfig: ProxyConfig
     forum: {
